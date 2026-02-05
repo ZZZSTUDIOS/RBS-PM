@@ -1,0 +1,29 @@
+{
+  "name": "prediction-market-doppler",
+  "version": "1.0.0",
+  "description": "Prediction market using Doppler on Monad with brutalist admin UI",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc && vite build",
+    "preview": "vite preview",
+    "example": "npx tsx scripts/create-market.ts"
+  },
+  "dependencies": {
+    "@tanstack/react-query": "^5.0.0",
+    "@whetstone-research/doppler-sdk": "^0.0.17",
+    "react": "^18.2.0",
+    "react-dom": "^18.2.0",
+    "viem": "^2.45.1",
+    "wagmi": "^2.0.0"
+  },
+  "devDependencies": {
+    "@types/node": "^20.0.0",
+    "@types/react": "^18.2.0",
+    "@types/react-dom": "^18.2.0",
+    "@vitejs/plugin-react": "^4.0.0",
+    "tsx": "^4.0.0",
+    "typescript": "^5.0.0",
+    "vite": "^5.0.0"
+  }
+}
