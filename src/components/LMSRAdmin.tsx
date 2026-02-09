@@ -750,6 +750,19 @@ export default function LMSRAdmin() {
       return;
     }
 
+    // Prevent selling shares the user doesn't have
+    if (tradeParams.direction === 'sell') {
+      const balance = tradeParams.isYes ? parseFloat(userYesBalance) : parseFloat(userNoBalance);
+      if (balance <= 0) {
+        addLog(`You don't have any ${tradeParams.isYes ? 'YES' : 'NO'} shares to sell`, 'error');
+        return;
+      }
+      if (parseFloat(tradeParams.amount) > balance) {
+        addLog(`You only have ${balance.toFixed(4)} shares available to sell`, 'error');
+        return;
+      }
+    }
+
     let result: { success: boolean; txHash?: string; shares?: string };
 
     if (tradeParams.direction === 'buy') {
@@ -1556,22 +1569,32 @@ export default function LMSRAdmin() {
                   </div>
                 )}
 
-                <button
-                  onClick={handleTrade}
-                  disabled={isBuying || isSelling || !tradeParams.marketAddress || !isConnected || isWrongChain}
-                  style={{
-                    ...styles.button,
-                    width: '100%',
-                    marginTop: '24px',
-                    padding: '16px',
-                    backgroundColor: tradeParams.direction === 'buy' ? '#001a00' : '#1a0a00',
-                    borderColor: tradeParams.direction === 'buy' ? '#00ff00' : '#ff6600',
-                    color: tradeParams.direction === 'buy' ? '#00ff00' : '#ff6600',
-                    opacity: isBuying || isSelling || !tradeParams.marketAddress || !isConnected || isWrongChain ? 0.5 : 1,
-                  }}
-                >
-                  [ {isBuying || isSelling ? 'PROCESSING...' : `${tradeParams.direction.toUpperCase()} ${tradeParams.isYes ? yesSymbol : noSymbol} SHARES`} ]
-                </button>
+                {/* Check if user has shares to sell */}
+                {(() => {
+                  const cannotSell = tradeParams.direction === 'sell' && (
+                    (tradeParams.isYes && parseFloat(userYesBalance) <= 0) ||
+                    (!tradeParams.isYes && parseFloat(userNoBalance) <= 0)
+                  );
+                  const isDisabled = isBuying || isSelling || !tradeParams.marketAddress || !isConnected || isWrongChain || cannotSell;
+                  return (
+                    <button
+                      onClick={handleTrade}
+                      disabled={isDisabled}
+                      style={{
+                        ...styles.button,
+                        width: '100%',
+                        marginTop: '24px',
+                        padding: '16px',
+                        backgroundColor: tradeParams.direction === 'buy' ? '#001a00' : '#1a0a00',
+                        borderColor: tradeParams.direction === 'buy' ? '#00ff00' : '#ff6600',
+                        color: tradeParams.direction === 'buy' ? '#00ff00' : '#ff6600',
+                        opacity: isDisabled ? 0.5 : 1,
+                      }}
+                    >
+                      [ {isBuying || isSelling ? 'PROCESSING...' : cannotSell ? `NO ${tradeParams.isYes ? yesSymbol : noSymbol} SHARES TO SELL` : `${tradeParams.direction.toUpperCase()} ${tradeParams.isYes ? yesSymbol : noSymbol} SHARES`} ]
+                    </button>
+                  );
+                })()}
               </div>
               )}
             </div>
