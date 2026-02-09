@@ -1093,9 +1093,7 @@ export default function LMSRAdmin() {
                   </div>
                 </div>
                 <div style={{ marginTop: '12px', color: '#666', fontSize: '11px' }}>
-                  1% trading fee is split 50/50 between protocol and market creator.
-                  Protocol fees auto-transfer to 0x048c...cdFE on every trade.
-                  Market creator can claim fees after resolution. α controls max spread.
+                  Market creators earn 0.5% of all trades. Fees can be claimed after resolution. α controls max spread.
                 </div>
               </div>
 
@@ -2053,34 +2051,20 @@ export default function LMSRAdmin() {
                   );
                 })()}
 
-                {/* FEE INFO DISPLAY */}
-                {feeInfo && (
+                {/* CREATOR FEE INFO - Only visible to market creator */}
+                {feeInfo && feeInfo.isMarketCreator && (
                   <div style={{
                     padding: '12px',
                     backgroundColor: '#0a0a0a',
                     border: '1px solid #333',
                     marginBottom: '16px',
                   }}>
-                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
-                      <div>
-                        <div style={{ color: '#666', fontSize: '10px', marginBottom: '4px' }}>PROTOCOL FEES SENT</div>
-                        <div style={{ color: '#00ffff', fontWeight: 'bold' }}>
-                          {parseFloat(feeInfo.totalProtocolFeesSent).toFixed(6)} MON
-                        </div>
-                        <div style={{ color: '#444', fontSize: '9px', marginTop: '2px' }}>
-                          Auto-sent to: {feeInfo.protocolFeeRecipient?.slice(0, 6)}...{feeInfo.protocolFeeRecipient?.slice(-4)}
-                        </div>
-                      </div>
-                      <div>
-                        <div style={{ color: '#666', fontSize: '10px', marginBottom: '4px' }}>CREATOR FEES</div>
-                        <div style={{ color: feeInfo.canClaimCreatorFees ? '#00ff00' : '#666', fontWeight: 'bold' }}>
-                          {parseFloat(feeInfo.creatorFees).toFixed(6)} MON
-                        </div>
-                        <div style={{ color: '#444', fontSize: '9px', marginTop: '2px' }}>
-                          Creator: {feeInfo.marketCreator?.slice(0, 6)}...{feeInfo.marketCreator?.slice(-4)}
-                          {feeInfo.isMarketCreator && ' (YOU)'}
-                        </div>
-                      </div>
+                    <div style={{ color: '#666', fontSize: '10px', marginBottom: '4px' }}>YOUR CREATOR FEES</div>
+                    <div style={{ color: feeInfo.canClaimCreatorFees ? '#00ff00' : '#666', fontWeight: 'bold', fontSize: '18px' }}>
+                      {parseFloat(feeInfo.creatorFees).toFixed(6)} MON
+                    </div>
+                    <div style={{ color: '#444', fontSize: '9px', marginTop: '4px' }}>
+                      Earned from trading fees on your market
                     </div>
                   </div>
                 )}
@@ -2130,14 +2114,15 @@ export default function LMSRAdmin() {
                 })()}
               </div>
 
-              <div style={{ ...styles.card, marginTop: '24px', borderColor: '#ff6600' }}>
-                <div style={{ color: '#ff6600', fontWeight: 'bold', marginBottom: '8px' }}>⚠ FEE INFO</div>
-                <div style={{ color: '#999', fontSize: '12px' }}>
-                  <strong>Protocol fees</strong> can be claimed anytime by the protocol fee recipient.<br />
-                  <strong>Creator fees</strong> can only be claimed by the market creator after resolution or after the resolution time passes.<br />
-                  1% trading fee is split 50/50 between protocol and creator.
+              {feeInfo?.isMarketCreator && (
+                <div style={{ ...styles.card, marginTop: '24px', borderColor: '#ff6600' }}>
+                  <div style={{ color: '#ff6600', fontWeight: 'bold', marginBottom: '8px' }}>ℹ CREATOR FEE INFO</div>
+                  <div style={{ color: '#999', fontSize: '12px' }}>
+                    As the market creator, you earn 0.5% of all trades on this market.<br />
+                    Creator fees can be claimed after the market resolves or after the resolution time passes.
+                  </div>
                 </div>
-              </div>
+              )}
             </div>
           )}
 
