@@ -178,7 +178,11 @@ export function useMarkets(options: UseMarketsOptions = {}) {
         await fetchMarkets();
         return true;
       } catch (err) {
-        console.error('Failed to upsert market:', err);
+        console.error('Failed to upsert market:', JSON.stringify(err, null, 2));
+        if (err && typeof err === 'object' && 'code' in err) {
+          const e = err as { code?: string; message?: string; details?: string };
+          console.error('Error code:', e.code, 'Message:', e.message, 'Details:', e.details);
+        }
         return false;
       }
     },

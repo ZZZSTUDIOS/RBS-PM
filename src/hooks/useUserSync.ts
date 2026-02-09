@@ -30,7 +30,8 @@ export function useUserSync() {
       });
 
       if (error) {
-        console.error('Failed to sync user:', error);
+        console.error('Failed to sync user:', JSON.stringify(error, null, 2));
+        console.error('Error code:', error.code, 'Message:', error.message, 'Details:', error.details);
         return null;
       }
 
