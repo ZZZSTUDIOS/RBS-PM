@@ -1,0 +1,2697 @@
+'use client';
+
+import React, { useState, useEffect } from 'react';
+import {
+  useAccount,
+  useConnect,
+  useDisconnect,
+  useBalance,
+  useChainId,
+  useSwitchChain,
+  usePublicClient,
+} from 'wagmi';
+import { formatEther, parseEther, type Address } from 'viem';
+import {
+  useTransactionLog,
+  useLSLMSRMarketCreate,
+  useLMSRBuy,
+  useLMSRSell,
+  useLMSRResolve,
+  useLMSRRedeem,
+  useClaimCreatorFees,
+  useMarketFees,
+  useUnifiedMarketData,
+  useUnifiedEstimateShares,
+  LSLMSR_ABI,
+  type LSLMSRMarketConfig,
+} from '../hooks/useLMSR';
+import { monadTestnet } from '../config/wagmi';
+import { useMarkets } from '../hooks/useMarkets';
+import { useUserSync } from '../hooks/useUserSync';
+import { usePositions } from '../hooks/usePositions';
+
+// Simple ERC20 ABI for balance and symbol checks
+const ERC20_ABI = [
+  {
+    name: 'balanceOf',
+    type: 'function',
+    inputs: [{ name: 'account', type: 'address' }],
+    outputs: [{ type: 'uint256' }],
+    stateMutability: 'view',
+  },
+  {
+    name: 'symbol',
+    type: 'function',
+    inputs: [],
+    outputs: [{ type: 'string' }],
+    stateMutability: 'view',
+  },
+] as const;
+
+// Trade history entry type
+interface TradeEntry {
+  id: string;
+  timestamp: number;
+  marketAddress: Address;
+  marketQuestion?: string;
+  type: 'buy' | 'sell' | 'redeem';
+  outcome: 'YES' | 'NO';
+  amount: string; // MON spent (buy) or received (sell/redeem)
+  shares: string;
+  txHash: string;
+}
+
+// Position summary per market
+interface Position {
+  marketAddress: Address;
+  marketQuestion?: string;
+  yesShares: number;
+  noShares: number;
+  yesCostBasis: number; // Total MON spent on YES shares
+  noCostBasis: number;  // Total MON spent on NO shares
+  realizedPnL: number;  // From sells and redemptions
+  resolved?: boolean;
+  yesWins?: boolean;
+}
+
+// Market prices cache
+interface MarketPrices {
+  yesPrice: number;
+  noPrice: number;
+  resolved: boolean;
+  yesWins: boolean;
+  oracle: string;
+}
+
+export default function LMSRAdmin() {
+  const [activeTab, setActiveTab] = useState('connect');
+  const [markets, setMarkets] = useState<Array<{
+    id: number;
+    address: Address;
+    question: string;
+    status: string;
+    yesToken: Address;
+    noToken: Address;
+    resolution: string;
+  }>>(() => {
+    if (typeof window !== 'undefined') {
+      const saved = localStorage.getItem('lmsr-markets');
+      return saved ? JSON.parse(saved) : [];
+    }
+    return [];
+  });
+
+  // Portfolio - trade history (loaded from Supabase)
+  const [trades, setTrades] = useState<TradeEntry[]>([]);
+
+  // Persist markets to localStorage
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      localStorage.setItem('lmsr-markets', JSON.stringify(markets));
+    }
+  }, [markets]);
+
+  // Market prices cache for PnL calculation
+  const [marketPrices, setMarketPrices] = useState<Record<string, MarketPrices>>({});
+
+  // Calculate positions from trades
+  const positions = React.useMemo((): Position[] => {
+    const positionMap: Record<string, Position> = {};
+
+    for (const trade of trades) {
+      const addr = trade.marketAddress.toLowerCase();
+      if (!positionMap[addr]) {
+        positionMap[addr] = {
+          marketAddress: trade.marketAddress,
+          marketQuestion: trade.marketQuestion,
+          yesShares: 0,
+          noShares: 0,
+          yesCostBasis: 0,
+          noCostBasis: 0,
+          realizedPnL: 0,
+        };
+      }
+
+      const pos = positionMap[addr];
+      const shares = parseFloat(trade.shares || '0');
+      const amount = parseFloat(trade.amount || '0');
+
+      if (trade.type === 'buy') {
+        if (trade.outcome === 'YES') {
+          pos.yesShares += shares;
+          pos.yesCostBasis += amount;
+        } else {
+          pos.noShares += shares;
+          pos.noCostBasis += amount;
+        }
+      } else if (trade.type === 'sell') {
+        if (trade.outcome === 'YES') {
+          // Calculate realized PnL for this sell
+          const avgCost = pos.yesShares > 0 ? pos.yesCostBasis / pos.yesShares : 0;
+          const costOfSold = avgCost * shares;
+          pos.realizedPnL += amount - costOfSold;
+          pos.yesShares -= shares;
+          pos.yesCostBasis -= costOfSold;
+        } else {
+          const avgCost = pos.noShares > 0 ? pos.noCostBasis / pos.noShares : 0;
+          const costOfSold = avgCost * shares;
+          pos.realizedPnL += amount - costOfSold;
+          pos.noShares -= shares;
+          pos.noCostBasis -= costOfSold;
+        }
+      } else if (trade.type === 'redeem') {
+        // Redemption: amount is payout, shares is what was redeemed
+        if (trade.outcome === 'YES') {
+          const avgCost = pos.yesShares > 0 ? pos.yesCostBasis / pos.yesShares : 0;
+          const costOfRedeemed = avgCost * shares;
+          pos.realizedPnL += amount - costOfRedeemed;
+          pos.yesShares -= shares;
+          pos.yesCostBasis -= costOfRedeemed;
+        } else {
+          const avgCost = pos.noShares > 0 ? pos.noCostBasis / pos.noShares : 0;
+          const costOfRedeemed = avgCost * shares;
+          pos.realizedPnL += amount - costOfRedeemed;
+          pos.noShares -= shares;
+          pos.noCostBasis -= costOfRedeemed;
+        }
+      }
+
+      // Update market question if available
+      if (trade.marketQuestion) {
+        pos.marketQuestion = trade.marketQuestion;
+      }
+    }
+
+    // Add market prices info to positions
+    return Object.values(positionMap).map(pos => {
+      const prices = marketPrices[pos.marketAddress.toLowerCase()];
+      if (prices) {
+        pos.resolved = prices.resolved;
+        pos.yesWins = prices.yesWins;
+      }
+      return pos;
+    }).filter(pos => pos.yesShares > 0.0001 || pos.noShares > 0.0001 || Math.abs(pos.realizedPnL) > 0.0001);
+  }, [trades, marketPrices]);
+
+  // Calculate unrealized PnL for a position
+  const getUnrealizedPnL = (pos: Position): number => {
+    // No shares = no unrealized P&L
+    if (pos.yesShares < 0.0001 && pos.noShares < 0.0001) {
+      return 0;
+    }
+
+    const prices = marketPrices[pos.marketAddress.toLowerCase()];
+    if (!prices) return 0;
+
+    if (prices.resolved) {
+      // If resolved, winning shares are worth 1 MON each, losing shares worth 0
+      const yesValue = prices.yesWins ? pos.yesShares : 0;
+      const noValue = prices.yesWins ? 0 : pos.noShares;
+      return (yesValue + noValue) - pos.yesCostBasis - pos.noCostBasis;
+    } else {
+      // Mark to market using current prices
+      const yesValue = pos.yesShares * prices.yesPrice;
+      const noValue = pos.noShares * prices.noPrice;
+      return (yesValue + noValue) - pos.yesCostBasis - pos.noCostBasis;
+    }
+  };
+
+  // Total PnL calculations
+  const totalRealizedPnL = positions.reduce((sum, pos) => sum + pos.realizedPnL, 0);
+  const totalUnrealizedPnL = positions.reduce((sum, pos) => sum + getUnrealizedPnL(pos), 0);
+  const totalPnL = totalRealizedPnL + totalUnrealizedPnL;
+
+  // Selected market for trading/viewing
+  const [selectedMarket, setSelectedMarket] = useState<Address | undefined>();
+
+  // Wallet hooks
+  const { address, isConnected } = useAccount();
+  const { connect, connectors, isPending: isConnecting } = useConnect();
+  const { disconnect } = useDisconnect();
+  const chainId = useChainId();
+  const { switchChain } = useSwitchChain();
+  const { data: balance, refetch: refetchBalance } = useBalance({
+    address,
+    query: { refetchInterval: 5000 }, // Refresh every 5 seconds
+  });
+  const publicClient = usePublicClient();
+
+  // Supabase hooks for syncing
+  const { upsertMarket: syncMarketToSupabase } = useMarkets();
+  const { syncTrade: syncTradeToSupabase, userId } = useUserSync(); // Auto-sync user when wallet connects
+
+  // Fetch trades and positions from Supabase
+  const {
+    trades: dbTrades,
+    isLoading: isLoadingPortfolio,
+    refetch: refetchPortfolio,
+    refetchTrades: refetchDbTrades,
+  } = usePositions(userId || undefined);
+
+  // Convert database trades to TradeEntry format for display
+  useEffect(() => {
+    if (dbTrades && dbTrades.length > 0) {
+      const convertedTrades: TradeEntry[] = dbTrades.map(t => ({
+        id: t.id,
+        timestamp: new Date(t.created_at).getTime(),
+        marketAddress: (t.market_address || '') as Address,
+        marketQuestion: t.market_question,
+        type: t.trade_type === 'BUY' ? 'buy' : 'sell',
+        outcome: t.outcome,
+        amount: t.amount,
+        shares: t.shares,
+        txHash: t.tx_hash,
+      }));
+      setTrades(convertedTrades);
+    } else {
+      // No trades or no user logged in
+      setTrades([]);
+    }
+  }, [dbTrades, userId]);
+
+  // Fetch market prices for all positions and deployed markets
+  useEffect(() => {
+    const fetchPrices = async () => {
+      if (!publicClient) return;
+
+      // Combine markets from trades and deployed markets
+      const tradeMarkets = trades.map(t => t.marketAddress.toLowerCase());
+      const deployedMarkets = markets.map(m => m.address.toLowerCase());
+      const uniqueMarkets = [...new Set([...tradeMarkets, ...deployedMarkets])];
+
+      if (uniqueMarkets.length === 0) return;
+
+      for (const marketAddr of uniqueMarkets) {
+        try {
+          // LS-LMSR getMarketInfo returns 14 fields
+          const info = await publicClient.readContract({
+            address: marketAddr as Address,
+            abi: LSLMSR_ABI,
+            functionName: 'getMarketInfo',
+          }) as [string, bigint, Address, bigint, bigint, bigint, bigint, bigint, bigint, bigint, bigint, bigint, boolean, boolean];
+
+          // Indices: 0=question, 1=resTime, 2=oracle, 3=yesPrice, 4=noPrice, 5=yesProbability, 6=noProbability, 7=yesShares, 8=noShares, 9=totalCollateral, 10=liquidityParam, 11=priceSum, 12=resolved, 13=yesWins
+          const [, , oracle, yesPrice, noPrice, , , , , , , , resolved, yesWins] = info;
+
+          setMarketPrices(prev => ({
+            ...prev,
+            [marketAddr]: {
+              yesPrice: Number(yesPrice) / 1e18,
+              noPrice: Number(noPrice) / 1e18,
+              resolved,
+              yesWins,
+              oracle: oracle.toLowerCase(),
+            },
+          }));
+        } catch (err) {
+          console.error(`Failed to fetch prices for ${marketAddr}:`, err);
+        }
+      }
+    };
+
+    fetchPrices();
+    // Refresh prices every 30 seconds
+    const interval = setInterval(fetchPrices, 30000);
+    return () => clearInterval(interval);
+  }, [publicClient, trades, markets]);
+
+  // LS-LMSR hooks
+  const { logs, addLog, clearLogs } = useTransactionLog(address);
+  const { createMarket, isLoading: isCreatingMarket } = useLSLMSRMarketCreate();
+  const { buy, isLoading: isBuying } = useLMSRBuy();
+  const { sell, isLoading: isSelling } = useLMSRSell();
+  const { resolve, isLoading: isResolving } = useLMSRResolve();
+  const { redeem, isLoading: isRedeeming } = useLMSRRedeem();
+  const { claimFees, isLoading: isClaimingCreatorFees } = useClaimCreatorFees();
+  // Protocol fees are now auto-transferred on every trade, no claiming needed
+  const { marketInfo, marketType: detectedMarketType, refetch: refetchMarketInfo } = useUnifiedMarketData(selectedMarket);
+  const { estimateShares } = useUnifiedEstimateShares();
+
+  // Estimated shares state
+  const [estimatedShares, setEstimatedShares] = useState<string>('0');
+  const [isEstimating, setIsEstimating] = useState(false);
+
+  // User's token balances for selling
+  const [userYesBalance, setUserYesBalance] = useState<string>('0');
+  const [userNoBalance, setUserNoBalance] = useState<string>('0');
+  const [estimatedPayout, setEstimatedPayout] = useState<string>('0');
+
+  // Resolve tab token balances (stored for future UI display)
+  const [_resolveYesBalance, setResolveYesBalance] = useState<string>('0');
+  const [_resolveNoBalance, setResolveNoBalance] = useState<string>('0');
+
+  // Resolve tab permissions
+  const [resolveMarketOracle, setResolveMarketOracle] = useState<string>('');
+  const [_resolveMarketCreator, setResolveMarketCreator] = useState<string>('');
+  const [resolveMarketResolved, setResolveMarketResolved] = useState<boolean>(false);
+  const [resolveMarketResolutionTime, setResolveMarketResolutionTime] = useState<bigint>(0n);
+
+  // Token symbols for display
+  const [yesSymbol, setYesSymbol] = useState<string>('YES');
+  const [noSymbol, setNoSymbol] = useState<string>('NO');
+
+  // Market Creation State (LS-LMSR only)
+  const [marketConfig, setMarketConfig] = useState<LSLMSRMarketConfig>({
+    question: 'Will ETH hit $10,000 by end of 2026?',
+    resolutionDate: '2026-12-31',
+    oracle: '',
+    alpha: '0.03', // 3% max spread
+    minLiquidity: '100', // Minimum effective b (should be >= initialShares to avoid exp overflow)
+    initialYesShares: '100', // Initial YES shares for bootstrapping
+    initialNoShares: '100', // Initial NO shares for bootstrapping
+    yesName: 'ETH10K-YES',
+    yesSymbol: 'YES',
+    noName: 'ETH10K-NO',
+    noSymbol: 'NO',
+    initialLiquidity: '10', // Liquidity buffer - recommend 2-5% of expected volume
+    // Note: Protocol fees auto-transfer to 0x048c2c9E869594a70c6Dc7CeAC168E724425cdFE on every trade
+  });
+
+  // Market creation confirmation
+  const [createdMarket, setCreatedMarket] = useState<{
+    address: string;
+    question: string;
+    txHash?: string;
+  } | null>(null);
+
+  // Trade State
+  const [tradeParams, setTradeParams] = useState({
+    marketAddress: '',
+    amount: '0.1',
+    minShares: '0',
+    isYes: true,
+    direction: 'buy' as 'buy' | 'sell',
+  });
+
+  // Resolution State
+  const [resolution, setResolution] = useState({
+    marketAddress: '',
+    outcome: 'YES' as 'YES' | 'NO',
+  });
+
+  // Fee info for resolution tab
+  const { feeInfo, refetch: refetchFeeInfo } = useMarketFees(
+    resolution.marketAddress ? resolution.marketAddress as `0x${string}` : undefined
+  );
+
+  // Check chain and prompt switch
+  useEffect(() => {
+    if (isConnected && chainId !== monadTestnet.id) {
+      addLog(`Wrong network. Please switch to Monad Testnet`, 'error');
+    }
+  }, [isConnected, chainId, addLog]);
+
+  // Load market info when trade address changes
+  useEffect(() => {
+    if (tradeParams.marketAddress && tradeParams.marketAddress.startsWith('0x')) {
+      setSelectedMarket(tradeParams.marketAddress as Address);
+    }
+  }, [tradeParams.marketAddress]);
+
+  // Estimate shares when amount, outcome, or market changes
+  useEffect(() => {
+    const updateEstimate = async () => {
+      if (
+        !tradeParams.marketAddress ||
+        !tradeParams.marketAddress.startsWith('0x') ||
+        !tradeParams.amount ||
+        parseFloat(tradeParams.amount) <= 0 ||
+        tradeParams.direction !== 'buy'
+      ) {
+        setEstimatedShares('0');
+        return;
+      }
+
+      setIsEstimating(true);
+      try {
+        const shares = await estimateShares(
+          tradeParams.marketAddress as Address,
+          tradeParams.isYes,
+          tradeParams.amount
+        );
+        setEstimatedShares(shares);
+      } catch (err) {
+        console.error('Failed to estimate shares:', err);
+        setEstimatedShares('0');
+      } finally {
+        setIsEstimating(false);
+      }
+    };
+
+    // Debounce the estimate call
+    const timeoutId = setTimeout(updateEstimate, 300);
+    return () => clearTimeout(timeoutId);
+  }, [tradeParams.marketAddress, tradeParams.amount, tradeParams.isYes, tradeParams.direction, estimateShares]);
+
+  // Fetch user's token balances and symbols when market changes
+  useEffect(() => {
+    const fetchBalancesAndSymbols = async () => {
+      if (!publicClient || !selectedMarket || !detectedMarketType) {
+        setUserYesBalance('0');
+        setUserNoBalance('0');
+        setYesSymbol('YES');
+        setNoSymbol('NO');
+        return;
+      }
+
+      // Always use LSLMSR_ABI (yesToken/noToken functions are compatible)
+      const marketAbi = LSLMSR_ABI;
+
+      try {
+        // Get token addresses from market
+        const [yesToken, noToken] = await Promise.all([
+          publicClient.readContract({
+            address: selectedMarket as Address,
+            abi: marketAbi,
+            functionName: 'yesToken',
+          }) as Promise<Address>,
+          publicClient.readContract({
+            address: selectedMarket as Address,
+            abi: marketAbi,
+            functionName: 'noToken',
+          }) as Promise<Address>,
+        ]);
+
+        // Get token symbols
+        const [yesTokenSymbol, noTokenSymbol] = await Promise.all([
+          publicClient.readContract({
+            address: yesToken,
+            abi: ERC20_ABI,
+            functionName: 'symbol',
+          }) as Promise<string>,
+          publicClient.readContract({
+            address: noToken,
+            abi: ERC20_ABI,
+            functionName: 'symbol',
+          }) as Promise<string>,
+        ]);
+
+        setYesSymbol(yesTokenSymbol);
+        setNoSymbol(noTokenSymbol);
+
+        // Get user balances if connected
+        if (address) {
+          const [yesBalance, noBalance] = await Promise.all([
+            publicClient.readContract({
+              address: yesToken,
+              abi: ERC20_ABI,
+              functionName: 'balanceOf',
+              args: [address],
+            }) as Promise<bigint>,
+            publicClient.readContract({
+              address: noToken,
+              abi: ERC20_ABI,
+              functionName: 'balanceOf',
+              args: [address],
+            }) as Promise<bigint>,
+          ]);
+
+          setUserYesBalance(formatEther(yesBalance));
+          setUserNoBalance(formatEther(noBalance));
+        }
+      } catch (err) {
+        console.error('Failed to fetch balances/symbols:', err);
+      }
+    };
+
+    fetchBalancesAndSymbols();
+  }, [publicClient, address, selectedMarket, marketInfo, detectedMarketType]);
+
+  // Estimate payout when selling
+  useEffect(() => {
+    const updatePayout = async () => {
+      if (
+        !publicClient ||
+        !tradeParams.marketAddress ||
+        !tradeParams.marketAddress.startsWith('0x') ||
+        !tradeParams.amount ||
+        parseFloat(tradeParams.amount) <= 0 ||
+        tradeParams.direction !== 'sell'
+      ) {
+        setEstimatedPayout('0');
+        return;
+      }
+
+      try {
+        const sharesToSell = parseEther(tradeParams.amount);
+        const payout = await publicClient.readContract({
+          address: tradeParams.marketAddress as Address,
+          abi: LSLMSR_ABI,
+          functionName: 'getPayoutForSell',
+          args: [tradeParams.isYes, sharesToSell],
+        }) as bigint;
+
+        setEstimatedPayout(formatEther(payout));
+      } catch (err) {
+        console.error('Failed to estimate payout:', err);
+        setEstimatedPayout('0');
+      }
+    };
+
+    const timeoutId = setTimeout(updatePayout, 300);
+    return () => clearTimeout(timeoutId);
+  }, [publicClient, tradeParams.marketAddress, tradeParams.amount, tradeParams.isYes, tradeParams.direction]);
+
+  // Fetch balances and permissions for resolve tab market
+  useEffect(() => {
+    const fetchResolveData = async () => {
+      if (!publicClient || !resolution.marketAddress || !resolution.marketAddress.startsWith('0x')) {
+        setResolveYesBalance('0');
+        setResolveNoBalance('0');
+        setResolveMarketOracle('');
+        setResolveMarketCreator('');
+        setResolveMarketResolved(false);
+        setResolveMarketResolutionTime(0n);
+        return;
+      }
+
+      try {
+        // Fetch market info including oracle, creator, and resolved status
+        const [yesTokenAddr, noTokenAddr, oracle, creator, marketInfo] = await Promise.all([
+          publicClient.readContract({
+            address: resolution.marketAddress as Address,
+            abi: LSLMSR_ABI,
+            functionName: 'yesToken',
+          }) as Promise<Address>,
+          publicClient.readContract({
+            address: resolution.marketAddress as Address,
+            abi: LSLMSR_ABI,
+            functionName: 'noToken',
+          }) as Promise<Address>,
+          publicClient.readContract({
+            address: resolution.marketAddress as Address,
+            abi: LSLMSR_ABI,
+            functionName: 'oracle',
+          }) as Promise<Address>,
+          publicClient.readContract({
+            address: resolution.marketAddress as Address,
+            abi: LSLMSR_ABI,
+            functionName: 'marketCreator',
+          }) as Promise<Address>,
+          publicClient.readContract({
+            address: resolution.marketAddress as Address,
+            abi: LSLMSR_ABI,
+            functionName: 'getMarketInfo',
+          }) as Promise<[string, bigint, Address, bigint, bigint, bigint, bigint, bigint, bigint, bigint, bigint, bigint, boolean, boolean]>,
+        ]);
+
+        setResolveMarketOracle(oracle.toLowerCase());
+        setResolveMarketCreator(creator.toLowerCase());
+        setResolveMarketResolved(marketInfo[12]); // resolved is at index 12
+        setResolveMarketResolutionTime(marketInfo[1]); // resolutionTime is at index 1
+
+        // Fetch token balances if address is connected
+        if (address) {
+          const [yesBalance, noBalance] = await Promise.all([
+            publicClient.readContract({
+              address: yesTokenAddr,
+              abi: ERC20_ABI,
+              functionName: 'balanceOf',
+              args: [address],
+            }) as Promise<bigint>,
+            publicClient.readContract({
+              address: noTokenAddr,
+              abi: ERC20_ABI,
+              functionName: 'balanceOf',
+              args: [address],
+            }) as Promise<bigint>,
+          ]);
+
+          setResolveYesBalance(formatEther(yesBalance));
+          setResolveNoBalance(formatEther(noBalance));
+        }
+      } catch (err) {
+        console.error('Failed to fetch resolve tab data:', err);
+        setResolveYesBalance('0');
+        setResolveNoBalance('0');
+        setResolveMarketOracle('');
+        setResolveMarketCreator('');
+        setResolveMarketResolved(false);
+      }
+    };
+
+    fetchResolveData();
+  }, [publicClient, address, resolution.marketAddress, marketPrices]);
+
+  // Handlers
+  const handleConnect = async (connector: any) => {
+    try {
+      addLog(`Connecting via ${connector.name}...`, 'pending');
+      await connect({ connector });
+    } catch (err: any) {
+      addLog(`Connection failed: ${err.message}`, 'error');
+    }
+  };
+
+  const handleSwitchChain = async () => {
+    try {
+      addLog('Switching to Monad Testnet...', 'pending');
+      await switchChain({ chainId: monadTestnet.id });
+      addLog('Switched to Monad Testnet', 'success');
+    } catch (err: any) {
+      addLog(`Failed to switch: ${err.message}`, 'error');
+    }
+  };
+
+  const handleCreateMarket = async () => {
+    // Validate resolution date is in the future (at least 1 hour from now)
+    const resolutionTimestamp = Math.floor(new Date(marketConfig.resolutionDate).getTime() / 1000);
+    const oneHourFromNow = Math.floor(Date.now() / 1000) + 3600;
+
+    if (resolutionTimestamp <= oneHourFromNow) {
+      addLog('Resolution date must be at least 1 hour in the future', 'error');
+      return;
+    }
+
+    const result = await createMarket(marketConfig, addLog);
+
+    if (result) {
+      setMarkets(prev => [
+        ...prev,
+        {
+          id: prev.length + 1,
+          address: result.marketAddress,
+          question: marketConfig.question,
+          status: 'ACTIVE',
+          yesToken: result.yesToken,
+          noToken: result.noToken,
+          resolution: marketConfig.resolutionDate,
+        },
+      ]);
+
+      // Sync to Supabase for indexing and real-time updates
+      syncMarketToSupabase({
+        address: result.marketAddress,
+        question: marketConfig.question,
+        yesToken: result.yesToken,
+        noToken: result.noToken,
+        oracle: address || '',
+        creator: address || '',
+        resolutionTime: new Date(marketConfig.resolutionDate),
+        txHash: result.txHash,
+        alpha: marketConfig.alpha,
+        minLiquidity: marketConfig.minLiquidity,
+        protocolFeeRecipient: address,
+      }).then(success => {
+        if (success) {
+          addLog('Market synced to Supabase', 'success');
+        } else {
+          addLog('Warning: Failed to sync market to Supabase', 'error');
+        }
+      });
+
+      // Auto-select the new market for trading
+      setTradeParams(prev => ({ ...prev, marketAddress: result.marketAddress }));
+      setSelectedMarket(result.marketAddress);
+
+      // Show confirmation modal
+      setCreatedMarket({
+        address: result.marketAddress,
+        question: marketConfig.question,
+        txHash: result.txHash,
+      });
+    }
+  };
+
+  const handleTrade = async () => {
+    if (!tradeParams.marketAddress) {
+      addLog('Please enter market address', 'error');
+      return;
+    }
+
+    let result: { success: boolean; txHash?: string; shares?: string };
+
+    if (tradeParams.direction === 'buy') {
+      result = await buy(
+        tradeParams.marketAddress as Address,
+        tradeParams.isYes,
+        tradeParams.amount,
+        '0', // No minimum shares - user sees price impact before trading
+        addLog
+      );
+    } else {
+      result = await sell(
+        tradeParams.marketAddress as Address,
+        tradeParams.isYes,
+        tradeParams.amount,
+        '0', // No minimum payout - user sees price impact before trading
+        addLog
+      );
+    }
+
+    if (result.success && result.txHash) {
+      // Sync trade to Supabase with price and fee info
+      const priceAtTrade = tradeParams.isYes
+        ? marketInfo?.yesPrice
+        : marketInfo?.noPrice;
+
+      // Calculate fees: 1% trading fee, split 50/50 between protocol and creator
+      const tradeAmount = parseFloat(tradeParams.amount);
+      const tradingFee = tradeAmount * 0.01; // 1% fee
+      const protocolFee = (tradingFee / 2).toFixed(18); // 50% to protocol (auto-transferred)
+      const creatorFee = (tradingFee / 2).toFixed(18);  // 50% to creator (accumulated)
+
+      await syncTradeToSupabase({
+        marketAddress: tradeParams.marketAddress,
+        tradeType: tradeParams.direction === 'buy' ? 'BUY' : 'SELL',
+        outcome: tradeParams.isYes ? 'YES' : 'NO',
+        shares: result.shares || '0',
+        amount: tradeParams.amount,
+        txHash: result.txHash,
+        priceAtTrade: priceAtTrade ? String(priceAtTrade) : undefined,
+        protocolFee,
+        creatorFee,
+      });
+
+      // Refetch trades from database to update portfolio
+      refetchDbTrades();
+      refetchPortfolio();
+      refetchMarketInfo();
+      refetchBalance();
+    }
+  };
+
+  const handleResolveMarket = async () => {
+    if (!resolution.marketAddress) {
+      addLog('Please enter market address', 'error');
+      return;
+    }
+
+    await resolve(
+      resolution.marketAddress as Address,
+      resolution.outcome === 'YES',
+      addLog
+    );
+  };
+
+  const handleClaimCreatorFees = async () => {
+    if (!resolution.marketAddress) {
+      addLog('Please enter market address', 'error');
+      return;
+    }
+
+    const result = await claimFees(resolution.marketAddress as Address, addLog);
+
+    if (result.success) {
+      refetchBalance();
+      refetchFeeInfo();
+    }
+  };
+
+  // Protocol fees are now auto-transferred on every trade to 0x048c2c9E869594a70c6Dc7CeAC168E724425cdFE
+  // No manual claiming needed
+
+  // Tabs configuration
+  const tabs = [
+    { id: 'connect', label: 'WALLET' },
+    { id: 'market', label: 'CREATE' },
+    { id: 'trade', label: 'TRADE' },
+    { id: 'portfolio', label: 'PORTFOLIO' },
+    { id: 'resolve', label: 'RESOLVE' },
+    { id: 'markets', label: 'MARKETS' },
+  ];
+
+  const isWrongChain = isConnected && chainId !== monadTestnet.id;
+
+  return (
+    <div style={styles.container}>
+      {/* Header */}
+      <header style={styles.header}>
+        <div style={styles.headerLeft}>
+          <div style={styles.logo}>◈ LMSR</div>
+          <div style={styles.badge}>PREDICTION MARKETS</div>
+        </div>
+        <div style={styles.headerRight}>
+          <div style={styles.networkBadge}>
+            {isWrongChain ? (
+              <span style={{ color: '#ff6600' }}>⚠ WRONG NETWORK</span>
+            ) : (
+              `MONAD TESTNET [${monadTestnet.id}]`
+            )}
+          </div>
+          {isConnected && address && (
+            <div style={styles.walletBadge}>
+              {address.slice(0, 6)}...{address.slice(-4)} | {balance ? parseFloat(formatEther(balance.value)).toFixed(4) : '0'} MON
+            </div>
+          )}
+        </div>
+      </header>
+
+      {/* Navigation */}
+      <nav style={styles.nav}>
+        {tabs.map(tab => (
+          <button
+            key={tab.id}
+            onClick={() => setActiveTab(tab.id)}
+            style={{
+              ...styles.navButton,
+              backgroundColor: activeTab === tab.id ? '#00ff00' : 'transparent',
+              color: activeTab === tab.id ? '#000' : '#00ff00',
+            }}
+          >
+            {tab.label}
+          </button>
+        ))}
+      </nav>
+
+      <div style={styles.mainContainer}>
+        {/* Main Content */}
+        <main style={styles.main}>
+          {/* WALLET TAB */}
+          {activeTab === 'connect' && (
+            <div>
+              <SectionHeader>WALLET CONNECTION</SectionHeader>
+
+              {!isConnected ? (
+                <div style={styles.card}>
+                  <div style={{ marginBottom: '16px', color: '#666' }}>
+                    Select a wallet to connect:
+                  </div>
+                  <div style={{ display: 'grid', gap: '12px' }}>
+                    {connectors.map(connector => (
+                      <button
+                        key={connector.uid}
+                        onClick={() => handleConnect(connector)}
+                        disabled={isConnecting}
+                        style={{
+                          ...styles.button,
+                          opacity: isConnecting ? 0.5 : 1,
+                        }}
+                      >
+                        [ {isConnecting ? 'CONNECTING...' : `CONNECT ${connector.name.toUpperCase()}`} ]
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              ) : (
+                <div>
+                  {isWrongChain && (
+                    <div style={{ ...styles.card, borderColor: '#ff6600', marginBottom: '24px' }}>
+                      <div style={{ color: '#ff6600', fontWeight: 'bold', marginBottom: '12px' }}>
+                        ⚠ WRONG NETWORK
+                      </div>
+                      <p style={{ color: '#999', marginBottom: '16px' }}>
+                        Please switch to Monad Testnet to continue.
+                      </p>
+                      <button onClick={handleSwitchChain} style={styles.button}>
+                        [ SWITCH TO MONAD TESTNET ]
+                      </button>
+                    </div>
+                  )}
+
+                  <div style={styles.card}>
+                    <InfoRow label="STATUS" value="● CONNECTED" valueColor="#00ff00" />
+                    <InfoRow label="ADDRESS" value={address || ''} mono />
+                    <InfoRow label="BALANCE" value={`${balance ? parseFloat(formatEther(balance.value)).toFixed(4) : '0'} MON`} />
+                    <InfoRow label="CHAIN ID" value={chainId?.toString() || ''} />
+                    <div style={{ marginTop: '16px' }}>
+                      <button
+                        onClick={() => {
+                          disconnect();
+                          addLog('Disconnected', 'info');
+                        }}
+                        style={{ ...styles.button, borderColor: '#ff0000', color: '#ff0000' }}
+                      >
+                        [ DISCONNECT ]
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              <div style={{ marginTop: '32px' }}>
+                <SectionHeader>ABOUT LMSR</SectionHeader>
+                <div style={{ ...styles.card, marginTop: '16px' }}>
+                  <p style={{ color: '#999', lineHeight: '1.6' }}>
+                    LMSR (Logarithmic Market Scoring Rule) is an automated market maker algorithm
+                    designed for prediction markets. It provides guaranteed liquidity and allows
+                    traders to buy/sell outcome shares (YES/NO) with prices that reflect the
+                    market's probability estimate.
+                  </p>
+                  <div style={{ marginTop: '16px' }}>
+                    <InfoRow label="COLLATERAL" value="Native MON" />
+                    <InfoRow label="PRICING" value="C(q) = b * ln(e^(qYes/b) + e^(qNo/b))" mono />
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* CREATE MARKET TAB */}
+          {activeTab === 'market' && (
+            <div>
+              <SectionHeader>CREATE LS-LMSR PREDICTION MARKET</SectionHeader>
+              <p style={{ color: '#666', marginBottom: '24px' }}>
+                Deploy a new LS-LMSR prediction market with dynamic liquidity and auto-generated YES/NO outcome tokens
+              </p>
+
+              <div style={styles.card}>
+                <InputField
+                  label="QUESTION"
+                  value={marketConfig.question}
+                  onChange={v => setMarketConfig(p => ({ ...p, question: v }))}
+                />
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px', marginTop: '16px' }}>
+                  <InputField
+                    label="RESOLUTION DATE"
+                    value={marketConfig.resolutionDate}
+                    type="date"
+                    min={new Date(Date.now() + 86400000).toISOString().split('T')[0]}
+                    onChange={v => setMarketConfig(p => ({ ...p, resolutionDate: v }))}
+                  />
+                  <InputField
+                    label="ORACLE ADDRESS"
+                    value={marketConfig.oracle}
+                    placeholder={address || '0x...'}
+                    onChange={v => setMarketConfig(p => ({ ...p, oracle: v }))}
+                  />
+                </div>
+              </div>
+
+              <div style={{ ...styles.card, marginTop: '24px' }}>
+                <div style={{ fontWeight: 'bold', marginBottom: '16px' }}>TOKEN CONFIG</div>
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
+                  <div style={{ padding: '12px', backgroundColor: '#001a00', border: '1px solid #00ff00' }}>
+                    <div style={{ color: '#00ff00', marginBottom: '12px', fontWeight: 'bold' }}>YES TOKEN</div>
+                    <InputField
+                      label="NAME"
+                      value={marketConfig.yesName}
+                      onChange={v => setMarketConfig(p => ({ ...p, yesName: v }))}
+                    />
+                    <InputField
+                      label="SYMBOL"
+                      value={marketConfig.yesSymbol}
+                      onChange={v => setMarketConfig(p => ({ ...p, yesSymbol: v }))}
+                    />
+                  </div>
+                  <div style={{ padding: '12px', backgroundColor: '#1a0a00', border: '1px solid #ff6600' }}>
+                    <div style={{ color: '#ff6600', marginBottom: '12px', fontWeight: 'bold' }}>NO TOKEN</div>
+                    <InputField
+                      label="NAME"
+                      value={marketConfig.noName}
+                      onChange={v => setMarketConfig(p => ({ ...p, noName: v }))}
+                    />
+                    <InputField
+                      label="SYMBOL"
+                      value={marketConfig.noSymbol}
+                      onChange={v => setMarketConfig(p => ({ ...p, noSymbol: v }))}
+                    />
+                  </div>
+                </div>
+              </div>
+
+              <div style={{ ...styles.card, marginTop: '24px' }}>
+                <div style={{ fontWeight: 'bold', marginBottom: '16px' }}>LS-LMSR CONFIG</div>
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
+                  <InputField
+                    label="ALPHA (α) - Spread Factor"
+                    value={marketConfig.alpha}
+                    placeholder="0.03"
+                    onChange={v => setMarketConfig(p => ({ ...p, alpha: v }))}
+                  />
+                  <InputField
+                    label="MIN LIQUIDITY (b floor, should be ≥ initial shares)"
+                    value={marketConfig.minLiquidity}
+                    placeholder="100"
+                    onChange={v => setMarketConfig(p => ({ ...p, minLiquidity: v }))}
+                  />
+                </div>
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px', marginTop: '16px' }}>
+                  <InputField
+                    label="INITIAL YES SHARES"
+                    value={marketConfig.initialYesShares}
+                    placeholder="100"
+                    onChange={v => setMarketConfig(p => ({ ...p, initialYesShares: v }))}
+                  />
+                  <InputField
+                    label="INITIAL NO SHARES"
+                    value={marketConfig.initialNoShares}
+                    placeholder="100"
+                    onChange={v => setMarketConfig(p => ({ ...p, initialNoShares: v }))}
+                  />
+                </div>
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px', marginTop: '16px' }}>
+                  <InputField
+                    label="LIQUIDITY BUFFER (MON)"
+                    value={marketConfig.initialLiquidity}
+                    placeholder="10"
+                    onChange={v => setMarketConfig(p => ({ ...p, initialLiquidity: v }))}
+                  />
+                </div>
+                <div style={{ marginTop: '12px', padding: '12px', backgroundColor: '#1a1a00', border: '1px solid #ff6600' }}>
+                  <div style={{ color: '#ff6600', fontWeight: 'bold', marginBottom: '8px', fontSize: '11px' }}>⚠ LIQUIDITY BUFFER</div>
+                  <div style={{ color: '#999', fontSize: '11px' }}>
+                    Buffer ensures winners can redeem at <strong style={{ color: '#fff' }}>1 MON per share</strong>.<br/>
+                    <strong>Recommended:</strong> 2-5% of expected total trading volume.<br/>
+                    <span style={{ color: '#666' }}>Example: Expecting 500 MON in trades → deposit 10-25 MON buffer</span><br/>
+                    <span style={{ color: '#666' }}>Minimum: 1 MON. Excess can be withdrawn after resolution.</span>
+                  </div>
+                </div>
+                <div style={{ marginTop: '12px', color: '#666', fontSize: '11px' }}>
+                  1% trading fee is split 50/50 between protocol and market creator.
+                  Protocol fees auto-transfer to 0x048c...cdFE on every trade.
+                  Market creator can claim fees after resolution. α controls max spread.
+                </div>
+              </div>
+
+              <button
+                onClick={handleCreateMarket}
+                disabled={isCreatingMarket || !isConnected || isWrongChain}
+                style={{
+                  ...styles.button,
+                  width: '100%',
+                  marginTop: '24px',
+                  padding: '16px',
+                  opacity: isCreatingMarket || !isConnected || isWrongChain ? 0.5 : 1,
+                }}
+              >
+                [ {isCreatingMarket ? 'DEPLOYING...' : 'DEPLOY LS-LMSR MARKET'} ]
+              </button>
+            </div>
+          )}
+
+          {/* TRADE TAB */}
+          {activeTab === 'trade' && (
+            <div>
+              <SectionHeader>TRADE OUTCOME SHARES</SectionHeader>
+
+              <div style={styles.card}>
+                <InputField
+                  label="MARKET ADDRESS"
+                  value={tradeParams.marketAddress}
+                  placeholder="0x..."
+                  onChange={v => setTradeParams(p => ({ ...p, marketAddress: v }))}
+                />
+
+                {/* Market Type Indicator */}
+                {detectedMarketType && (
+                  <div style={{
+                    marginTop: '12px',
+                    padding: '8px 12px',
+                    backgroundColor: detectedMarketType === 'LSLMSR' ? '#001a1a' : '#1a1a00',
+                    border: `1px solid ${detectedMarketType === 'LSLMSR' ? '#00ffff' : '#ffff00'}`,
+                    fontSize: '11px',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '8px'
+                  }}>
+                    <span style={{ color: '#666' }}>TYPE:</span>
+                    <span style={{ color: detectedMarketType === 'LSLMSR' ? '#00ffff' : '#ffff00', fontWeight: 'bold' }}>
+                      {detectedMarketType === 'LSLMSR' ? 'LS-LMSR (Dynamic Liquidity)' : 'LMSR (Fixed Liquidity)'}
+                    </span>
+                  </div>
+                )}
+
+                {/* Token Pricing Display */}
+                {marketInfo && (
+                  <div style={{ marginTop: '16px' }}>
+                    <div style={{ marginBottom: '12px', color: '#999', fontSize: '12px' }}>
+                      {marketInfo.question}
+                    </div>
+
+                    {/* Visual Price Display */}
+                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px', marginBottom: '16px' }}>
+                      {/* YES Token Price */}
+                      <div style={{
+                        padding: '16px',
+                        backgroundColor: '#001a00',
+                        border: '2px solid #00ff00',
+                        textAlign: 'center',
+                      }}>
+                        <div style={{ color: '#666', fontSize: '11px', marginBottom: '8px' }}>{yesSymbol} TOKEN</div>
+                        <div style={{ color: '#00ff00', fontSize: '32px', fontWeight: 'bold' }}>
+                          {(Number(marketInfo.yesPrice) / 1e18 * 100).toFixed(1)}%
+                        </div>
+                        <div style={{ color: '#00ff00', fontSize: '12px', marginTop: '4px' }}>
+                          {(Number(marketInfo.yesPrice) / 1e18).toFixed(4)} MON
+                        </div>
+                        <div style={{ color: '#666', fontSize: '10px', marginTop: '8px' }}>
+                          {formatEther(marketInfo.yesShares)} shares
+                        </div>
+                      </div>
+
+                      {/* NO Token Price */}
+                      <div style={{
+                        padding: '16px',
+                        backgroundColor: '#1a0a00',
+                        border: '2px solid #ff6600',
+                        textAlign: 'center',
+                      }}>
+                        <div style={{ color: '#666', fontSize: '11px', marginBottom: '8px' }}>{noSymbol} TOKEN</div>
+                        <div style={{ color: '#ff6600', fontSize: '32px', fontWeight: 'bold' }}>
+                          {(Number(marketInfo.noPrice) / 1e18 * 100).toFixed(1)}%
+                        </div>
+                        <div style={{ color: '#ff6600', fontSize: '12px', marginTop: '4px' }}>
+                          {(Number(marketInfo.noPrice) / 1e18).toFixed(4)} MON
+                        </div>
+                        <div style={{ color: '#666', fontSize: '10px', marginTop: '8px' }}>
+                          {formatEther(marketInfo.noShares)} shares
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Price Bar Visualization */}
+                    <div style={{ marginBottom: '16px' }}>
+                      <div style={{ display: 'flex', height: '24px', border: '1px solid #333', overflow: 'hidden' }}>
+                        <div style={{
+                          width: `${(Number(marketInfo.yesPrice) / 1e18 * 100)}%`,
+                          backgroundColor: '#00ff00',
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          color: '#000',
+                          fontSize: '10px',
+                          fontWeight: 'bold',
+                          transition: 'width 0.3s',
+                        }}>
+                          {yesSymbol}
+                        </div>
+                        <div style={{
+                          flex: 1,
+                          backgroundColor: '#ff6600',
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          color: '#000',
+                          fontSize: '10px',
+                          fontWeight: 'bold',
+                        }}>
+                          {noSymbol}
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Market Stats */}
+                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px', padding: '12px', backgroundColor: '#0a0a0a', border: '1px solid #333' }}>
+                      <InfoRow label="COLLATERAL POOL" value={`${formatEther(marketInfo.totalCollateral)} MON`} />
+                      <InfoRow
+                        label="STATUS"
+                        value={marketInfo.resolved ? `${marketInfo.yesWins ? yesSymbol : noSymbol} WINS` : 'ACTIVE'}
+                        valueColor={marketInfo.resolved ? '#ffff00' : '#00ff00'}
+                      />
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              {/* Show resolved state or trading interface */}
+              {marketInfo?.resolved ? (
+                <div style={{ ...styles.card, marginTop: '24px', borderColor: '#ffff00' }}>
+                  <div style={{
+                    textAlign: 'center',
+                    padding: '24px',
+                  }}>
+                    <div style={{ color: '#ffff00', fontSize: '24px', fontWeight: 'bold', marginBottom: '8px' }}>
+                      MARKET RESOLVED
+                    </div>
+                    <div style={{ color: '#fff', fontSize: '18px', marginBottom: '16px' }}>
+                      Winner: <span style={{ color: marketInfo.yesWins ? '#00ff00' : '#ff6600', fontWeight: 'bold' }}>
+                        {marketInfo.yesWins ? yesSymbol : noSymbol}
+                      </span>
+                    </div>
+                    <div style={{ color: '#666', fontSize: '12px', marginBottom: '24px' }}>
+                      Trading is closed. Holders of {marketInfo.yesWins ? yesSymbol : noSymbol} tokens can redeem for their share of the collateral pool.
+                    </div>
+
+                    {/* Show user's winning tokens if any */}
+                    {((marketInfo.yesWins && parseFloat(userYesBalance) > 0) || (!marketInfo.yesWins && parseFloat(userNoBalance) > 0)) && (
+                      <div style={{
+                        padding: '16px',
+                        backgroundColor: '#001a00',
+                        border: '2px solid #00ff00',
+                        marginBottom: '16px',
+                      }}>
+                        <div style={{ color: '#666', fontSize: '11px', marginBottom: '4px' }}>YOUR WINNING TOKENS</div>
+                        <div style={{ color: '#00ff00', fontSize: '28px', fontWeight: 'bold' }}>
+                          {marketInfo.yesWins ? parseFloat(userYesBalance).toFixed(4) : parseFloat(userNoBalance).toFixed(4)}
+                        </div>
+                        <div style={{ color: '#00ff00', fontSize: '12px' }}>
+                          {marketInfo.yesWins ? yesSymbol : noSymbol} shares
+                        </div>
+                      </div>
+                    )}
+
+                    {(marketInfo.yesWins ? parseFloat(userYesBalance) === 0 : parseFloat(userNoBalance) === 0) ? (
+                      <button
+                        disabled
+                        style={{
+                          ...styles.button,
+                          width: '100%',
+                          padding: '16px',
+                          backgroundColor: '#0a1a0a',
+                          borderColor: '#444',
+                          color: '#444',
+                          cursor: 'not-allowed',
+                        }}
+                      >
+                        [ ✓ CLAIMED ]
+                      </button>
+                    ) : (
+                      <button
+                        onClick={async () => {
+                          const result = await redeem(tradeParams.marketAddress as Address, addLog);
+                          if (result.success && result.txHash && result.shares && result.payout) {
+                            // Sync redeem to Supabase
+                            await syncTradeToSupabase({
+                              marketAddress: tradeParams.marketAddress,
+                              tradeType: 'REDEEM',
+                              outcome: result.yesWins ? 'YES' : 'NO',
+                              shares: result.shares,
+                              amount: result.payout,
+                              txHash: result.txHash,
+                            });
+                            // Refetch from database
+                            refetchDbTrades();
+                            refetchPortfolio();
+                            refetchBalance();
+                            refetchMarketInfo();
+                          }
+                        }}
+                        disabled={isRedeeming}
+                        style={{
+                          ...styles.button,
+                          width: '100%',
+                          padding: '16px',
+                          backgroundColor: '#001a00',
+                          borderColor: '#00ff00',
+                          color: '#00ff00',
+                          opacity: isRedeeming ? 0.5 : 1,
+                        }}
+                      >
+                        [ {isRedeeming ? 'REDEEMING...' : 'REDEEM WINNINGS'} ]
+                      </button>
+                    )}
+                  </div>
+                </div>
+              ) : (
+              <div style={{ ...styles.card, marginTop: '24px' }}>
+                <div style={{ marginBottom: '16px' }}>
+                  <label style={{ display: 'block', color: '#666', fontSize: '11px', marginBottom: '8px', letterSpacing: '1px' }}>
+                    DIRECTION
+                  </label>
+                  <div style={{ display: 'flex', gap: '8px' }}>
+                    <button
+                      onClick={() => setTradeParams(p => ({ ...p, direction: 'buy' }))}
+                      style={{
+                        ...styles.button,
+                        flex: 1,
+                        backgroundColor: tradeParams.direction === 'buy' ? '#00ff00' : 'transparent',
+                        color: tradeParams.direction === 'buy' ? '#000' : '#00ff00',
+                      }}
+                    >
+                      BUY
+                    </button>
+                    <button
+                      onClick={() => setTradeParams(p => ({ ...p, direction: 'sell' }))}
+                      style={{
+                        ...styles.button,
+                        flex: 1,
+                        backgroundColor: tradeParams.direction === 'sell' ? '#ff6600' : 'transparent',
+                        color: tradeParams.direction === 'sell' ? '#000' : '#ff6600',
+                        borderColor: '#ff6600',
+                      }}
+                    >
+                      SELL
+                    </button>
+                  </div>
+                </div>
+
+                <div style={{ marginBottom: '16px' }}>
+                  <label style={{ display: 'block', color: '#666', fontSize: '11px', marginBottom: '8px', letterSpacing: '1px' }}>
+                    OUTCOME
+                  </label>
+                  <div style={{ display: 'flex', gap: '8px' }}>
+                    <button
+                      onClick={() => setTradeParams(p => ({ ...p, isYes: true }))}
+                      style={{
+                        ...styles.button,
+                        flex: 1,
+                        backgroundColor: tradeParams.isYes ? '#00ff00' : 'transparent',
+                        color: tradeParams.isYes ? '#000' : '#00ff00',
+                      }}
+                    >
+                      {yesSymbol}
+                    </button>
+                    <button
+                      onClick={() => setTradeParams(p => ({ ...p, isYes: false }))}
+                      style={{
+                        ...styles.button,
+                        flex: 1,
+                        backgroundColor: !tradeParams.isYes ? '#ff6600' : 'transparent',
+                        color: !tradeParams.isYes ? '#000' : '#ff6600',
+                        borderColor: '#ff6600',
+                      }}
+                    >
+                      {noSymbol}
+                    </button>
+                  </div>
+                </div>
+
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
+                  <InputField
+                    label={tradeParams.direction === 'buy' ? 'AMOUNT (MON)' : 'SHARES TO SELL'}
+                    value={tradeParams.amount}
+                    onChange={v => setTradeParams(p => ({ ...p, amount: v }))}
+                  />
+                  {tradeParams.direction === 'buy' ? (
+                    <div style={{ marginBottom: '12px' }}>
+                      <label style={{ display: 'block', color: '#666', fontSize: '11px', marginBottom: '8px', letterSpacing: '1px' }}>
+                        PRICE IMPACT
+                      </label>
+                      <div style={{
+                        padding: '12px',
+                        backgroundColor: '#0a0a0a',
+                        border: '1px solid #333',
+                        textAlign: 'center',
+                      }}>
+                        {(() => {
+                          if (!marketInfo || !tradeParams.amount || parseFloat(tradeParams.amount) <= 0 || parseFloat(estimatedShares) <= 0 || isEstimating) {
+                            return <span style={{ color: '#666', fontSize: '14px' }}>--</span>;
+                          }
+                          const spotPrice = Number(tradeParams.isYes ? marketInfo.yesPrice : marketInfo.noPrice) / 1e18;
+                          const avgPrice = parseFloat(tradeParams.amount) / parseFloat(estimatedShares);
+                          const impact = ((avgPrice - spotPrice) / spotPrice) * 100;
+                          const impactColor = impact < 1 ? '#00ff00' : impact < 5 ? '#ffff00' : '#ff6600';
+                          return (
+                            <span style={{ color: impactColor, fontSize: '18px', fontWeight: 'bold' }}>
+                              {impact.toFixed(2)}%
+                            </span>
+                          );
+                        })()}
+                      </div>
+                    </div>
+                  ) : (
+                    <div style={{ marginBottom: '12px' }}>
+                      <label style={{ display: 'block', color: '#666', fontSize: '11px', marginBottom: '8px', letterSpacing: '1px' }}>
+                        PRICE IMPACT
+                      </label>
+                      <div style={{
+                        padding: '12px',
+                        backgroundColor: '#0a0a0a',
+                        border: '1px solid #333',
+                        textAlign: 'center',
+                      }}>
+                        {(() => {
+                          if (!marketInfo || !tradeParams.amount || parseFloat(tradeParams.amount) <= 0 || parseFloat(estimatedPayout) <= 0) {
+                            return <span style={{ color: '#666', fontSize: '14px' }}>--</span>;
+                          }
+                          const spotPrice = Number(tradeParams.isYes ? marketInfo.yesPrice : marketInfo.noPrice) / 1e18;
+                          const avgPrice = parseFloat(estimatedPayout) / parseFloat(tradeParams.amount);
+                          const impact = ((spotPrice - avgPrice) / spotPrice) * 100;
+                          const impactColor = impact < 1 ? '#00ff00' : impact < 5 ? '#ffff00' : '#ff6600';
+                          return (
+                            <span style={{ color: impactColor, fontSize: '18px', fontWeight: 'bold' }}>
+                              {impact.toFixed(2)}%
+                            </span>
+                          );
+                        })()}
+                      </div>
+                    </div>
+                  )}
+                </div>
+
+                {/* Estimated Shares Display */}
+                {marketInfo && tradeParams.amount && parseFloat(tradeParams.amount) > 0 && tradeParams.direction === 'buy' && (
+                  <div style={{
+                    marginTop: '16px',
+                    padding: '16px',
+                    backgroundColor: tradeParams.isYes ? '#001a00' : '#1a0a00',
+                    border: `1px solid ${tradeParams.isYes ? '#00ff00' : '#ff6600'}`,
+                    textAlign: 'center',
+                  }}>
+                    <div style={{ color: '#666', fontSize: '11px', marginBottom: '4px' }}>
+                      {isEstimating ? 'CALCULATING...' : 'ESTIMATED SHARES'}
+                    </div>
+                    <div style={{
+                      color: tradeParams.isYes ? '#00ff00' : '#ff6600',
+                      fontSize: '28px',
+                      fontWeight: 'bold',
+                    }}>
+                      {isEstimating ? '...' : `~${parseFloat(estimatedShares).toFixed(4)}`}
+                    </div>
+                    <div style={{ color: '#666', fontSize: '11px', marginTop: '4px' }}>
+                      {tradeParams.isYes ? yesSymbol : noSymbol} shares
+                      {parseFloat(estimatedShares) > 0 && !isEstimating && (
+                        <> (avg {(parseFloat(tradeParams.amount) / parseFloat(estimatedShares)).toFixed(4)} MON/share)</>
+                      )}
+                    </div>
+                    <div style={{ color: '#444', fontSize: '10px', marginTop: '8px' }}>
+                      Current price: {(Number(tradeParams.isYes ? marketInfo.yesPrice : marketInfo.noPrice) / 1e18 * 100).toFixed(1)}%
+                    </div>
+                  </div>
+                )}
+
+                {/* Sell Mode: Show available shares and estimated payout */}
+                {marketInfo && tradeParams.direction === 'sell' && (
+                  <div style={{ marginTop: '16px' }}>
+                    {/* Available Shares */}
+                    <div style={{
+                      display: 'grid',
+                      gridTemplateColumns: '1fr 1fr',
+                      gap: '12px',
+                      marginBottom: '16px',
+                    }}>
+                      <div style={{
+                        padding: '12px',
+                        backgroundColor: '#001a00',
+                        border: `2px solid ${tradeParams.isYes ? '#00ff00' : '#333'}`,
+                        textAlign: 'center',
+                        cursor: 'pointer',
+                        opacity: tradeParams.isYes ? 1 : 0.6,
+                      }}
+                      onClick={() => {
+                        if (parseFloat(userYesBalance) > 0) {
+                          setTradeParams(p => ({ ...p, isYes: true, amount: userYesBalance }));
+                        }
+                      }}
+                      >
+                        <div style={{ color: '#666', fontSize: '10px', marginBottom: '4px' }}>YOUR {yesSymbol} SHARES</div>
+                        <div style={{ color: '#00ff00', fontSize: '20px', fontWeight: 'bold' }}>
+                          {parseFloat(userYesBalance).toFixed(4)}
+                        </div>
+                        {parseFloat(userYesBalance) > 0 && (
+                          <div style={{ color: '#00ff00', fontSize: '9px', marginTop: '4px' }}>Click to sell all</div>
+                        )}
+                      </div>
+                      <div style={{
+                        padding: '12px',
+                        backgroundColor: '#1a0a00',
+                        border: `2px solid ${!tradeParams.isYes ? '#ff6600' : '#333'}`,
+                        textAlign: 'center',
+                        cursor: 'pointer',
+                        opacity: !tradeParams.isYes ? 1 : 0.6,
+                      }}
+                      onClick={() => {
+                        if (parseFloat(userNoBalance) > 0) {
+                          setTradeParams(p => ({ ...p, isYes: false, amount: userNoBalance }));
+                        }
+                      }}
+                      >
+                        <div style={{ color: '#666', fontSize: '10px', marginBottom: '4px' }}>YOUR {noSymbol} SHARES</div>
+                        <div style={{ color: '#ff6600', fontSize: '20px', fontWeight: 'bold' }}>
+                          {parseFloat(userNoBalance).toFixed(4)}
+                        </div>
+                        {parseFloat(userNoBalance) > 0 && (
+                          <div style={{ color: '#ff6600', fontSize: '9px', marginTop: '4px' }}>Click to sell all</div>
+                        )}
+                      </div>
+                    </div>
+
+                    {/* Estimated Payout */}
+                    {tradeParams.amount && parseFloat(tradeParams.amount) > 0 && (
+                      <div style={{
+                        padding: '16px',
+                        backgroundColor: '#0a0a0a',
+                        border: '1px solid #ffff00',
+                        textAlign: 'center',
+                      }}>
+                        <div style={{ color: '#666', fontSize: '11px', marginBottom: '4px' }}>ESTIMATED PAYOUT</div>
+                        <div style={{ color: '#ffff00', fontSize: '28px', fontWeight: 'bold' }}>
+                          {parseFloat(estimatedPayout).toFixed(4)} MON
+                        </div>
+                        <div style={{ color: '#666', fontSize: '11px', marginTop: '4px' }}>
+                          for {tradeParams.amount} {tradeParams.isYes ? yesSymbol : noSymbol} shares
+                        </div>
+                        {parseFloat(estimatedPayout) > 0 && parseFloat(tradeParams.amount) > 0 && (
+                          <div style={{ color: '#444', fontSize: '10px', marginTop: '8px' }}>
+                            Avg price: {(parseFloat(estimatedPayout) / parseFloat(tradeParams.amount)).toFixed(4)} MON/share
+                            {marketInfo && (
+                              <> | Spot: {(Number(tradeParams.isYes ? marketInfo.yesPrice : marketInfo.noPrice) / 1e18).toFixed(4)} MON</>
+                            )}
+                          </div>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                <button
+                  onClick={handleTrade}
+                  disabled={isBuying || isSelling || !tradeParams.marketAddress || !isConnected || isWrongChain}
+                  style={{
+                    ...styles.button,
+                    width: '100%',
+                    marginTop: '24px',
+                    padding: '16px',
+                    backgroundColor: tradeParams.direction === 'buy' ? '#001a00' : '#1a0a00',
+                    borderColor: tradeParams.direction === 'buy' ? '#00ff00' : '#ff6600',
+                    color: tradeParams.direction === 'buy' ? '#00ff00' : '#ff6600',
+                    opacity: isBuying || isSelling || !tradeParams.marketAddress || !isConnected || isWrongChain ? 0.5 : 1,
+                  }}
+                >
+                  [ {isBuying || isSelling ? 'PROCESSING...' : `${tradeParams.direction.toUpperCase()} ${tradeParams.isYes ? yesSymbol : noSymbol} SHARES`} ]
+                </button>
+              </div>
+              )}
+            </div>
+          )}
+
+          {/* PORTFOLIO TAB */}
+          {activeTab === 'portfolio' && (
+            <div>
+              <SectionHeader>PORTFOLIO</SectionHeader>
+              <p style={{ color: '#666', marginBottom: '24px' }}>
+                Your positions and P&L across all markets
+              </p>
+
+              {/* PnL Summary Cards */}
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '16px', marginBottom: '24px' }}>
+                <div style={{
+                  ...styles.card,
+                  textAlign: 'center',
+                  borderColor: totalPnL >= 0 ? '#00ff00' : '#ff0000',
+                  borderWidth: '2px',
+                }}>
+                  <div style={{ color: '#666', fontSize: '11px', marginBottom: '4px' }}>TOTAL P&L</div>
+                  <div style={{
+                    color: totalPnL >= 0 ? '#00ff00' : '#ff0000',
+                    fontSize: '28px',
+                    fontWeight: 'bold',
+                  }}>
+                    {totalPnL >= 0 ? '+' : ''}{totalPnL.toFixed(4)}
+                  </div>
+                  <div style={{ color: '#666', fontSize: '10px' }}>MON</div>
+                </div>
+                <div style={{ ...styles.card, textAlign: 'center' }}>
+                  <div style={{ color: '#666', fontSize: '11px', marginBottom: '4px' }}>REALIZED P&L</div>
+                  <div style={{
+                    color: totalRealizedPnL >= 0 ? '#00ff00' : '#ff0000',
+                    fontSize: '24px',
+                    fontWeight: 'bold',
+                  }}>
+                    {totalRealizedPnL >= 0 ? '+' : ''}{totalRealizedPnL.toFixed(4)}
+                  </div>
+                  <div style={{ color: '#666', fontSize: '10px' }}>From sells & redemptions</div>
+                </div>
+                <div style={{ ...styles.card, textAlign: 'center' }}>
+                  <div style={{ color: '#666', fontSize: '11px', marginBottom: '4px' }}>OPEN POSITIONS</div>
+                  <div style={{
+                    color: totalUnrealizedPnL >= 0 ? '#00ff00' : '#ff0000',
+                    fontSize: '24px',
+                    fontWeight: 'bold',
+                  }}>
+                    {totalUnrealizedPnL >= 0 ? '+' : ''}{totalUnrealizedPnL.toFixed(4)}
+                  </div>
+                  <div style={{ color: '#666', fontSize: '10px' }}>Mark-to-market</div>
+                </div>
+              </div>
+
+              {/* Open Positions */}
+              {positions.length > 0 && (
+                <div style={{ marginBottom: '24px' }}>
+                  <div style={{ fontWeight: 'bold', letterSpacing: '2px', marginBottom: '16px' }}>OPEN POSITIONS</div>
+                  <div style={{ display: 'grid', gap: '12px' }}>
+                    {positions.map(pos => {
+                      const unrealizedPnL = getUnrealizedPnL(pos);
+                      const prices = marketPrices[pos.marketAddress.toLowerCase()];
+                      const yesValue = prices ? pos.yesShares * prices.yesPrice : 0;
+                      const noValue = prices ? pos.noShares * prices.noPrice : 0;
+                      const totalValue = yesValue + noValue;
+                      const totalCost = pos.yesCostBasis + pos.noCostBasis;
+
+                      return (
+                        <div
+                          key={pos.marketAddress}
+                          style={{
+                            ...styles.card,
+                            borderLeftWidth: '4px',
+                            borderLeftColor: unrealizedPnL >= 0 ? '#00ff00' : '#ff0000',
+                          }}
+                        >
+                          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '12px' }}>
+                            <div>
+                              <div style={{ color: '#fff', fontWeight: 'bold', marginBottom: '4px' }}>
+                                {pos.marketQuestion || 'Unknown Market'}
+                              </div>
+                              <div style={{ color: '#666', fontSize: '11px' }}>
+                                {pos.marketAddress.slice(0, 10)}...{pos.marketAddress.slice(-8)}
+                              </div>
+                              {pos.resolved && (
+                                <div style={{
+                                  marginTop: '4px',
+                                  padding: '2px 8px',
+                                  backgroundColor: '#1a1a00',
+                                  border: '1px solid #ffff00',
+                                  color: '#ffff00',
+                                  fontSize: '10px',
+                                  display: 'inline-block',
+                                }}>
+                                  RESOLVED: {pos.yesWins ? 'YES' : 'NO'} WINS
+                                </div>
+                              )}
+                            </div>
+                            <div style={{ textAlign: 'right' }}>
+                              <div style={{
+                                color: unrealizedPnL >= 0 ? '#00ff00' : '#ff0000',
+                                fontSize: '20px',
+                                fontWeight: 'bold',
+                              }}>
+                                {unrealizedPnL >= 0 ? '+' : ''}{unrealizedPnL.toFixed(4)}
+                              </div>
+                              <div style={{ color: '#666', fontSize: '10px' }}>Unrealized P&L</div>
+                            </div>
+                          </div>
+
+                          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '8px' }}>
+                            {pos.yesShares > 0.0001 && (
+                              <div style={{ padding: '8px', backgroundColor: '#001a00', border: '1px solid #00ff00' }}>
+                                <div style={{ color: '#666', fontSize: '10px' }}>YES SHARES</div>
+                                <div style={{ color: '#00ff00', fontWeight: 'bold' }}>{pos.yesShares.toFixed(4)}</div>
+                                <div style={{ color: '#666', fontSize: '10px' }}>Cost: {pos.yesCostBasis.toFixed(4)}</div>
+                              </div>
+                            )}
+                            {pos.noShares > 0.0001 && (
+                              <div style={{ padding: '8px', backgroundColor: '#1a0a00', border: '1px solid #ff6600' }}>
+                                <div style={{ color: '#666', fontSize: '10px' }}>NO SHARES</div>
+                                <div style={{ color: '#ff6600', fontWeight: 'bold' }}>{pos.noShares.toFixed(4)}</div>
+                                <div style={{ color: '#666', fontSize: '10px' }}>Cost: {pos.noCostBasis.toFixed(4)}</div>
+                              </div>
+                            )}
+                            <div style={{ padding: '8px', backgroundColor: '#0a0a0a', border: '1px solid #333' }}>
+                              <div style={{ color: '#666', fontSize: '10px' }}>COST BASIS</div>
+                              <div style={{ color: '#fff', fontWeight: 'bold' }}>{totalCost.toFixed(4)}</div>
+                              <div style={{ color: '#666', fontSize: '10px' }}>MON</div>
+                            </div>
+                            <div style={{ padding: '8px', backgroundColor: '#0a0a0a', border: '1px solid #333' }}>
+                              <div style={{ color: '#666', fontSize: '10px' }}>MARKET VALUE</div>
+                              <div style={{ color: '#fff', fontWeight: 'bold' }}>{totalValue.toFixed(4)}</div>
+                              <div style={{ color: '#666', fontSize: '10px' }}>MON</div>
+                            </div>
+                          </div>
+
+                          {Math.abs(pos.realizedPnL) > 0.0001 && (
+                            <div style={{ marginTop: '8px', padding: '8px', backgroundColor: '#0a0a0a', border: '1px solid #333' }}>
+                              <span style={{ color: '#666', fontSize: '10px' }}>Realized P&L: </span>
+                              <span style={{
+                                color: pos.realizedPnL >= 0 ? '#00ff00' : '#ff0000',
+                                fontWeight: 'bold',
+                              }}>
+                                {pos.realizedPnL >= 0 ? '+' : ''}{pos.realizedPnL.toFixed(4)} MON
+                              </span>
+                            </div>
+                          )}
+
+                          <div style={{ marginTop: '12px', display: 'flex', gap: '8px' }}>
+                            {pos.resolved ? (
+                              <button
+                                onClick={() => {
+                                  setTradeParams(prev => ({ ...prev, marketAddress: pos.marketAddress }));
+                                  setActiveTab('trade');
+                                }}
+                                style={{ ...styles.button, flex: 1, padding: '8px', fontSize: '10px', borderColor: '#666', color: '#666' }}
+                              >
+                                VIEW
+                              </button>
+                            ) : (
+                              <button
+                                onClick={() => {
+                                  setTradeParams(prev => ({ ...prev, marketAddress: pos.marketAddress }));
+                                  setActiveTab('trade');
+                                }}
+                                style={{ ...styles.button, flex: 1, padding: '8px', fontSize: '10px' }}
+                              >
+                                TRADE
+                              </button>
+                            )}
+                            {pos.resolved && (() => {
+                              const winningShares = pos.yesWins ? pos.yesShares : pos.noShares;
+                              const hasClaimed = winningShares < 0.0001;
+
+                              if (hasClaimed) {
+                                return (
+                                  <button
+                                    disabled
+                                    style={{
+                                      ...styles.button,
+                                      flex: 1,
+                                      padding: '8px',
+                                      fontSize: '10px',
+                                      borderColor: '#444',
+                                      color: '#444',
+                                      cursor: 'not-allowed',
+                                    }}
+                                  >
+                                    CLAIMED
+                                  </button>
+                                );
+                              }
+
+                              return (
+                                <button
+                                  onClick={() => {
+                                    setResolution(prev => ({ ...prev, marketAddress: pos.marketAddress }));
+                                    setActiveTab('resolve');
+                                  }}
+                                  style={{ ...styles.button, flex: 1, padding: '8px', fontSize: '10px', borderColor: '#ffff00', color: '#ffff00' }}
+                                >
+                                  REDEEM
+                                </button>
+                              );
+                            })()}
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+
+              {/* Trade Stats */}
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '16px', marginBottom: '24px' }}>
+                <div style={{ ...styles.card, textAlign: 'center' }}>
+                  <div style={{ color: '#666', fontSize: '11px', marginBottom: '4px' }}>TOTAL TRADES</div>
+                  <div style={{ color: '#00ff00', fontSize: '24px', fontWeight: 'bold' }}>{trades.length}</div>
+                </div>
+                <div style={{ ...styles.card, textAlign: 'center' }}>
+                  <div style={{ color: '#666', fontSize: '11px', marginBottom: '4px' }}>BUYS</div>
+                  <div style={{ color: '#00ff00', fontSize: '24px', fontWeight: 'bold' }}>
+                    {trades.filter(t => t.type === 'buy').length}
+                  </div>
+                </div>
+                <div style={{ ...styles.card, textAlign: 'center' }}>
+                  <div style={{ color: '#666', fontSize: '11px', marginBottom: '4px' }}>SELLS</div>
+                  <div style={{ color: '#ff6600', fontSize: '24px', fontWeight: 'bold' }}>
+                    {trades.filter(t => t.type === 'sell').length}
+                  </div>
+                </div>
+                <div style={{ ...styles.card, textAlign: 'center' }}>
+                  <div style={{ color: '#666', fontSize: '11px', marginBottom: '4px' }}>VOLUME</div>
+                  <div style={{ color: '#fff', fontSize: '24px', fontWeight: 'bold' }}>
+                    {trades.reduce((sum, t) => sum + parseFloat(t.amount || '0'), 0).toFixed(2)}
+                  </div>
+                  <div style={{ color: '#666', fontSize: '10px' }}>MON</div>
+                </div>
+              </div>
+
+              {/* Trade History */}
+              {trades.length === 0 ? (
+                <div style={{ ...styles.card, textAlign: 'center', padding: '48px', color: '#666' }}>
+                  No trades yet. Start trading in the TRADE tab.
+                </div>
+              ) : (
+                <div>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
+                    <div style={{ fontWeight: 'bold', letterSpacing: '2px' }}>TRADE HISTORY</div>
+                    <button
+                      onClick={() => refetchDbTrades()}
+                      disabled={isLoadingPortfolio}
+                      style={{ ...styles.button, padding: '6px 12px', fontSize: '10px', borderColor: '#00ffff', color: '#00ffff' }}
+                    >
+                      {isLoadingPortfolio ? 'LOADING...' : 'REFRESH'}
+                    </button>
+                  </div>
+                  <div style={{ display: 'grid', gap: '8px' }}>
+                    {trades.map(trade => (
+                      <div
+                        key={trade.id}
+                        style={{
+                          ...styles.card,
+                          padding: '16px',
+                          borderLeftWidth: '4px',
+                          borderLeftColor: trade.type === 'buy' ? '#00ff00' : '#ff6600',
+                        }}
+                      >
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+                          <div>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '8px' }}>
+                              <span style={{
+                                padding: '2px 8px',
+                                backgroundColor: trade.type === 'buy' ? '#001a00' : '#1a0a00',
+                                border: `1px solid ${trade.type === 'buy' ? '#00ff00' : '#ff6600'}`,
+                                color: trade.type === 'buy' ? '#00ff00' : '#ff6600',
+                                fontSize: '10px',
+                                fontWeight: 'bold',
+                              }}>
+                                {trade.type.toUpperCase()}
+                              </span>
+                              <span style={{
+                                padding: '2px 8px',
+                                backgroundColor: trade.outcome === 'YES' ? '#001a00' : '#1a0a00',
+                                border: `1px solid ${trade.outcome === 'YES' ? '#00ff00' : '#ff6600'}`,
+                                color: trade.outcome === 'YES' ? '#00ff00' : '#ff6600',
+                                fontSize: '10px',
+                                fontWeight: 'bold',
+                              }}>
+                                {trade.outcome}
+                              </span>
+                              <span style={{
+                                padding: '2px 8px',
+                                backgroundColor: '#111',
+                                border: '1px solid #666',
+                                color: '#fff',
+                                fontSize: '10px',
+                                fontWeight: 'bold',
+                              }}>
+                                {parseFloat(trade.shares || '0').toFixed(4)} SHARES
+                              </span>
+                            </div>
+                            <div style={{ color: '#fff', fontSize: '14px', fontWeight: 'bold', marginBottom: '8px' }}>
+                              {trade.type === 'buy' ? 'Spent' : 'Received'}: {trade.amount} MON
+                            </div>
+                            {trade.marketQuestion && (
+                              <div style={{ color: '#999', fontSize: '12px', marginBottom: '4px' }}>
+                                {trade.marketQuestion}
+                              </div>
+                            )}
+                            <div style={{ color: '#666', fontSize: '11px' }}>
+                              Market: {trade.marketAddress.slice(0, 10)}...{trade.marketAddress.slice(-8)}
+                            </div>
+                          </div>
+                          <div style={{ textAlign: 'right' }}>
+                            <div style={{ color: '#666', fontSize: '11px' }}>
+                              {new Date(trade.timestamp).toLocaleDateString()}{' '}
+                              {new Date(trade.timestamp).toLocaleTimeString()}
+                            </div>
+                            <a
+                              href={`${monadTestnet.blockExplorers.default.url}/tx/${trade.txHash}`}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              style={{
+                                display: 'inline-block',
+                                marginTop: '8px',
+                                padding: '4px 12px',
+                                backgroundColor: '#001a00',
+                                border: '1px solid #00ff00',
+                                color: '#00ff00',
+                                fontSize: '10px',
+                                textDecoration: 'none',
+                              }}
+                            >
+                              VIEW TX →
+                            </a>
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* RESOLVE TAB */}
+          {activeTab === 'resolve' && (
+            <div>
+              <SectionHeader>RESOLVE MARKET</SectionHeader>
+              <p style={{ color: '#666', marginBottom: '24px' }}>Oracle-only function to set the final outcome</p>
+
+              <div style={styles.card}>
+                <InputField
+                  label="MARKET ADDRESS"
+                  value={resolution.marketAddress}
+                  placeholder="0x..."
+                  onChange={v => setResolution(p => ({ ...p, marketAddress: v }))}
+                />
+                <div style={{ marginTop: '16px' }}>
+                  <label style={{ display: 'block', color: '#666', fontSize: '11px', marginBottom: '8px', letterSpacing: '1px' }}>
+                    OUTCOME
+                  </label>
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '8px' }}>
+                    {(['YES', 'NO'] as const).map(outcome => (
+                      <button
+                        key={outcome}
+                        onClick={() => setResolution(p => ({ ...p, outcome }))}
+                        style={{
+                          ...styles.button,
+                          backgroundColor: resolution.outcome === outcome
+                            ? outcome === 'YES' ? '#00ff00' : '#ff6600'
+                            : 'transparent',
+                          color: resolution.outcome === outcome
+                            ? '#000'
+                            : outcome === 'YES' ? '#00ff00' : '#ff6600',
+                          borderColor: outcome === 'YES' ? '#00ff00' : '#ff6600',
+                        }}
+                      >
+                        {outcome} WINS
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              </div>
+
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px', marginTop: '24px' }}>
+                {/* RESOLVE BUTTON - Only for oracle, only if not resolved */}
+                {(() => {
+                  const isOracle = address && resolveMarketOracle && address.toLowerCase() === resolveMarketOracle;
+
+                  if (resolveMarketResolved) {
+                    return (
+                      <button
+                        disabled
+                        style={{
+                          ...styles.button,
+                          backgroundColor: '#1a1a00',
+                          borderColor: '#444',
+                          color: '#444',
+                          padding: '16px',
+                          cursor: 'not-allowed',
+                        }}
+                      >
+                        [ ✓ ALREADY RESOLVED ]
+                      </button>
+                    );
+                  }
+
+                  // Check if resolution time has passed
+                  const now = BigInt(Math.floor(Date.now() / 1000));
+                  const canResolveTime = resolveMarketResolutionTime > 0n && now >= resolveMarketResolutionTime;
+
+                  if (resolveMarketResolutionTime > 0n && !canResolveTime && resolution.marketAddress) {
+                    const resolutionDate = new Date(Number(resolveMarketResolutionTime) * 1000);
+                    return (
+                      <button
+                        disabled
+                        style={{
+                          ...styles.button,
+                          backgroundColor: '#1a1a00',
+                          borderColor: '#444',
+                          color: '#444',
+                          padding: '16px',
+                          cursor: 'not-allowed',
+                        }}
+                      >
+                        [ TOO EARLY - Resolves {resolutionDate.toLocaleDateString()} ]
+                      </button>
+                    );
+                  }
+
+                  // Hide resolve button entirely for non-oracle users
+                  if (!isOracle && resolution.marketAddress) {
+                    return null;
+                  }
+
+                  return (
+                    <button
+                      onClick={handleResolveMarket}
+                      disabled={isResolving || !resolution.marketAddress || !isConnected || isWrongChain || !isOracle || !canResolveTime}
+                      style={{
+                        ...styles.button,
+                        backgroundColor: '#1a0000',
+                        borderColor: '#ff0000',
+                        color: '#ff0000',
+                        padding: '16px',
+                        opacity: isResolving || !resolution.marketAddress || !isConnected || isWrongChain || !canResolveTime ? 0.5 : 1,
+                      }}
+                    >
+                      [ {isResolving ? 'RESOLVING...' : '⚠ RESOLVE MARKET'} ]
+                    </button>
+                  );
+                })()}
+
+                {/* FEE INFO DISPLAY */}
+                {feeInfo && (
+                  <div style={{
+                    padding: '12px',
+                    backgroundColor: '#0a0a0a',
+                    border: '1px solid #333',
+                    marginBottom: '16px',
+                  }}>
+                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
+                      <div>
+                        <div style={{ color: '#666', fontSize: '10px', marginBottom: '4px' }}>PROTOCOL FEES SENT</div>
+                        <div style={{ color: '#00ffff', fontWeight: 'bold' }}>
+                          {parseFloat(feeInfo.totalProtocolFeesSent).toFixed(6)} MON
+                        </div>
+                        <div style={{ color: '#444', fontSize: '9px', marginTop: '2px' }}>
+                          Auto-sent to: {feeInfo.protocolFeeRecipient?.slice(0, 6)}...{feeInfo.protocolFeeRecipient?.slice(-4)}
+                        </div>
+                      </div>
+                      <div>
+                        <div style={{ color: '#666', fontSize: '10px', marginBottom: '4px' }}>CREATOR FEES</div>
+                        <div style={{ color: feeInfo.canClaimCreatorFees ? '#00ff00' : '#666', fontWeight: 'bold' }}>
+                          {parseFloat(feeInfo.creatorFees).toFixed(6)} MON
+                        </div>
+                        <div style={{ color: '#444', fontSize: '9px', marginTop: '2px' }}>
+                          Creator: {feeInfo.marketCreator?.slice(0, 6)}...{feeInfo.marketCreator?.slice(-4)}
+                          {feeInfo.isMarketCreator && ' (YOU)'}
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {/* Protocol fees are auto-transferred on every trade, no claim button needed */}
+
+                {/* CLAIM CREATOR FEES BUTTON */}
+                {(() => {
+                  if (!feeInfo?.isMarketCreator) {
+                    return null;
+                  }
+
+                  if (!resolveMarketResolved && resolveMarketResolutionTime > BigInt(Math.floor(Date.now() / 1000))) {
+                    return (
+                      <button
+                        disabled
+                        style={{
+                          ...styles.button,
+                          backgroundColor: '#0a0a0a',
+                          borderColor: '#444',
+                          color: '#444',
+                          padding: '16px',
+                          cursor: 'not-allowed',
+                        }}
+                      >
+                        [ AWAITING RESOLUTION ]
+                      </button>
+                    );
+                  }
+
+                  return (
+                    <button
+                      onClick={handleClaimCreatorFees}
+                      disabled={isClaimingCreatorFees || !feeInfo.canClaimCreatorFees || !isConnected || isWrongChain}
+                      style={{
+                        ...styles.button,
+                        backgroundColor: feeInfo.canClaimCreatorFees ? '#001a00' : '#0a0a0a',
+                        borderColor: feeInfo.canClaimCreatorFees ? '#00ff00' : '#444',
+                        color: feeInfo.canClaimCreatorFees ? '#00ff00' : '#444',
+                        padding: '16px',
+                        opacity: isClaimingCreatorFees || !feeInfo.canClaimCreatorFees ? 0.5 : 1,
+                      }}
+                    >
+                      [ {isClaimingCreatorFees ? 'CLAIMING...' : `CLAIM CREATOR FEES (${parseFloat(feeInfo.creatorFees).toFixed(4)} MON)`} ]
+                    </button>
+                  );
+                })()}
+              </div>
+
+              <div style={{ ...styles.card, marginTop: '24px', borderColor: '#ff6600' }}>
+                <div style={{ color: '#ff6600', fontWeight: 'bold', marginBottom: '8px' }}>⚠ FEE INFO</div>
+                <div style={{ color: '#999', fontSize: '12px' }}>
+                  <strong>Protocol fees</strong> can be claimed anytime by the protocol fee recipient.<br />
+                  <strong>Creator fees</strong> can only be claimed by the market creator after resolution or after the resolution time passes.<br />
+                  1% trading fee is split 50/50 between protocol and creator.
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* MARKETS TAB */}
+          {activeTab === 'markets' && (
+            <div>
+              {markets.length === 0 ? (
+                <div style={{ ...styles.card, textAlign: 'center', padding: '48px', color: '#666' }}>
+                  No markets deployed yet. Create one in the CREATE tab.
+                </div>
+              ) : (
+                <>
+                  {/* ACTIVE MARKETS */}
+                  {(() => {
+                    const activeMarkets = markets.filter(m => !marketPrices[m.address.toLowerCase()]?.resolved);
+                    if (activeMarkets.length === 0) return null;
+                    return (
+                      <>
+                        <SectionHeader>ACTIVE MARKETS ({activeMarkets.length})</SectionHeader>
+                        <div style={{ display: 'grid', gap: '16px', marginBottom: '32px' }}>
+                          {activeMarkets.map(market => {
+                            const prices = marketPrices[market.address.toLowerCase()];
+                            return (
+                              <div key={market.id} style={{
+                                ...styles.card,
+                                borderColor: '#00ff00',
+                              }}>
+                                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+                                  <div>
+                                    <div style={{ fontWeight: 'bold', fontSize: '14px' }}>{market.question}</div>
+                                    <div style={{ color: '#666', marginTop: '8px', fontSize: '11px' }}>
+                                      Resolution Date: {market.resolution}
+                                    </div>
+                                    {prices && (
+                                      <div style={{ marginTop: '8px', display: 'flex', gap: '16px' }}>
+                                        <span style={{ color: '#00ff00', fontSize: '12px' }}>
+                                          YES: {(prices.yesPrice * 100).toFixed(1)}%
+                                        </span>
+                                        <span style={{ color: '#ff6600', fontSize: '12px' }}>
+                                          NO: {(prices.noPrice * 100).toFixed(1)}%
+                                        </span>
+                                      </div>
+                                    )}
+                                  </div>
+                                  <div
+                                    style={{
+                                      padding: '4px 12px',
+                                      backgroundColor: '#001a00',
+                                      border: '1px solid #00ff00',
+                                      color: '#00ff00',
+                                      fontSize: '11px',
+                                    }}
+                                  >
+                                    ACTIVE
+                                  </div>
+                                </div>
+                                <div style={{ marginTop: '12px', fontSize: '11px' }}>
+                                  <div style={{ color: '#666' }}>
+                                    Contract: <span style={{ color: '#fff' }}>{market.address}</span>
+                                  </div>
+                                </div>
+                                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px', marginTop: '12px' }}>
+                                  <div style={{ color: '#666', fontSize: '11px' }}>
+                                    YES: <span style={{ color: '#00ff00' }}>{market.yesToken.slice(0, 10)}...</span>
+                                  </div>
+                                  <div style={{ color: '#666', fontSize: '11px' }}>
+                                    NO: <span style={{ color: '#ff6600' }}>{market.noToken.slice(0, 10)}...</span>
+                                  </div>
+                                </div>
+                                <div style={{ marginTop: '16px', display: 'flex', gap: '8px' }}>
+                                  <button
+                                    onClick={() => {
+                                      setTradeParams(prev => ({ ...prev, marketAddress: market.address }));
+                                      setActiveTab('trade');
+                                    }}
+                                    style={{ ...styles.button, flex: 1, padding: '8px', borderColor: '#00ff00', color: '#00ff00' }}
+                                  >
+                                    TRADE
+                                  </button>
+                                  {prices?.oracle && address?.toLowerCase() === prices.oracle && (
+                                    <button
+                                      onClick={() => {
+                                        setResolution(prev => ({ ...prev, marketAddress: market.address }));
+                                        setActiveTab('resolve');
+                                      }}
+                                      style={{ ...styles.button, flex: 1, padding: '8px', borderColor: '#ff6600', color: '#ff6600' }}
+                                    >
+                                      RESOLVE
+                                    </button>
+                                  )}
+                                </div>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      </>
+                    );
+                  })()}
+
+                  {/* RESOLVED MARKETS */}
+                  {(() => {
+                    const resolvedMarkets = markets.filter(m => marketPrices[m.address.toLowerCase()]?.resolved);
+                    if (resolvedMarkets.length === 0) return null;
+                    return (
+                      <>
+                        <SectionHeader>RESOLVED MARKETS ({resolvedMarkets.length})</SectionHeader>
+                        <div style={{ display: 'grid', gap: '16px' }}>
+                          {resolvedMarkets.map(market => {
+                            const prices = marketPrices[market.address.toLowerCase()];
+                            const winner = prices?.yesWins ? 'YES' : 'NO';
+                            return (
+                              <div key={market.id} style={{
+                                ...styles.card,
+                                borderColor: '#ffff00',
+                                opacity: 0.8,
+                              }}>
+                                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+                                  <div>
+                                    <div style={{ fontWeight: 'bold', fontSize: '14px' }}>{market.question}</div>
+                                    <div style={{ color: '#666', marginTop: '8px', fontSize: '11px' }}>
+                                      Resolution Date: {market.resolution}
+                                    </div>
+                                  </div>
+                                  <div
+                                    style={{
+                                      padding: '4px 12px',
+                                      backgroundColor: '#1a1a00',
+                                      border: '1px solid #ffff00',
+                                      color: '#ffff00',
+                                      fontSize: '11px',
+                                    }}
+                                  >
+                                    {winner} WINS
+                                  </div>
+                                </div>
+                                <div style={{ marginTop: '12px', fontSize: '11px' }}>
+                                  <div style={{ color: '#666' }}>
+                                    Contract: <span style={{ color: '#fff' }}>{market.address}</span>
+                                  </div>
+                                </div>
+                                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px', marginTop: '12px' }}>
+                                  <div style={{ color: '#666', fontSize: '11px' }}>
+                                    YES: <span style={{ color: '#00ff00' }}>{market.yesToken.slice(0, 10)}...</span>
+                                  </div>
+                                  <div style={{ color: '#666', fontSize: '11px' }}>
+                                    NO: <span style={{ color: '#ff6600' }}>{market.noToken.slice(0, 10)}...</span>
+                                  </div>
+                                </div>
+                                <div style={{ marginTop: '16px', display: 'flex', gap: '8px' }}>
+                                  <button
+                                    onClick={() => {
+                                      setTradeParams(prev => ({ ...prev, marketAddress: market.address }));
+                                      setActiveTab('trade');
+                                    }}
+                                    style={{ ...styles.button, flex: 1, padding: '8px', borderColor: '#ffff00', color: '#ffff00' }}
+                                  >
+                                    VIEW / REDEEM
+                                  </button>
+                                </div>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      </>
+                    );
+                  })()}
+                </>
+              )}
+            </div>
+          )}
+        </main>
+
+        {/* Logs Sidebar */}
+        <aside style={styles.sidebar}>
+          <div style={styles.sidebarHeader}>TRANSACTION LOG</div>
+          <div style={styles.logsContainer}>
+            {logs.length === 0 ? (
+              <div style={{ color: '#333', padding: '16px', textAlign: 'center', fontSize: '11px' }}>
+                Waiting for actions...
+              </div>
+            ) : (
+              logs.map((log, i) => (
+                <div
+                  key={i}
+                  style={{
+                    ...styles.logEntry,
+                    borderLeftColor:
+                      log.type === 'success' ? '#00ff00' :
+                      log.type === 'error' ? '#ff0000' :
+                      log.type === 'pending' ? '#ffff00' : '#666',
+                  }}
+                >
+                  <div style={{ color: '#666' }}>{log.timestamp}</div>
+                  <div
+                    style={{
+                      color:
+                        log.type === 'success' ? '#00ff00' :
+                        log.type === 'error' ? '#ff0000' :
+                        log.type === 'pending' ? '#ffff00' : '#fff',
+                      marginTop: '4px',
+                      wordBreak: 'break-all',
+                    }}
+                  >
+                    {log.msg}
+                  </div>
+                  {log.txHash && (
+                    <a
+                      href={`${monadTestnet.blockExplorers.default.url}/tx/${log.txHash}`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      style={{ color: '#00ff00', fontSize: '10px', marginTop: '4px', display: 'block' }}
+                    >
+                      View TX →
+                    </a>
+                  )}
+                </div>
+              ))
+            )}
+          </div>
+          <div style={styles.sidebarFooter}>
+            <button onClick={clearLogs} style={styles.clearButton}>
+              CLEAR LOGS
+            </button>
+          </div>
+        </aside>
+      </div>
+
+      {/* Market Creation Confirmation Modal */}
+      {createdMarket && (
+        <div style={{
+          position: 'fixed',
+          top: 0,
+          left: 0,
+          right: 0,
+          bottom: 0,
+          backgroundColor: 'rgba(0, 0, 0, 0.9)',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          zIndex: 1000,
+        }}>
+          <div style={{
+            backgroundColor: '#0a0a0a',
+            border: '2px solid #00ff00',
+            padding: '32px',
+            maxWidth: '500px',
+            width: '90%',
+          }}>
+            <div style={{
+              color: '#00ff00',
+              fontSize: '24px',
+              fontWeight: 'bold',
+              marginBottom: '8px',
+              textAlign: 'center',
+            }}>
+              MARKET CREATED
+            </div>
+            <div style={{
+              color: '#666',
+              fontSize: '12px',
+              textAlign: 'center',
+              marginBottom: '24px',
+            }}>
+              Your prediction market is now live on Monad Testnet
+            </div>
+
+            <div style={{
+              backgroundColor: '#000',
+              border: '1px solid #333',
+              padding: '16px',
+              marginBottom: '16px',
+            }}>
+              <div style={{ color: '#666', fontSize: '11px', marginBottom: '4px' }}>QUESTION</div>
+              <div style={{ color: '#fff', fontSize: '14px' }}>{createdMarket.question}</div>
+            </div>
+
+            <div style={{
+              backgroundColor: '#000',
+              border: '1px solid #333',
+              padding: '16px',
+              marginBottom: '16px',
+            }}>
+              <div style={{ color: '#666', fontSize: '11px', marginBottom: '4px' }}>CONTRACT ADDRESS</div>
+              <div style={{
+                color: '#00ff00',
+                fontSize: '12px',
+                wordBreak: 'break-all',
+                fontFamily: 'monospace',
+              }}>
+                {createdMarket.address}
+              </div>
+            </div>
+
+            <div style={{ display: 'flex', gap: '8px', marginBottom: '16px' }}>
+              <button
+                onClick={() => {
+                  navigator.clipboard.writeText(createdMarket.address);
+                  addLog('Market address copied to clipboard', 'success');
+                }}
+                style={{
+                  ...styles.button,
+                  flex: 1,
+                  padding: '12px',
+                }}
+              >
+                COPY ADDRESS
+              </button>
+              <a
+                href={`${monadTestnet.blockExplorers.default.url}/address/${createdMarket.address}`}
+                target="_blank"
+                rel="noopener noreferrer"
+                style={{
+                  ...styles.button,
+                  flex: 1,
+                  padding: '12px',
+                  textAlign: 'center',
+                  textDecoration: 'none',
+                }}
+              >
+                VIEW ON EXPLORER
+              </a>
+            </div>
+
+            {createdMarket.txHash && (
+              <a
+                href={`${monadTestnet.blockExplorers.default.url}/tx/${createdMarket.txHash}`}
+                target="_blank"
+                rel="noopener noreferrer"
+                style={{
+                  display: 'block',
+                  color: '#666',
+                  fontSize: '11px',
+                  textAlign: 'center',
+                  marginBottom: '16px',
+                }}
+              >
+                View creation transaction →
+              </a>
+            )}
+
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px' }}>
+              <button
+                onClick={() => {
+                  setCreatedMarket(null);
+                  setActiveTab('trade');
+                }}
+                style={{
+                  ...styles.button,
+                  padding: '16px',
+                  backgroundColor: '#001a00',
+                }}
+              >
+                START TRADING
+              </button>
+              <button
+                onClick={() => setCreatedMarket(null)}
+                style={{
+                  ...styles.button,
+                  padding: '16px',
+                  borderColor: '#666',
+                  color: '#666',
+                }}
+              >
+                CLOSE
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// Styles
+const styles: Record<string, React.CSSProperties> = {
+  container: {
+    minHeight: '100vh',
+    backgroundColor: '#0a0a0a',
+    color: '#00ff00',
+    fontFamily: '"IBM Plex Mono", "Courier New", monospace',
+    fontSize: '13px',
+  },
+  header: {
+    borderBottom: '3px solid #00ff00',
+    padding: '16px 24px',
+    display: 'flex',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    backgroundColor: '#000',
+  },
+  headerLeft: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: '16px',
+  },
+  logo: {
+    fontSize: '24px',
+    fontWeight: 'bold',
+    letterSpacing: '4px',
+    textTransform: 'uppercase',
+  },
+  badge: {
+    padding: '4px 12px',
+    border: '2px solid #00ff00',
+    fontSize: '11px',
+    letterSpacing: '2px',
+  },
+  headerRight: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: '16px',
+  },
+  networkBadge: {
+    padding: '4px 12px',
+    backgroundColor: '#1a1a1a',
+    border: '1px solid #333',
+    fontSize: '11px',
+  },
+  walletBadge: {
+    padding: '4px 12px',
+    backgroundColor: '#001a00',
+    border: '1px solid #00ff00',
+  },
+  nav: {
+    display: 'flex',
+    borderBottom: '2px solid #333',
+    backgroundColor: '#0d0d0d',
+  },
+  navButton: {
+    padding: '12px 24px',
+    backgroundColor: 'transparent',
+    color: '#00ff00',
+    border: 'none',
+    borderRight: '1px solid #333',
+    cursor: 'pointer',
+    fontFamily: 'inherit',
+    fontSize: '12px',
+    fontWeight: 'bold',
+    letterSpacing: '2px',
+    transition: 'all 0.1s',
+  },
+  mainContainer: {
+    display: 'flex',
+    height: 'calc(100vh - 120px)',
+  },
+  main: {
+    flex: 1,
+    padding: '24px',
+    overflowY: 'auto',
+  },
+  card: {
+    padding: '20px',
+    backgroundColor: '#111',
+    border: '1px solid #333',
+  },
+  button: {
+    padding: '12px 24px',
+    backgroundColor: 'transparent',
+    border: '2px solid #00ff00',
+    color: '#00ff00',
+    fontFamily: '"IBM Plex Mono", monospace',
+    fontSize: '12px',
+    fontWeight: 'bold',
+    letterSpacing: '1px',
+    cursor: 'pointer',
+    transition: 'all 0.1s',
+  },
+  sidebar: {
+    width: '320px',
+    borderLeft: '2px solid #333',
+    backgroundColor: '#050505',
+    display: 'flex',
+    flexDirection: 'column',
+  },
+  sidebarHeader: {
+    padding: '12px 16px',
+    borderBottom: '1px solid #333',
+    fontWeight: 'bold',
+    letterSpacing: '2px',
+    fontSize: '11px',
+  },
+  logsContainer: {
+    flex: 1,
+    overflowY: 'auto',
+    padding: '8px',
+  },
+  logEntry: {
+    padding: '8px',
+    marginBottom: '4px',
+    backgroundColor: '#0a0a0a',
+    borderLeft: '3px solid #666',
+    fontSize: '11px',
+  },
+  sidebarFooter: {
+    padding: '8px',
+    borderTop: '1px solid #333',
+  },
+  clearButton: {
+    width: '100%',
+    padding: '8px',
+    backgroundColor: 'transparent',
+    border: '1px solid #333',
+    color: '#666',
+    fontFamily: 'inherit',
+    fontSize: '10px',
+    cursor: 'pointer',
+  },
+};
+
+// Components
+function SectionHeader({ children }: { children: React.ReactNode }) {
+  return (
+    <div
+      style={{
+        fontSize: '18px',
+        fontWeight: 'bold',
+        letterSpacing: '4px',
+        paddingBottom: '12px',
+        borderBottom: '2px solid #00ff00',
+        marginBottom: '24px',
+      }}
+    >
+      {children}
+    </div>
+  );
+}
+
+function InputField({
+  label,
+  value,
+  onChange,
+  placeholder,
+  type = 'text',
+  min,
+}: {
+  label: string;
+  value: string;
+  onChange: (v: string) => void;
+  placeholder?: string;
+  type?: string;
+  min?: string;
+}) {
+  return (
+    <div style={{ marginBottom: '12px' }}>
+      <label
+        style={{
+          display: 'block',
+          color: '#666',
+          fontSize: '11px',
+          marginBottom: '8px',
+          letterSpacing: '1px',
+        }}
+      >
+        {label}
+      </label>
+      <input
+        type={type}
+        value={value}
+        onChange={e => onChange(e.target.value)}
+        placeholder={placeholder}
+        min={min}
+        style={{
+          width: '100%',
+          padding: '10px 12px',
+          backgroundColor: '#0a0a0a',
+          border: '1px solid #333',
+          color: '#00ff00',
+          fontFamily: '"IBM Plex Mono", monospace',
+          fontSize: '13px',
+          outline: 'none',
+          boxSizing: 'border-box',
+        }}
+      />
+    </div>
+  );
+}
+
+function InfoRow({
+  label,
+  value,
+  valueColor = '#fff',
+  mono,
+}: {
+  label: string;
+  value: string;
+  valueColor?: string;
+  mono?: boolean;
+}) {
+  return (
+    <div
+      style={{
+        display: 'flex',
+        justifyContent: 'space-between',
+        padding: '8px 0',
+        borderBottom: '1px solid #1a1a1a',
+      }}
+    >
+      <span style={{ color: '#666' }}>{label}</span>
+      <span
+        style={{
+          color: valueColor,
+          fontFamily: mono ? 'monospace' : 'inherit',
+          wordBreak: 'break-all',
+          textAlign: 'right',
+          maxWidth: '60%',
+        }}
+      >
+        {value}
+      </span>
+    </div>
+  );
+}

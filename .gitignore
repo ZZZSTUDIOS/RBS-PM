@@ -1,0 +1,25 @@
+# Dependencies
+node_modules/
+
+# Build output
+dist/
+out/
+cache/
+
+# Environment variables
+.env.local
+.env*.local
+
+# IDE
+.vscode/
+.idea/
+
+# OS
+.DS_Store
+
+# Foundry
+cache/
+out/
+
+# Claude settings
+.claude/settings.local.json

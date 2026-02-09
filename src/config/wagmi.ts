@@ -1,24 +1,9 @@
 import { http, createConfig, createStorage } from 'wagmi';
-import { injected, walletConnect } from 'wagmi/connectors';
-import { defineChain } from 'viem';
+import { injected } from 'wagmi/connectors';
+import { monadTestnet } from 'viem/chains';
 
-// Define Monad Testnet chain
-export const monadTestnet = defineChain({
-  id: 10143,
-  name: 'Monad Testnet',
-  nativeCurrency: {
-    decimals: 18,
-    name: 'Monad',
-    symbol: 'MON',
-  },
-  rpcUrls: {
-    default: { http: ['https://testnet-rpc.monad.xyz'] },
-  },
-  blockExplorers: {
-    default: { name: 'Monad Explorer', url: 'https://testnet.monadexplorer.com' },
-  },
-  testnet: true,
-});
+// Re-export monadTestnet for use in other files
+export { monadTestnet };
 
 // Contract addresses - Monad Testnet (10143)
 export const ADDRESSES = {
@@ -32,25 +17,40 @@ export const ADDRESSES = {
     bundler: '0xf6023127f6E937091D5B605680056A6D27524bad' as `0x${string}`,
     deployer: '0xb35469ee64A87Afd19B31615094fE3962d73e421' as `0x${string}`,
     quoter: '0x2F2BAcd46d3F5c9EE052Ab392b73711dB89129DB' as `0x${string}`,
-    
+
     // Token Factory
     tokenFactory: '0x8AF018e28c273826e6b2d5a99e81c8fB63729b07' as `0x${string}`,
-    
+    tokenFactory80: '0xf0B5141dD9096254B2ca624dff26024f46087229' as `0x${string}`,
+
+    // UniswapV4 Initializer (single curve)
+    uniswapV4Initializer: '0x53b4c21a6Cb61D64F636ABBfa6E8E90E6558e8ad' as `0x${string}`,
+
     // Multicurve Initializer (for bonding curves)
     multicurveInitializer: '0xA3C847eAb58eAa9cbc215C785c9cfBc19CDABD5f' as `0x${string}`,
     multicurveInitializerHook: '0xFaF16d11737E6552156DD328cD26C530e1da2D40' as `0x${string}`,
-    
-    // No-Op (for prediction markets - no governance/migration needed)
+
+    // UniswapV4 Migrator
+    uniswapV4Migrator: '0x4B0EC16Eb40318Ca5A4346f20F04A2285C19675B' as `0x${string}`,
+    uniswapV4MigratorHook: '0x76E1f507592d9856B48482c599732d129eD6a500' as `0x${string}`,
+
+    // Governance
+    governanceFactory: '0x014E1c0bd34f3B10546E554CB33B3293fECDD056' as `0x${string}`,
     noOpGovernanceFactory: '0x094D926A969B3024ca46D2186BF13FD5CDBA9CE2' as `0x${string}`,
+
+    // No-Op Migrator
     noOpMigrator: '0x5CadB034267751a364dDD4d321C99E07A307f915' as `0x${string}`,
+
+    // Other
+    timelockFactory: '0xB544F6fFF61F601F638C3930F6Aec4bbD7DA42b9' as `0x${string}`,
+    streamableFeesLocker: '0x0d2f38d807bfAd5C18e430516e10ab560D300caF' as `0x${string}`,
   },
   
   // Canonical Monad contracts
   MULTICALL3: '0xcA11bde05977b3631167028862bE2a173976CA11' as `0x${string}`,
   PERMIT2: '0x000000000022d473030f116ddee9f6b43ac78ba3' as `0x${string}`,
   
-  // Your deployed prediction market factory (deploy via Foundry)
-  PREDICTION_FACTORY: '' as `0x${string}`,
+  // Your deployed prediction market factory (uses native MON)
+  PREDICTION_FACTORY: '0xc4546422291F1860bbCe379075a077563B0e0777' as `0x${string}`,
 } as const;
 
 // Wagmi config
@@ -137,9 +137,16 @@ export const PREDICTION_MARKET_ABI = [
   {
     name: 'depositCollateral',
     type: 'function',
-    inputs: [{ name: 'amount', type: 'uint256' }],
+    inputs: [],
     outputs: [],
-    stateMutability: 'nonpayable',
+    stateMutability: 'payable',
+  },
+  {
+    name: 'getCollateralBalance',
+    type: 'function',
+    inputs: [],
+    outputs: [{ type: 'uint256' }],
+    stateMutability: 'view',
   },
   {
     name: 'outcome',

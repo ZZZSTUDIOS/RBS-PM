@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MIT
-pragma solidity ^0.8.24;
+pragma solidity ^0.8.27;
 
 import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
@@ -8,9 +8,8 @@ import "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
 
 /**
  * @title DopplerPredictionMarket
- * @notice A simple prediction market that uses Doppler-launched tokens as outcome shares
- * @dev This contract acts as a wrapper around two Doppler tokens (YES/NO outcomes)
- *      and handles resolution + redemption logic
+ * @notice A prediction market that uses Doppler-launched tokens as outcome shares
+ * @dev Uses native MON for collateral instead of WMON
  */
 contract DopplerPredictionMarket is Ownable, ReentrancyGuard {
     using SafeERC20 for IERC20;
@@ -18,29 +17,28 @@ contract DopplerPredictionMarket is Ownable, ReentrancyGuard {
     // ============ State Variables ============
 
     IERC20 public immutable yesToken;      // Doppler-launched YES outcome token
-    IERC20 public immutable noToken;       // Doppler-launched NO outcome token  
-    IERC20 public immutable collateral;    // Settlement currency (e.g., WMON, WETH)
-    
+    IERC20 public immutable noToken;       // Doppler-launched NO outcome token
+
     string public question;                // The prediction question
     uint256 public resolutionTime;         // When the market can be resolved
-    
+
     enum Outcome { UNRESOLVED, YES, NO, INVALID }
     Outcome public outcome;
-    
+
     bool public resolved;
     uint256 public collateralPerWinningToken;  // Redemption rate (scaled by 1e18)
-    
+
     address public oracle;                 // Address authorized to resolve the market
-    
+
     // ============ Events ============
-    
+
     event MarketResolved(Outcome outcome, uint256 redemptionRate);
-    event TokensRedeemed(address indexed user, uint256 winningTokens, uint256 collateralReceived);
+    event TokensRedeemed(address indexed user, uint256 winningTokens, uint256 monReceived);
     event OracleUpdated(address indexed newOracle);
     event CollateralDeposited(address indexed depositor, uint256 amount);
 
     // ============ Errors ============
-    
+
     error MarketNotResolved();
     error MarketAlreadyResolved();
     error NotOracle();
@@ -48,13 +46,13 @@ contract DopplerPredictionMarket is Ownable, ReentrancyGuard {
     error InvalidOutcome();
     error NoWinningTokens();
     error InsufficientCollateral();
+    error TransferFailed();
 
     // ============ Constructor ============
 
     /**
      * @param _yesToken Address of the Doppler YES token
      * @param _noToken Address of the Doppler NO token
-     * @param _collateral Settlement currency address
      * @param _question The prediction market question
      * @param _resolutionTime Unix timestamp when resolution is allowed
      * @param _oracle Address authorized to resolve
@@ -62,18 +60,22 @@ contract DopplerPredictionMarket is Ownable, ReentrancyGuard {
     constructor(
         address _yesToken,
         address _noToken,
-        address _collateral,
         string memory _question,
         uint256 _resolutionTime,
         address _oracle
     ) Ownable(msg.sender) {
         yesToken = IERC20(_yesToken);
         noToken = IERC20(_noToken);
-        collateral = IERC20(_collateral);
         question = _question;
         resolutionTime = _resolutionTime;
         oracle = _oracle;
         outcome = Outcome.UNRESOLVED;
+    }
+
+    // ============ Receive MON ============
+
+    receive() external payable {
+        emit CollateralDeposited(msg.sender, msg.value);
     }
 
     // ============ Oracle Functions ============
@@ -87,14 +89,14 @@ contract DopplerPredictionMarket is Ownable, ReentrancyGuard {
         if (resolved) revert MarketAlreadyResolved();
         if (block.timestamp < resolutionTime) revert ResolutionTooEarly();
         if (_outcome == Outcome.UNRESOLVED) revert InvalidOutcome();
-        
+
         resolved = true;
         outcome = _outcome;
-        
-        // Calculate redemption rate based on collateral in contract
-        uint256 totalCollateral = collateral.balanceOf(address(this));
+
+        // Calculate redemption rate based on MON balance in contract
+        uint256 totalCollateral = address(this).balance;
         uint256 winningSupply;
-        
+
         if (_outcome == Outcome.YES) {
             winningSupply = yesToken.totalSupply();
         } else if (_outcome == Outcome.NO) {
@@ -103,36 +105,35 @@ contract DopplerPredictionMarket is Ownable, ReentrancyGuard {
             // INVALID: Split collateral between both token holders proportionally
             winningSupply = yesToken.totalSupply() + noToken.totalSupply();
         }
-        
+
         if (winningSupply > 0) {
             collateralPerWinningToken = (totalCollateral * 1e18) / winningSupply;
         }
-        
+
         emit MarketResolved(_outcome, collateralPerWinningToken);
     }
 
     // ============ User Functions ============
 
     /**
-     * @notice Redeem winning tokens for collateral after resolution
+     * @notice Redeem winning tokens for MON after resolution
      * @param amount Amount of winning tokens to redeem
      */
     function redeem(uint256 amount) external nonReentrant {
         if (!resolved) revert MarketNotResolved();
         if (amount == 0) revert NoWinningTokens();
-        
+
         IERC20 winningToken;
-        
+
         if (outcome == Outcome.YES) {
             winningToken = yesToken;
         } else if (outcome == Outcome.NO) {
             winningToken = noToken;
         } else if (outcome == Outcome.INVALID) {
             // For INVALID, allow redemption of either token
-            // Check which token user wants to redeem
             uint256 yesBalance = yesToken.balanceOf(msg.sender);
             uint256 noBalance = noToken.balanceOf(msg.sender);
-            
+
             if (yesBalance >= amount) {
                 winningToken = yesToken;
             } else if (noBalance >= amount) {
@@ -143,29 +144,36 @@ contract DopplerPredictionMarket is Ownable, ReentrancyGuard {
         } else {
             revert InvalidOutcome();
         }
-        
+
         // Transfer tokens from user (burns them effectively by holding in contract)
         winningToken.safeTransferFrom(msg.sender, address(this), amount);
-        
-        // Calculate and transfer collateral
-        uint256 collateralAmount = (amount * collateralPerWinningToken) / 1e18;
-        if (collateralAmount == 0) revert InsufficientCollateral();
-        
-        collateral.safeTransfer(msg.sender, collateralAmount);
-        
-        emit TokensRedeemed(msg.sender, amount, collateralAmount);
+
+        // Calculate and transfer MON
+        uint256 monAmount = (amount * collateralPerWinningToken) / 1e18;
+        if (monAmount == 0) revert InsufficientCollateral();
+
+        (bool success, ) = msg.sender.call{value: monAmount}("");
+        if (!success) revert TransferFailed();
+
+        emit TokensRedeemed(msg.sender, amount, monAmount);
     }
 
     /**
-     * @notice Deposit collateral to back the market
-     * @param amount Amount of collateral to deposit
+     * @notice Deposit MON to back the market
      */
-    function depositCollateral(uint256 amount) external {
-        collateral.safeTransferFrom(msg.sender, address(this), amount);
-        emit CollateralDeposited(msg.sender, amount);
+    function depositCollateral() external payable {
+        if (msg.value == 0) revert InsufficientCollateral();
+        emit CollateralDeposited(msg.sender, msg.value);
     }
 
     // ============ View Functions ============
+
+    /**
+     * @notice Get the current MON balance backing this market
+     */
+    function getCollateralBalance() external view returns (uint256) {
+        return address(this).balance;
+    }
 
     /**
      * @notice Get the current redemption value for a given amount of winning tokens
@@ -180,7 +188,7 @@ contract DopplerPredictionMarket is Ownable, ReentrancyGuard {
      */
     function hasWinningTokens(address user) external view returns (bool, uint256) {
         if (!resolved) return (false, 0);
-        
+
         if (outcome == Outcome.YES) {
             uint256 balance = yesToken.balanceOf(user);
             return (balance > 0, balance);
@@ -191,7 +199,7 @@ contract DopplerPredictionMarket is Ownable, ReentrancyGuard {
             uint256 totalBalance = yesToken.balanceOf(user) + noToken.balanceOf(user);
             return (totalBalance > 0, totalBalance);
         }
-        
+
         return (false, 0);
     }
 
@@ -208,7 +216,16 @@ contract DopplerPredictionMarket is Ownable, ReentrancyGuard {
     /**
      * @notice Emergency withdraw (only before resolution)
      */
-    function emergencyWithdraw(address token, uint256 amount) external onlyOwner {
+    function emergencyWithdraw(uint256 amount) external onlyOwner {
+        if (resolved) revert MarketAlreadyResolved();
+        (bool success, ) = owner().call{value: amount}("");
+        if (!success) revert TransferFailed();
+    }
+
+    /**
+     * @notice Emergency withdraw tokens (only before resolution)
+     */
+    function emergencyWithdrawToken(address token, uint256 amount) external onlyOwner {
         if (resolved) revert MarketAlreadyResolved();
         IERC20(token).safeTransfer(owner(), amount);
     }
