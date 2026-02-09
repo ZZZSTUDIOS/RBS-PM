@@ -725,6 +725,22 @@ export default function LMSRAdmin() {
         question: marketConfig.question,
         txHash: result.txHash,
       });
+
+      // Reset form for next market creation
+      setMarketConfig({
+        question: '',
+        resolutionDate: '',
+        oracle: '',
+        alpha: '0.03',
+        minLiquidity: '100',
+        initialYesShares: '100',
+        initialNoShares: '100',
+        yesName: '',
+        yesSymbol: 'YES',
+        noName: '',
+        noSymbol: 'NO',
+        initialLiquidity: '10',
+      });
     }
   };
 
