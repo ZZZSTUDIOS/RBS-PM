@@ -400,6 +400,13 @@ export const LSLMSR_ABI = [
     outputs: [{ type: 'address' }],
     stateMutability: 'view',
   },
+  {
+    name: 'resolutionTime',
+    type: 'function',
+    inputs: [],
+    outputs: [{ type: 'uint256' }],
+    stateMutability: 'view',
+  },
   // Events
   {
     name: 'SharesPurchased',
