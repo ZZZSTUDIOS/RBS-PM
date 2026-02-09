@@ -111,21 +111,6 @@ export default function LMSRAdmin() {
     }
   }, [markets]);
 
-  // Load markets from Supabase (replaces localStorage markets)
-  useEffect(() => {
-    if (supabaseMarkets && supabaseMarkets.length > 0) {
-      const convertedMarkets = supabaseMarkets.map(m => ({
-        address: m.address as Address,
-        question: m.question,
-        status: m.status,
-        yesToken: m.yes_token_address as Address,
-        noToken: m.no_token_address as Address,
-        resolution: m.resolution_time,
-      }));
-      setMarkets(convertedMarkets);
-    }
-  }, [supabaseMarkets]);
-
   // Market prices cache for PnL calculation
   const [marketPrices, setMarketPrices] = useState<Record<string, MarketPrices>>({});
 
@@ -252,8 +237,24 @@ export default function LMSRAdmin() {
   const publicClient = usePublicClient();
 
   // Supabase hooks for syncing
-  const { upsertMarket: syncMarketToSupabase, markets: supabaseMarkets, refetch: refetchSupabaseMarkets } = useMarkets();
+  const { upsertMarket: syncMarketToSupabase, markets: supabaseMarkets } = useMarkets();
   const { syncTrade: syncTradeToSupabase, userId } = useUserSync(); // Auto-sync user when wallet connects
+
+  // Load markets from Supabase (replaces localStorage markets)
+  useEffect(() => {
+    if (supabaseMarkets && supabaseMarkets.length > 0) {
+      const convertedMarkets = supabaseMarkets.map((m, index) => ({
+        id: index + 1,
+        address: m.address as Address,
+        question: m.question,
+        status: m.status,
+        yesToken: m.yes_token_address as Address,
+        noToken: m.no_token_address as Address,
+        resolution: m.resolution_time,
+      }));
+      setMarkets(convertedMarkets);
+    }
+  }, [supabaseMarkets]);
 
   // Fetch trades and positions from Supabase
   const {
