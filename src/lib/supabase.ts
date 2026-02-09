@@ -8,8 +8,9 @@ declare global {
   }
 }
 
-const supabaseUrl = import.meta.env.VITE_SUPABASE_URL?.trim();
-const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY?.trim();
+// Remove ALL whitespace (including newlines that may have been copy-pasted)
+const supabaseUrl = import.meta.env.VITE_SUPABASE_URL?.replace(/\s/g, '');
+const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY?.replace(/\s/g, '');
 
 // Debug logging for Supabase config
 console.log('Supabase URL:', supabaseUrl ? `${supabaseUrl.substring(0, 30)}...` : 'NOT SET');
