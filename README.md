@@ -248,3 +248,4 @@ forge test
 MIT
 # Trigger redeploy
 
+# Prediction Market
