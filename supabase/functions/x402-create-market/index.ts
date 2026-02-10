@@ -45,12 +45,33 @@ interface MarketCreateRequest {
 }
 
 // Parse x402 payment header
+// Format: x402 version|network|payloadB64|signature (using | as delimiter to avoid conflict with network format)
+// Or legacy: x402 version:network:payloadB64:signature (where network doesn't contain :)
 function parsePaymentHeader(header: string): { version: string; network: string; payload: PaymentPayload; signature: string } | null {
   if (!header.startsWith("x402 ")) {
     return null;
   }
 
-  const parts = header.slice(5).split(":");
+  const content = header.slice(5);
+
+  // Try pipe delimiter first (new format)
+  let parts = content.split("|");
+
+  // Fall back to colon delimiter if pipe doesn't give us 4 parts
+  if (parts.length !== 4) {
+    // For colon delimiter with network like "eip155:10143", we need to handle it specially
+    // Format: version:chainPrefix:chainId:payloadB64:signature
+    const colonParts = content.split(":");
+    if (colonParts.length === 5) {
+      // Reconstruct: version, network (chainPrefix:chainId), payload, signature
+      parts = [colonParts[0], `${colonParts[1]}:${colonParts[2]}`, colonParts[3], colonParts[4]];
+    } else if (colonParts.length === 4) {
+      parts = colonParts;
+    } else {
+      return null;
+    }
+  }
+
   if (parts.length !== 4) {
     return null;
   }
@@ -262,20 +283,17 @@ serve(async (req: Request) => {
         address: body.address.toLowerCase(),
         question: body.question,
         resolution_time: new Date(body.resolutionTime * 1000).toISOString(),
-        oracle: body.oracle.toLowerCase(),
-        yes_token_address: body.yesTokenAddress?.toLowerCase(),
-        no_token_address: body.noTokenAddress?.toLowerCase(),
-        creator_id: creatorId,
-        status: "active",
-        market_type: "lslmsr_erc20",
-        collateral_token: "USDC",
-        initial_liquidity: body.initialLiquidity || "0",
+        oracle_address: body.oracle.toLowerCase(),
+        creator_address: creatorAddress.toLowerCase(),
+        yes_token_address: body.yesTokenAddress?.toLowerCase() || "",
+        no_token_address: body.noTokenAddress?.toLowerCase() || "",
+        status: "ACTIVE",
         alpha: body.alpha || "0.03",
         category: body.category || "general",
         tags: body.tags || [],
-        yes_price: "0.5",
-        no_price: "0.5",
-        total_volume: "0",
+        yes_price: 0.5,
+        no_price: 0.5,
+        total_volume: 0,
         total_trades: 0,
       })
       .select()
