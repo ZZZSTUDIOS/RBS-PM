@@ -62,8 +62,15 @@ export function restoreAuthToken(): string | null {
 
 // Edge function URLs
 export const EDGE_FUNCTIONS = {
+  // Human wallet auth (SIWE)
   authNonce: '/functions/v1/auth-nonce',
   authVerify: '/functions/v1/auth-verify',
+  // Agent auth (Moltbook)
+  authMoltbook: '/functions/v1/auth-moltbook',
+  // x402 protected endpoints
+  x402MarketData: '/functions/v1/x402-market-data',
+  x402AgentTrade: '/functions/v1/x402-agent-trade',
+  // Indexer
   indexer: '/functions/v1/indexer',
 };
 

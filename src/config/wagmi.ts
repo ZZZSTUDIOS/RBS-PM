@@ -5,10 +5,31 @@ import { monadTestnet } from 'viem/chains';
 // Re-export monadTestnet for use in other files
 export { monadTestnet };
 
+// x402 Payment Configuration - Monad Testnet
+export const X402_CONFIG = {
+  // Network identifier for x402
+  network: 'eip155:10143' as const,
+  // USDC on Monad Testnet (used for micropayments)
+  usdc: '0x534b2f3A21130d7a60830c2Df862319e593943A3' as `0x${string}`,
+  // x402 Facilitator URL for Monad
+  facilitator: 'https://x402-facilitator.molandak.org',
+  // Pricing for different endpoints (in USDC base units, 6 decimals)
+  prices: {
+    marketData: '10000',    // 0.01 USDC - premium market data
+    createMarket: '100000', // 0.10 USDC - market creation listing fee
+    agentTrade: '100000',   // 0.10 USDC - agent trade execution
+    analytics: '50000',     // 0.05 USDC - market analytics
+  },
+} as const;
+
 // Contract addresses - Monad Testnet (10143)
 export const ADDRESSES = {
   // Wrapped MON on Monad Testnet
   WMON: '0xFb8bf4c1CC7a94c73D209a149eA2AbEa852BC541' as `0x${string}`,
+
+  // USDC on Monad Testnet (6 decimals) - used as collateral for prediction markets
+  USDC: '0x534b2f3A21130d7a60830c2Df862319e593943A3' as `0x${string}`,
+  USDC_DECIMALS: 6,
   
   // Doppler V4 addresses on Monad Testnet
   DOPPLER: {
@@ -51,6 +72,9 @@ export const ADDRESSES = {
   
   // Your deployed prediction market factory (uses native MON)
   PREDICTION_FACTORY: '0xc4546422291F1860bbCe379075a077563B0e0777' as `0x${string}`,
+
+  // LS-LMSR with USDC collateral (ERC-20 version)
+  LSLMSR_ERC20_SAMPLE: '0x2E4A90ea7c569789e3Ce9c5c6d9e7B750D4eC44A' as `0x${string}`,
 } as const;
 
 // Wagmi config

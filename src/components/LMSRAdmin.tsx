@@ -10,12 +10,10 @@ import {
   useSwitchChain,
   usePublicClient,
 } from 'wagmi';
-import { formatEther, parseEther, type Address } from 'viem';
+import { parseUnits, formatEther, parseEther, type Address } from 'viem';
 import {
   useTransactionLog,
   useLSLMSRMarketCreate,
-  useLMSRBuy,
-  useLMSRSell,
   useLMSRResolve,
   useLMSRRedeem,
   useClaimCreatorFees,
@@ -25,6 +23,7 @@ import {
   LSLMSR_ABI,
   type LSLMSRMarketConfig,
 } from '../hooks/useLMSR';
+import { useLSLMSR_ERC20 } from '../hooks/useLMSR_ERC20';
 import { monadTestnet } from '../config/wagmi';
 import { useMarkets } from '../hooks/useMarkets';
 import { useUserSync } from '../hooks/useUserSync';
@@ -56,7 +55,7 @@ interface TradeEntry {
   marketQuestion?: string;
   type: 'buy' | 'sell' | 'redeem';
   outcome: 'YES' | 'NO';
-  amount: string; // MON spent (buy) or received (sell/redeem)
+  amount: string; // USDC spent (buy) or received (sell/redeem)
   shares: string;
   txHash: string;
 }
@@ -67,8 +66,8 @@ interface Position {
   marketQuestion?: string;
   yesShares: number;
   noShares: number;
-  yesCostBasis: number; // Total MON spent on YES shares
-  noCostBasis: number;  // Total MON spent on NO shares
+  yesCostBasis: number; // Total USDC spent on YES shares
+  noCostBasis: number;  // Total USDC spent on NO shares
   realizedPnL: number;  // From sells and redemptions
   resolved?: boolean;
   yesWins?: boolean;
@@ -204,7 +203,7 @@ export default function LMSRAdmin() {
     if (!prices) return 0;
 
     if (prices.resolved) {
-      // If resolved, winning shares are worth 1 MON each, losing shares worth 0
+      // If resolved, winning shares are worth 1 USDC each, losing shares worth 0
       const yesValue = prices.yesWins ? pos.yesShares : 0;
       const noValue = prices.yesWins ? 0 : pos.noShares;
       return (yesValue + noValue) - pos.yesCostBasis - pos.noCostBasis;
@@ -334,8 +333,14 @@ export default function LMSRAdmin() {
   // LS-LMSR hooks
   const { logs, addLog, clearLogs } = useTransactionLog(address);
   const { createMarket, isLoading: isCreatingMarket } = useLSLMSRMarketCreate();
-  const { buy, isLoading: isBuying } = useLMSRBuy();
-  const { sell, isLoading: isSelling } = useLMSRSell();
+  // USDC trading hooks
+  const {
+    buyShares,
+    sellShares,
+    isLoading: isUSDCLoading,
+  } = useLSLMSR_ERC20();
+  const isBuying = isUSDCLoading;
+  const isSelling = isUSDCLoading;
   const { resolve, isLoading: isResolving } = useLMSRResolve();
   const { redeem, isLoading: isRedeeming } = useLMSRRedeem();
   const { claimFees, isLoading: isClaimingCreatorFees } = useClaimCreatorFees();
@@ -766,22 +771,41 @@ export default function LMSRAdmin() {
 
     let result: { success: boolean; txHash?: string; shares?: string };
 
-    if (tradeParams.direction === 'buy') {
-      result = await buy(
-        tradeParams.marketAddress as Address,
-        tradeParams.isYes,
-        tradeParams.amount,
-        '0', // No minimum shares - user sees price impact before trading
-        addLog
-      );
-    } else {
-      result = await sell(
-        tradeParams.marketAddress as Address,
-        tradeParams.isYes,
-        tradeParams.amount,
-        '0', // No minimum payout - user sees price impact before trading
-        addLog
-      );
+    try {
+      if (tradeParams.direction === 'buy') {
+        addLog(`Buying ${tradeParams.isYes ? 'YES' : 'NO'} shares with ${tradeParams.amount} USDC...`, 'pending');
+        const txResult = await buyShares(
+          tradeParams.marketAddress as Address,
+          tradeParams.isYes,
+          tradeParams.amount, // USDC amount
+          0n // No minimum shares
+        );
+        result = {
+          success: true,
+          txHash: txResult.hash,
+          shares: tradeParams.amount, // Approximate
+        };
+        addLog(`Buy successful!`, 'success', txResult.hash);
+      } else {
+        addLog(`Selling ${tradeParams.amount} ${tradeParams.isYes ? 'YES' : 'NO'} shares...`, 'pending');
+        const shares = parseUnits(tradeParams.amount, 18); // Shares are 18 decimals
+        const txResult = await sellShares(
+          tradeParams.marketAddress as Address,
+          tradeParams.isYes,
+          shares,
+          0n // No minimum payout
+        );
+        result = {
+          success: true,
+          txHash: txResult.hash,
+          shares: tradeParams.amount,
+        };
+        addLog(`Sell successful!`, 'success', txResult.hash);
+      }
+    } catch (err) {
+      const errorMsg = err instanceof Error ? err.message : 'Trade failed';
+      addLog(errorMsg, 'error');
+      result = { success: false };
     }
 
     if (result.success && result.txHash) {
@@ -947,7 +971,7 @@ export default function LMSRAdmin() {
                   <div style={styles.card}>
                     <InfoRow label="STATUS" value="● CONNECTED" valueColor="#00ff00" />
                     <InfoRow label="ADDRESS" value={address || ''} mono />
-                    <InfoRow label="BALANCE" value={`${balance ? parseFloat(formatEther(balance.value)).toFixed(4) : '0'} MON`} />
+                    <InfoRow label="BALANCE" value={`${balance ? parseFloat(formatEther(balance.value)).toFixed(4) : '0'} USDC`} />
                     <InfoRow label="CHAIN ID" value={chainId?.toString() || ''} />
                     <div style={{ marginTop: '16px' }}>
                       <button
@@ -974,7 +998,7 @@ export default function LMSRAdmin() {
                     market's probability estimate.
                   </p>
                   <div style={{ marginTop: '16px' }}>
-                    <InfoRow label="COLLATERAL" value="Native MON" />
+                    <InfoRow label="COLLATERAL" value="USDC" />
                     <InfoRow label="PRICING" value="C(q) = b * ln(e^(qYes/b) + e^(qNo/b))" mono />
                   </div>
                 </div>
@@ -1077,7 +1101,7 @@ export default function LMSRAdmin() {
                 </div>
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px', marginTop: '16px' }}>
                   <InputField
-                    label="LIQUIDITY BUFFER (MON)"
+                    label="LIQUIDITY BUFFER (USDC)"
                     value={marketConfig.initialLiquidity}
                     placeholder="10"
                     onChange={v => setMarketConfig(p => ({ ...p, initialLiquidity: v }))}
@@ -1086,10 +1110,10 @@ export default function LMSRAdmin() {
                 <div style={{ marginTop: '12px', padding: '12px', backgroundColor: '#1a1a00', border: '1px solid #ff6600' }}>
                   <div style={{ color: '#ff6600', fontWeight: 'bold', marginBottom: '8px', fontSize: '11px' }}>⚠ LIQUIDITY BUFFER</div>
                   <div style={{ color: '#999', fontSize: '11px' }}>
-                    Buffer ensures winners can redeem at <strong style={{ color: '#fff' }}>1 MON per share</strong>.<br/>
+                    Buffer ensures winners can redeem at <strong style={{ color: '#fff' }}>1 USDC per share</strong>.<br/>
                     <strong>Recommended:</strong> 2-5% of expected total trading volume.<br/>
-                    <span style={{ color: '#666' }}>Example: Expecting 500 MON in trades → deposit 10-25 MON buffer</span><br/>
-                    <span style={{ color: '#666' }}>Minimum: 1 MON. Excess can be withdrawn after resolution.</span>
+                    <span style={{ color: '#666' }}>Example: Expecting 500 USDC in trades → deposit 10-25 USDC buffer</span><br/>
+                    <span style={{ color: '#666' }}>Minimum: 1 USDC. Excess can be withdrawn after resolution.</span>
                   </div>
                 </div>
                 <div style={{ marginTop: '12px', color: '#666', fontSize: '11px' }}>
@@ -1166,7 +1190,7 @@ export default function LMSRAdmin() {
                           {(Number(marketInfo.yesPrice) / 1e18 * 100).toFixed(1)}%
                         </div>
                         <div style={{ color: '#00ff00', fontSize: '12px', marginTop: '4px' }}>
-                          {(Number(marketInfo.yesPrice) / 1e18).toFixed(4)} MON
+                          {(Number(marketInfo.yesPrice) / 1e18).toFixed(4)} USDC
                         </div>
                         <div style={{ color: '#666', fontSize: '10px', marginTop: '8px' }}>
                           {formatEther(marketInfo.yesShares)} shares
@@ -1185,7 +1209,7 @@ export default function LMSRAdmin() {
                           {(Number(marketInfo.noPrice) / 1e18 * 100).toFixed(1)}%
                         </div>
                         <div style={{ color: '#ff6600', fontSize: '12px', marginTop: '4px' }}>
-                          {(Number(marketInfo.noPrice) / 1e18).toFixed(4)} MON
+                          {(Number(marketInfo.noPrice) / 1e18).toFixed(4)} USDC
                         </div>
                         <div style={{ color: '#666', fontSize: '10px', marginTop: '8px' }}>
                           {formatEther(marketInfo.noShares)} shares
@@ -1226,7 +1250,7 @@ export default function LMSRAdmin() {
 
                     {/* Market Stats */}
                     <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px', padding: '12px', backgroundColor: '#0a0a0a', border: '1px solid #333' }}>
-                      <InfoRow label="COLLATERAL POOL" value={`${formatEther(marketInfo.totalCollateral)} MON`} />
+                      <InfoRow label="COLLATERAL POOL" value={`${formatEther(marketInfo.totalCollateral)} USDC`} />
                       <InfoRow
                         label="STATUS"
                         value={marketInfo.resolved ? `${marketInfo.yesWins ? yesSymbol : noSymbol} WINS` : 'ACTIVE'}
@@ -1392,7 +1416,7 @@ export default function LMSRAdmin() {
 
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
                   <InputField
-                    label={tradeParams.direction === 'buy' ? 'AMOUNT (MON)' : 'SHARES TO SELL'}
+                    label={tradeParams.direction === 'buy' ? 'AMOUNT (USDC)' : 'SHARES TO SELL'}
                     value={tradeParams.amount}
                     onChange={v => setTradeParams(p => ({ ...p, amount: v }))}
                   />
@@ -1475,7 +1499,7 @@ export default function LMSRAdmin() {
                     <div style={{ color: '#666', fontSize: '11px', marginTop: '4px' }}>
                       {tradeParams.isYes ? yesSymbol : noSymbol} shares
                       {parseFloat(estimatedShares) > 0 && !isEstimating && (
-                        <> (avg {(parseFloat(tradeParams.amount) / parseFloat(estimatedShares)).toFixed(4)} MON/share)</>
+                        <> (avg {(parseFloat(tradeParams.amount) / parseFloat(estimatedShares)).toFixed(4)} USDC/share)</>
                       )}
                     </div>
                     <div style={{ color: '#444', fontSize: '10px', marginTop: '8px' }}>
@@ -1550,16 +1574,16 @@ export default function LMSRAdmin() {
                       }}>
                         <div style={{ color: '#666', fontSize: '11px', marginBottom: '4px' }}>ESTIMATED PAYOUT</div>
                         <div style={{ color: '#ffff00', fontSize: '28px', fontWeight: 'bold' }}>
-                          {parseFloat(estimatedPayout).toFixed(4)} MON
+                          {parseFloat(estimatedPayout).toFixed(4)} USDC
                         </div>
                         <div style={{ color: '#666', fontSize: '11px', marginTop: '4px' }}>
                           for {tradeParams.amount} {tradeParams.isYes ? yesSymbol : noSymbol} shares
                         </div>
                         {parseFloat(estimatedPayout) > 0 && parseFloat(tradeParams.amount) > 0 && (
                           <div style={{ color: '#444', fontSize: '10px', marginTop: '8px' }}>
-                            Avg price: {(parseFloat(estimatedPayout) / parseFloat(tradeParams.amount)).toFixed(4)} MON/share
+                            Avg price: {(parseFloat(estimatedPayout) / parseFloat(tradeParams.amount)).toFixed(4)} USDC/share
                             {marketInfo && (
-                              <> | Spot: {(Number(tradeParams.isYes ? marketInfo.yesPrice : marketInfo.noPrice) / 1e18).toFixed(4)} MON</>
+                              <> | Spot: {(Number(tradeParams.isYes ? marketInfo.yesPrice : marketInfo.noPrice) / 1e18).toFixed(4)} USDC</>
                             )}
                           </div>
                         )}
@@ -1623,7 +1647,7 @@ export default function LMSRAdmin() {
                   }}>
                     {totalPnL >= 0 ? '+' : ''}{totalPnL.toFixed(4)}
                   </div>
-                  <div style={{ color: '#666', fontSize: '10px' }}>MON</div>
+                  <div style={{ color: '#666', fontSize: '10px' }}>USDC</div>
                 </div>
                 <div style={{ ...styles.card, textAlign: 'center' }}>
                   <div style={{ color: '#666', fontSize: '11px', marginBottom: '4px' }}>REALIZED P&L</div>
@@ -1723,12 +1747,12 @@ export default function LMSRAdmin() {
                             <div style={{ padding: '8px', backgroundColor: '#0a0a0a', border: '1px solid #333' }}>
                               <div style={{ color: '#666', fontSize: '10px' }}>COST BASIS</div>
                               <div style={{ color: '#fff', fontWeight: 'bold' }}>{totalCost.toFixed(4)}</div>
-                              <div style={{ color: '#666', fontSize: '10px' }}>MON</div>
+                              <div style={{ color: '#666', fontSize: '10px' }}>USDC</div>
                             </div>
                             <div style={{ padding: '8px', backgroundColor: '#0a0a0a', border: '1px solid #333' }}>
                               <div style={{ color: '#666', fontSize: '10px' }}>MARKET VALUE</div>
                               <div style={{ color: '#fff', fontWeight: 'bold' }}>{totalValue.toFixed(4)}</div>
-                              <div style={{ color: '#666', fontSize: '10px' }}>MON</div>
+                              <div style={{ color: '#666', fontSize: '10px' }}>USDC</div>
                             </div>
                           </div>
 
@@ -1739,7 +1763,7 @@ export default function LMSRAdmin() {
                                 color: pos.realizedPnL >= 0 ? '#00ff00' : '#ff0000',
                                 fontWeight: 'bold',
                               }}>
-                                {pos.realizedPnL >= 0 ? '+' : ''}{pos.realizedPnL.toFixed(4)} MON
+                                {pos.realizedPnL >= 0 ? '+' : ''}{pos.realizedPnL.toFixed(4)} USDC
                               </span>
                             </div>
                           )}
@@ -1832,7 +1856,7 @@ export default function LMSRAdmin() {
                   <div style={{ color: '#fff', fontSize: '24px', fontWeight: 'bold' }}>
                     {trades.reduce((sum, t) => sum + parseFloat(t.amount || '0'), 0).toFixed(2)}
                   </div>
-                  <div style={{ color: '#666', fontSize: '10px' }}>MON</div>
+                  <div style={{ color: '#666', fontSize: '10px' }}>USDC</div>
                 </div>
               </div>
 
@@ -1899,7 +1923,7 @@ export default function LMSRAdmin() {
                               </span>
                             </div>
                             <div style={{ color: '#fff', fontSize: '14px', fontWeight: 'bold', marginBottom: '8px' }}>
-                              {trade.type === 'buy' ? 'Spent' : 'Received'}: {trade.amount} MON
+                              {trade.type === 'buy' ? 'Spent' : 'Received'}: {trade.amount} USDC
                             </div>
                             {trade.marketQuestion && (
                               <div style={{ color: '#999', fontSize: '12px', marginBottom: '4px' }}>
@@ -2061,7 +2085,7 @@ export default function LMSRAdmin() {
                   }}>
                     <div style={{ color: '#666', fontSize: '10px', marginBottom: '4px' }}>YOUR CREATOR FEES</div>
                     <div style={{ color: feeInfo.canClaimCreatorFees ? '#00ff00' : '#666', fontWeight: 'bold', fontSize: '18px' }}>
-                      {parseFloat(feeInfo.creatorFees).toFixed(6)} MON
+                      {parseFloat(feeInfo.creatorFees).toFixed(6)} USDC
                     </div>
                     <div style={{ color: '#444', fontSize: '9px', marginTop: '4px' }}>
                       Earned from trading fees on your market
@@ -2108,7 +2132,7 @@ export default function LMSRAdmin() {
                         opacity: isClaimingCreatorFees || !feeInfo.canClaimCreatorFees ? 0.5 : 1,
                       }}
                     >
-                      [ {isClaimingCreatorFees ? 'CLAIMING...' : `CLAIM CREATOR FEES (${parseFloat(feeInfo.creatorFees).toFixed(4)} MON)`} ]
+                      [ {isClaimingCreatorFees ? 'CLAIMING...' : `CLAIM CREATOR FEES (${parseFloat(feeInfo.creatorFees).toFixed(4)} USDC)`} ]
                     </button>
                   );
                 })()}

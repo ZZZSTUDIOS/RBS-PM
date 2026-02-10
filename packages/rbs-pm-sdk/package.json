@@ -1,0 +1,47 @@
+{
+  "name": "@rbs-pm/sdk",
+  "version": "1.0.0",
+  "description": "SDK for AI agents to trade on RBS Prediction Markets (Monad)",
+  "main": "dist/index.js",
+  "module": "dist/index.mjs",
+  "types": "dist/index.d.ts",
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "tsup src/index.ts --format cjs,esm --dts",
+    "dev": "tsup src/index.ts --format cjs,esm --dts --watch",
+    "lint": "eslint src/",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "viem": "^2.0.0"
+  },
+  "devDependencies": {
+    "@types/node": "^20.0.0",
+    "tsup": "^8.0.0",
+    "typescript": "^5.0.0"
+  },
+  "peerDependencies": {
+    "viem": "^2.0.0"
+  },
+  "keywords": [
+    "prediction-market",
+    "ai-agent",
+    "monad",
+    "x402",
+    "erc8004",
+    "moltbook",
+    "web3",
+    "trading"
+  ],
+  "author": "RBS",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/ZZZSTUDIOS/RBS-PM"
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}

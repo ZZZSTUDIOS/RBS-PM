@@ -5,6 +5,7 @@ import { WagmiProvider } from 'wagmi';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import config from '../config/wagmi';
 import { AuthProvider } from '../contexts/AuthContext';
+import { AgentProvider } from '../contexts/AgentContext';
 import { restoreAuthToken } from '../lib/supabase';
 
 // Restore auth token on app load
@@ -26,7 +27,9 @@ export function Providers({ children }: { children: React.ReactNode }) {
     <WagmiProvider config={config}>
       <QueryClientProvider client={queryClient}>
         <AuthProvider>
-          {children}
+          <AgentProvider>
+            {children}
+          </AgentProvider>
         </AuthProvider>
       </QueryClientProvider>
     </WagmiProvider>
