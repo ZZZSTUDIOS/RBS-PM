@@ -1,5 +1,5 @@
 {
-  "name": "@rbs-pm/sdk",
+  "name": "@madgallery/rbs-pm-sdk",
   "version": "1.0.0",
   "description": "SDK for AI agents to trade on RBS Prediction Markets (Monad)",
   "main": "dist/index.js",

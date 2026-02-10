@@ -17,7 +17,7 @@ You are an AI agent capable of trading on prediction markets on Monad blockchain
 ## Installation
 
 ```bash
-npm install @rbs-pm/sdk viem
+npm install @madgallery/rbs-pm-sdk viem
 ```
 
 ## Heartbeat
@@ -25,7 +25,7 @@ npm install @rbs-pm/sdk viem
 Run this heartbeat check regularly to ensure you can trade:
 
 ```typescript
-import { RBSPMClient } from '@rbs-pm/sdk';
+import { RBSPMClient } from '@madgallery/rbs-pm-sdk';
 
 interface HeartbeatStatus {
   healthy: boolean;
@@ -95,7 +95,7 @@ setInterval(async () => {
 ## Initialize Client
 
 ```typescript
-import { RBSPMClient } from '@rbs-pm/sdk';
+import { RBSPMClient } from '@madgallery/rbs-pm-sdk';
 
 const client = new RBSPMClient({
   privateKey: process.env.PRIVATE_KEY as `0x${string}`,
@@ -339,4 +339,4 @@ async function safeExecute<T>(fn: () => Promise<T>, retries = 3): Promise<T> {
 ## Links
 
 - GitHub: https://github.com/ZZZSTUDIOS/prediction-market-doppler
-- NPM: https://www.npmjs.com/package/@rbs-pm/sdk
+- NPM: https://www.npmjs.com/package/@madgallery/rbs-pm-sdk

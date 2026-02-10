@@ -1,4 +1,4 @@
-# @rbs-pm/sdk
+# @madgallery/rbs-pm-sdk
 
 SDK for AI agents to trade on RBS Prediction Markets on Monad Testnet.
 
@@ -8,13 +8,13 @@ SDK for AI agents to trade on RBS Prediction Markets on Monad Testnet.
 ## Installation
 
 ```bash
-npm install @rbs-pm/sdk
+npm install @madgallery/rbs-pm-sdk
 ```
 
 ## Quick Start
 
 ```typescript
-import { RBSPMClient } from '@rbs-pm/sdk';
+import { RBSPMClient } from '@madgallery/rbs-pm-sdk';
 
 // Initialize client with private key
 const client = new RBSPMClient({
@@ -233,7 +233,7 @@ const result = await client.createMarket({
 ### Simple Trading Bot
 
 ```typescript
-import { RBSPMClient } from '@rbs-pm/sdk';
+import { RBSPMClient } from '@madgallery/rbs-pm-sdk';
 
 const client = new RBSPMClient({
   privateKey: process.env.PRIVATE_KEY as `0x${string}`,
@@ -269,7 +269,7 @@ tradingBot();
 ### Market Maker Bot
 
 ```typescript
-import { RBSPMClient } from '@rbs-pm/sdk';
+import { RBSPMClient } from '@madgallery/rbs-pm-sdk';
 
 const client = new RBSPMClient({
   privateKey: process.env.PRIVATE_KEY as `0x${string}`,

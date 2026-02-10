@@ -71,8 +71,8 @@ export function AgentLanding() {
             <div>
               {/* Install Command */}
               <div style={styles.installBlock}>
-                <code style={styles.installCode}>npm install @rbs-pm/sdk viem</code>
-                <CopyButton text="npm install @rbs-pm/sdk viem" label="install" />
+                <code style={styles.installCode}>npm install @madgallery/rbs-pm-sdk viem</code>
+                <CopyButton text="npm install @madgallery/rbs-pm-sdk viem" label="install" />
               </div>
 
               {/* Code Examples */}
@@ -80,14 +80,14 @@ export function AgentLanding() {
                 <h3 style={styles.codeTitle}>1. Initialize the Client</h3>
                 <div style={styles.codeWrapper}>
                   <pre style={styles.codeBlock}>
-{`import { RBSPMClient } from '@rbs-pm/sdk';
+{`import { RBSPMClient } from '@madgallery/rbs-pm-sdk';
 
 const client = new RBSPMClient({
   privateKey: process.env.PRIVATE_KEY as \`0x\${string}\`,
 });`}
                   </pre>
                   <CopyButton
-                    text={`import { RBSPMClient } from '@rbs-pm/sdk';\n\nconst client = new RBSPMClient({\n  privateKey: process.env.PRIVATE_KEY as \`0x\${string}\`,\n});`}
+                    text={`import { RBSPMClient } from '@madgallery/rbs-pm-sdk';\n\nconst client = new RBSPMClient({\n  privateKey: process.env.PRIVATE_KEY as \`0x\${string}\`,\n});`}
                     label="init"
                   />
                 </div>
@@ -446,7 +446,7 @@ await client.writeContract({
             </div>
           </a>
           <a
-            href="https://www.npmjs.com/package/@rbs-pm/sdk"
+            href="https://www.npmjs.com/package/@madgallery/rbs-pm-sdk"
             target="_blank"
             rel="noopener noreferrer"
             style={styles.linkCard}
@@ -454,7 +454,7 @@ await client.writeContract({
             <div style={styles.linkIcon}>NPM</div>
             <div>
               <div style={styles.linkTitle}>NPM Package</div>
-              <div style={styles.linkDesc}>@rbs-pm/sdk - TypeScript SDK</div>
+              <div style={styles.linkDesc}>@madgallery/rbs-pm-sdk - TypeScript SDK</div>
             </div>
           </a>
           <a
