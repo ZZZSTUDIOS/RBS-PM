@@ -11,7 +11,10 @@ export const MONAD_TESTNET = {
 
 // Contract Addresses
 export const ADDRESSES = {
-  // Prediction Market Factory
+  // Market Factory (deploy new markets)
+  MARKET_FACTORY: '0xc486fD94Af1b18CE2d246cBD0941d06F06d4d159' as `0x${string}`,
+
+  // Legacy Prediction Market Factory
   PREDICTION_FACTORY: '0xc4546422291F1860bbCe379075a077563B0e0777' as `0x${string}`,
 
   // Wrapped MON
@@ -51,8 +54,9 @@ export const API_ENDPOINTS = {
   x402ClaimFees: '/functions/v1/x402-claim-fees',      // POST - claim fees calldata
   x402Redeem: '/functions/v1/x402-redeem',             // POST - redeem calldata
   x402Initialize: '/functions/v1/x402-initialize',     // POST - initialize calldata
-  // Market listing (0.0001 USDC)
-  x402CreateMarket: '/functions/v1/x402-create-market', // POST - list market
+  // Market creation (0.0001 USDC)
+  x402CreateMarket: '/functions/v1/x402-create-market', // POST - list market in discovery
+  x402DeployMarket: '/functions/v1/x402-deploy-market', // POST - deploy new market via factory
   // Authentication (free - required for agent identity)
   authMoltbook: '/functions/v1/auth-moltbook',
 } as const;
@@ -335,6 +339,34 @@ export const LSLMSR_ABI = [
       { name: 'isYes', type: 'bool', indexed: false },
       { name: 'shares', type: 'uint256', indexed: false },
       { name: 'payout', type: 'uint256', indexed: false },
+    ],
+  },
+] as const;
+
+// Market Factory ABI
+export const MARKET_FACTORY_ABI = [
+  {
+    name: "createMarket",
+    type: "function",
+    inputs: [
+      { name: "question", type: "string" },
+      { name: "resolutionTime", type: "uint256" },
+      { name: "oracle", type: "address" },
+      { name: "yesSymbol", type: "string" },
+      { name: "noSymbol", type: "string" },
+    ],
+    outputs: [{ name: "market", type: "address" }],
+    stateMutability: "nonpayable",
+  },
+  {
+    type: "event",
+    name: "MarketCreated",
+    inputs: [
+      { name: "market", type: "address", indexed: true },
+      { name: "creator", type: "address", indexed: true },
+      { name: "question", type: "string", indexed: false },
+      { name: "resolutionTime", type: "uint256", indexed: false },
+      { name: "oracle", type: "address", indexed: false },
     ],
   },
 ] as const;

@@ -10,6 +10,7 @@
     "example": "npx tsx scripts/create-market.ts"
   },
   "dependencies": {
+    "@madgallery/rbs-pm-sdk": "^1.0.5",
     "@supabase/supabase-js": "^2.39.0",
     "@tanstack/react-query": "^5.0.0",
     "@whetstone-research/doppler-sdk": "^0.0.17",
@@ -19,7 +20,7 @@
     "react": "^18.2.0",
     "react-dom": "^18.2.0",
     "siwe": "^2.1.4",
-    "viem": "^2.45.1",
+    "viem": "^2.45.2",
     "wagmi": "^2.0.0"
   },
   "devDependencies": {

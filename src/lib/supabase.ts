@@ -70,9 +70,29 @@ export const EDGE_FUNCTIONS = {
   // x402 protected endpoints
   x402MarketData: '/functions/v1/x402-market-data',
   x402AgentTrade: '/functions/v1/x402-agent-trade',
+  // Price sync (internal)
+  syncMarketPrices: '/functions/v1/sync-market-prices',
   // Indexer
   indexer: '/functions/v1/indexer',
 };
+
+// Sync market prices to database (call after trades)
+export async function syncMarketPrices(marketAddress: string): Promise<boolean> {
+  try {
+    const response = await fetch(`${supabaseUrl}/functions/v1/sync-market-prices`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        apikey: supabaseAnonKey || '',
+      },
+      body: JSON.stringify({ marketAddress }),
+    });
+    return response.ok;
+  } catch {
+    console.log('Price sync skipped');
+    return false;
+  }
+}
 
 // Helper to call edge functions
 export async function callEdgeFunction<T = unknown>(

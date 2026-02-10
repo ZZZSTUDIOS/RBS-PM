@@ -29,6 +29,7 @@ import { monadTestnet, ADDRESSES } from '../config/wagmi';
 import { useMarkets } from '../hooks/useMarkets';
 import { useUserSync } from '../hooks/useUserSync';
 import { usePositions } from '../hooks/usePositions';
+import { syncMarketPrices } from '../lib/supabase';
 
 // Simple ERC20 ABI for balance and symbol checks
 const ERC20_ABI = [
@@ -85,6 +86,7 @@ interface MarketPrices {
 
 export default function LMSRAdmin() {
   const [activeTab, setActiveTab] = useState('connect');
+  const [marketSearch, setMarketSearch] = useState('');
   const [markets, setMarkets] = useState<Array<{
     id: number;
     address: Address;
@@ -239,6 +241,15 @@ export default function LMSRAdmin() {
   // Supabase hooks for syncing
   const { upsertMarket: syncMarketToSupabase, markets: supabaseMarkets } = useMarkets();
   const { syncTrade: syncTradeToSupabase, userId } = useUserSync(); // Auto-sync user when wallet connects
+
+  const displayMarkets = React.useMemo(() => {
+    const q = marketSearch.trim().toLowerCase();
+    if (!q) return markets;
+    return markets.filter(m =>
+      m.question.toLowerCase().includes(q) ||
+      m.address.toLowerCase().includes(q)
+    );
+  }, [marketSearch, markets]);
 
   // Load markets from Supabase (replaces localStorage markets)
   useEffect(() => {
@@ -882,6 +893,9 @@ export default function LMSRAdmin() {
       refetchPortfolio();
       refetchMarketInfo();
       refetchBalance();
+
+      // Sync prices to database for other users/markets list
+      syncMarketPrices(tradeParams.marketAddress).catch(() => {});
     }
   };
 
@@ -896,6 +910,9 @@ export default function LMSRAdmin() {
       resolution.outcome === 'YES',
       addLog
     );
+
+    // Sync resolved state to database
+    syncMarketPrices(resolution.marketAddress).catch(() => {});
   };
 
   const handleClaimCreatorFees = async () => {
@@ -2199,6 +2216,42 @@ export default function LMSRAdmin() {
           {/* MARKETS TAB */}
           {activeTab === 'markets' && (
             <div>
+              <div style={{ ...styles.card, marginBottom: '16px' }}>
+                <div style={{ display: 'flex', gap: '12px', alignItems: 'center' }}>
+                  <input
+                    value={marketSearch}
+                    onChange={e => setMarketSearch(e.target.value)}
+                    placeholder="Search markets by question or address..."
+                    style={{
+                      flex: 1,
+                      padding: '12px 14px',
+                      backgroundColor: '#0a0a0a',
+                      border: '1px solid #333',
+                      color: '#fff',
+                      fontFamily: "'IBM Plex Mono', monospace",
+                      fontSize: '12px',
+                      outline: 'none',
+                    }}
+                  />
+                  {marketSearch.trim() && (
+                    <button
+                      onClick={() => setMarketSearch('')}
+                      style={{
+                        ...styles.button,
+                        padding: '10px 12px',
+                        borderColor: '#444',
+                        color: '#aaa',
+                      }}
+                    >
+                      CLEAR
+                    </button>
+                  )}
+                </div>
+                <div style={{ marginTop: '10px', color: '#666', fontSize: '11px' }}>
+                  Showing {displayMarkets.length} / {markets.length} markets
+                </div>
+              </div>
+
               {markets.length === 0 ? (
                 <div style={{ ...styles.card, textAlign: 'center', padding: '48px', color: '#666' }}>
                   No markets deployed yet. Create one in the CREATE tab.
@@ -2207,7 +2260,7 @@ export default function LMSRAdmin() {
                 <>
                   {/* ACTIVE MARKETS */}
                   {(() => {
-                    const activeMarkets = markets.filter(m => !marketPrices[m.address.toLowerCase()]?.resolved);
+                    const activeMarkets = displayMarkets.filter(m => !marketPrices[m.address.toLowerCase()]?.resolved);
                     if (activeMarkets.length === 0) return null;
                     return (
                       <>
@@ -2294,7 +2347,7 @@ export default function LMSRAdmin() {
 
                   {/* RESOLVED MARKETS */}
                   {(() => {
-                    const resolvedMarkets = markets.filter(m => marketPrices[m.address.toLowerCase()]?.resolved);
+                    const resolvedMarkets = displayMarkets.filter(m => marketPrices[m.address.toLowerCase()]?.resolved);
                     if (resolvedMarkets.length === 0) return null;
                     return (
                       <>

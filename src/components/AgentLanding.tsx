@@ -39,6 +39,7 @@ export function AgentLanding() {
           <span style={styles.badge}>REST API</span>
           <span style={styles.badge}>USDC Collateral</span>
           <span style={styles.badge}>x402 Micropayments</span>
+          <span style={styles.badge}>Deploy Markets</span>
         </div>
       </header>
 
@@ -177,7 +178,31 @@ console.log('USDC received:', sellResult.usdcReceived);`}
               </div>
 
               <div style={styles.codeSection}>
-                <h3 style={styles.codeTitle}>6. Check Full Portfolio</h3>
+                <h3 style={styles.codeTitle}>6. Deploy Your Own Market</h3>
+                <div style={styles.codeWrapper}>
+                  <pre style={styles.codeBlock}>
+{`// Deploy a new prediction market
+const result = await client.deployMarket({
+  question: 'Will ETH hit $5000 by March 2025?',
+  resolutionTime: Math.floor(Date.now() / 1000) + 86400 * 30, // 30 days
+  initialLiquidity: '10', // 10 USDC
+});
+
+console.log('Market deployed:', result.marketAddress);
+console.log('Deploy tx:', result.deployTxHash);
+console.log('Initialize tx:', result.initializeTxHash);
+
+// Your market is now live and tradeable!`}
+                  </pre>
+                  <CopyButton
+                    text={`const result = await client.deployMarket({\n  question: 'Will ETH hit $5000 by March 2025?',\n  resolutionTime: Math.floor(Date.now() / 1000) + 86400 * 30,\n  initialLiquidity: '10',\n});\nconsole.log('Market deployed:', result.marketAddress);`}
+                    label="deploy"
+                  />
+                </div>
+              </div>
+
+              <div style={styles.codeSection}>
+                <h3 style={styles.codeTitle}>7. Check Full Portfolio</h3>
                 <div style={styles.codeWrapper}>
                   <pre style={styles.codeBlock}>
 {`// Get all positions across all markets
@@ -455,6 +480,11 @@ await client.writeContract({
               <td style={styles.costTdCategory} colSpan={3}>Market Management (Creators/Oracles)</td>
             </tr>
             <tr>
+              <td style={styles.costTd}><code>deployMarket()</code></td>
+              <td style={styles.costTdPrice}>0.0001 + gas + liquidity</td>
+              <td style={styles.costTd}>Deploy + initialize + list in one call</td>
+            </tr>
+            <tr>
               <td style={styles.costTd}><code>listMarket()</code></td>
               <td style={styles.costTdPrice}>0.0001</td>
               <td style={styles.costTd}>List a deployed market for discovery</td>
@@ -533,6 +563,13 @@ await client.writeContract({
               </td>
             </tr>
             <tr>
+              <td style={styles.contractLabel}>MarketFactory</td>
+              <td style={styles.contractAddress}>
+                <code>0xc486fD94Af1b18CE2d246cBD0941d06F06d4d159</code>
+                <CopyButton text="0xc486fD94Af1b18CE2d246cBD0941d06F06d4d159" label="factory" />
+              </td>
+            </tr>
+            <tr>
               <td style={styles.contractLabel}>Sample Market</td>
               <td style={styles.contractAddress}>
                 <code>0x3f9498ef0a9cc5a88678d4d4a900ec16875a1f9f</code>
@@ -575,7 +612,7 @@ await client.writeContract({
             <div style={styles.linkIcon}>NPM</div>
             <div>
               <div style={styles.linkTitle}>NPM Package</div>
-              <div style={styles.linkDesc}>@madgallery/rbs-pm-sdk - TypeScript SDK</div>
+              <div style={styles.linkDesc}>@madgallery/rbs-pm-sdk v1.0.8</div>
             </div>
           </a>
           <a

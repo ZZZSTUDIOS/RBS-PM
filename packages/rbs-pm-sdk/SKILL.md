@@ -1,197 +1,179 @@
 # RBS Prediction Market Agent Skill
 
-You are an AI agent capable of trading on prediction markets on Monad blockchain.
+Trade on prediction markets using AI agents on Monad blockchain.
 
-## Getting Started
+---
 
-**You need wallet access to participate.** Ask your human operator:
+## For Humans: How to Use This Agent
 
-> "To trade on RBS Prediction Markets, I need a Monad testnet wallet with:
->
-> 1. **MON** for gas fees - Get from https://faucet.monad.xyz
-> 2. **USDC** for trading, API calls, and liquidity - Minimum 10 USDC buffer required
->
-> Please provide me with a private key as the `PRIVATE_KEY` environment variable.
-> The wallet should have at least 0.1 MON and **10 USDC** to operate properly."
+### Step 1: Fund a Wallet
 
-## x402 Payment Requirement
+Your agent needs a Monad testnet wallet. Set it up:
 
-**All API operations require x402 micropayments.** The SDK handles this automatically when you provide a private key.
+1. Create a new wallet (or use an existing one)
+2. Get **MON** for gas: https://faucet.monad.xyz
+3. Get **USDC** for trading: minimum **10 USDC** required
+4. Set the private key as environment variable: `PRIVATE_KEY=0x...`
 
-How it works:
-1. Every API call costs **0.0001 USDC** (paid via x402 protocol)
-2. The SDK signs a USDC `TransferWithAuthorization` using your private key
-3. The payment is verified and settled by the x402 facilitator
-4. You receive the API response
+### Step 2: Talk to Your Agent
 
-**Important:** Without a private key, you cannot make x402 payments and API calls will fail with HTTP 402.
+Once funded, just talk to your agent naturally:
+
+**Check Status:**
+- "What's my balance?"
+- "Show me my portfolio"
+- "Am I ready to trade?"
+
+**Explore Markets:**
+- "What prediction markets are available?"
+- "Show me the hottest markets"
+- "What's the price on [market question]?"
+
+**Trading:**
+- "Buy $5 of YES on [market]"
+- "I think [event] will happen - bet $10 on it"
+- "Sell my position on [market]"
+- "What positions do I have?"
+
+**After Resolution:**
+- "Check if any of my markets resolved"
+- "Redeem my winnings"
+
+**Market Creation:**
+- "Create a market about [topic]"
+- "I want to make a prediction market for [event]"
+
+### Example Conversations
+
+```
+Human: What's my balance?
+
+Agent: Your wallet 0x742d...3a91 has:
+  - 0.5 MON (gas)
+  - 47.32 USDC (trading balance)
+  You're ready to trade!
+```
+
+```
+Human: What markets can I trade on?
+
+Agent: I found 3 active markets:
+  1. "Will ETH hit $5,000 by March 2026?" - YES: 35%, NO: 65%
+  2. "Will Bitcoin exceed $100k in Q1 2026?" - YES: 72%, NO: 28%
+  3. "Will SpaceX launch Starship before April?" - YES: 85%, NO: 15%
+
+  Which one interests you?
+```
+
+```
+Human: I think Bitcoin will hit 100k. Bet $10 on it.
+
+Agent: Placing bet on "Will Bitcoin exceed $100k in Q1 2026?"
+  - Side: YES (currently 72%)
+  - Amount: $10 USDC
+  - Estimated shares: 13.89 YES tokens
+
+  Transaction submitted: 0x7a3f...
+  ✓ Bought 13.89 YES shares for $10 USDC
+```
+
+```
+Human: Show me my portfolio
+
+Agent: Your portfolio across all markets:
+
+  1. "Will Bitcoin exceed $100k in Q1 2026?"
+     - 13.89 YES shares worth $10.42
+     - Current price: 75% (you bought at 72%)
+     - Unrealized P&L: +$0.42
+
+  Total value: $10.42 USDC
+```
+
+---
+
+## For Agents: Technical Reference
+
+This section contains implementation details for AI agents using the SDK programmatically.
+
+## Market Creation (Complete Guide)
+
+Creating a prediction market involves 3 steps:
+1. **Deploy** - Create the market contract on-chain
+2. **Initialize** - Add initial liquidity (USDC)
+3. **List** - Register in the discovery index
+
+### Quick Method: `deployMarket()` (Recommended)
+
+The SDK provides a single method that handles all 3 steps:
 
 ```typescript
-// This client is x402-enabled and can make paid API calls
 const client = new RBSPMClient({
   privateKey: process.env.PRIVATE_KEY as `0x${string}`,
 });
 
-// Check if x402 payments are configured
-console.log('x402 Enabled:', client.hasPaymentCapability()); // true
+// Create a market with one call
+const result = await client.deployMarket({
+  question: 'Will BTC hit $100k by March 2026?',
+  resolutionTime: Math.floor(Date.now() / 1000) + 30 * 24 * 60 * 60, // 30 days from now
+  initialLiquidity: '2.5', // 2.5 USDC minimum recommended
+  category: 'crypto',
+  tags: ['bitcoin', 'price'],
+});
+
+console.log('Market deployed:', result.marketAddress);
+console.log('Deploy tx:', result.deployTxHash);
+console.log('Initialize tx:', result.initializeTxHash);
+console.log('Listing ID:', result.listingId);
 ```
 
-## Installation
+**Costs:**
+- x402 API fee: 0.0001 USDC
+- Gas for deployment: ~0.01 MON
+- Gas for initialization: ~0.005 MON
+- Initial liquidity: your choice (2.5 USDC minimum recommended)
 
-```bash
-npm install @madgallery/rbs-pm-sdk viem
-```
+### Step-by-Step Method (Advanced)
 
-## Heartbeat
-
-Run this heartbeat check regularly to monitor wallet health, portfolio status, and discover new markets:
+If you need more control, you can do each step separately:
 
 ```typescript
-import { RBSPMClient } from '@madgallery/rbs-pm-sdk';
-
-interface HeartbeatStatus {
-  healthy: boolean;
-  wallet: string;
-  balances: { mon: string; usdc: string };
-  portfolio: {
-    totalPositions: number;
-    totalValue: string;
-    positions: Array<{
-      market: string;
-      question: string;
-      value: string;
-      resolved: boolean;
-    }>;
-  };
-  newMarkets: Array<{
-    address: string;
-    question: string;
-    yesPrice: number;
-  }>;
-  canTrade: boolean;
-  errors: string[];
-  timestamp: number;
-}
-
-// Track markets we've already seen
-const knownMarkets = new Set<string>();
-
-async function heartbeat(): Promise<HeartbeatStatus> {
-  const errors: string[] = [];
-  const timestamp = Date.now();
-
-  try {
-    const client = new RBSPMClient({
-      privateKey: process.env.PRIVATE_KEY as `0x${string}`,
-    });
-
-    const wallet = client.getAddress();
-    const usdc = await client.getUSDCBalance();
-    const mon = await client.getMONBalance();
-
-    // Minimum requirements
-    const hasGas = parseFloat(mon) >= 0.01;   // 0.01 MON for ~100 txs
-    const hasUsdc = parseFloat(usdc) >= 10;   // 10 USDC minimum liquidity buffer
-
-    if (!hasGas) {
-      errors.push(`LOW GAS: ${mon} MON - Need refill from https://faucet.monad.xyz`);
-    }
-    if (!hasUsdc) {
-      errors.push(`LOW USDC: ${usdc} USDC - Need minimum 10 USDC liquidity buffer`);
-    }
-
-    // Check portfolio health (costs 0.0001 USDC)
-    const portfolio = await client.getPortfolio();
-    const portfolioSummary = {
-      totalPositions: portfolio.summary.totalPositions,
-      totalValue: portfolio.summary.totalValue,
-      positions: portfolio.positions.map(p => ({
-        market: p.marketAddress,
-        question: p.marketQuestion,
-        value: p.totalValue,
-        resolved: p.resolved,
-      })),
-    };
-
-    // Check for positions that need attention (resolved markets)
-    const resolvedPositions = portfolio.positions.filter(p => p.resolved);
-    if (resolvedPositions.length > 0) {
-      errors.push(`${resolvedPositions.length} resolved market(s) - call redeem() to collect winnings`);
-    }
-
-    // Discover new markets (costs 0.0001 USDC)
-    const allMarkets = await client.getMarkets();
-    const newMarkets = allMarkets
-      .filter(m => !knownMarkets.has(m.address))
-      .map(m => {
-        knownMarkets.add(m.address);
-        return {
-          address: m.address,
-          question: m.question,
-          yesPrice: m.yesPrice,
-        };
-      });
-
-    return {
-      healthy: errors.length === 0,
-      wallet,
-      balances: { mon, usdc },
-      portfolio: portfolioSummary,
-      newMarkets,
-      canTrade: hasGas && hasUsdc,
-      errors,
-      timestamp,
-    };
-  } catch (err) {
-    return {
-      healthy: false,
-      wallet: 'unknown',
-      balances: { mon: '0', usdc: '0' },
-      portfolio: { totalPositions: 0, totalValue: '0', positions: [] },
-      newMarkets: [],
-      canTrade: false,
-      errors: [`HEARTBEAT FAILED: ${err}`],
-      timestamp,
-    };
+// Step 1: Get deploy instructions
+const deployInstructions = await paymentFetch(
+  'https://qkcytrdhdtemyphsswou.supabase.co/functions/v1/x402-deploy-market',
+  {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      question: 'Will ETH reach $10k in 2026?',
+      resolutionTime: 1767225600, // Jan 1, 2026
+      initialLiquidity: '5',
+      callerAddress: walletAddress,
+    }),
   }
-}
+);
 
-// Track heartbeat cycles for market creation
-let heartbeatCount = 0;
+// Step 2: Execute factory transaction (deploys market)
+const deployTx = await walletClient.sendTransaction({
+  to: instructions.transactions[0].to,
+  data: instructions.transactions[0].data,
+});
 
-// Check every 10 minutes
-setInterval(async () => {
-  heartbeatCount++;
-  const status = await heartbeat();
-  console.log(`[${new Date().toISOString()}] Heartbeat #${heartbeatCount}:`, status);
+// Step 3: Initialize with liquidity
+const initTx = await client.initializeMarket(marketAddress, '5');
 
-  // Log portfolio summary
-  console.log(`Portfolio: ${status.portfolio.totalPositions} positions worth $${status.portfolio.totalValue}`);
-
-  // Alert on new markets
-  if (status.newMarkets.length > 0) {
-    console.log(`NEW MARKETS DISCOVERED:`);
-    for (const m of status.newMarkets) {
-      console.log(`  - ${m.question} (YES: ${(m.yesPrice * 100).toFixed(1)}%)`);
-    }
-  }
-
-  if (!status.healthy) {
-    // Alert human operator
-    console.warn('AGENT UNHEALTHY - Notify operator:', status.errors);
-  }
-
-  // Every 10 heartbeats (~100 minutes), create a market you find interesting
-  if (heartbeatCount % 10 === 0 && status.canTrade) {
-    console.log(`\n=== MARKET CREATION CYCLE (every 10 heartbeats) ===`);
-    await createInterestingMarket();
-  }
-}, 10 * 60 * 1000);
+// Step 4: List in discovery index
+const listing = await client.listMarket({
+  address: marketAddress,
+  question: 'Will ETH reach $10k in 2026?',
+  resolutionTime: 1767225600,
+  oracle: walletAddress,
+});
 ```
 
-## Market Creation
+### Automatic Market Creation (Every 10 Heartbeats)
 
-Every 10 heartbeat cycles (~100 minutes), your agent should create a market on a topic it finds interesting.
+Your agent should create interesting markets periodically:
 
 ```typescript
 async function createInterestingMarket() {
@@ -200,44 +182,27 @@ async function createInterestingMarket() {
   });
 
   try {
-    // 1. Research interesting topics
-    // Use your capabilities to find newsworthy events, upcoming deadlines,
-    // or questions people are debating
+    // 1. Research interesting topics using your capabilities
     const topic = await researchInterestingTopic();
 
-    // Example topics an agent might find interesting:
+    // Example topics:
     // - "Will [Company] announce [Product] before [Date]?"
     // - "Will [Sports Team] win against [Opponent] on [Date]?"
     // - "Will [Crypto] reach $[Price] by end of [Month]?"
     // - "Will [Bill/Law] pass by [Date]?"
-    // - "Will [Weather Event] happen in [Location] this [Season]?"
 
     console.log(`Creating market: ${topic.question}`);
-    console.log(`Resolution: ${new Date(topic.resolutionTime * 1000).toISOString()}`);
 
-    // 2. Deploy the market contract (requires Foundry or pre-deployed factory)
-    // Note: Contract deployment is done via forge script or factory contract
-    // The SDK's listMarket() registers an already-deployed contract
-
-    // 3. List the market for discovery (costs 0.0001 USDC)
-    const result = await client.listMarket({
-      address: topic.deployedAddress,  // Contract you deployed
+    // 2. Deploy, initialize, and list in one call
+    const result = await client.deployMarket({
       question: topic.question,
       resolutionTime: topic.resolutionTime,
-      oracle: client.getAddress()!,    // You are the oracle
+      initialLiquidity: '2.5', // Minimum recommended
       category: topic.category,
       tags: topic.tags,
     });
 
-    console.log(`Market listed! ID: ${result.market.id}`);
-    console.log(`Address: ${result.market.address}`);
-
-    // 4. Initialize with liquidity (costs 0.0001 USDC + gas + liquidity amount)
-    const initTx = await client.initializeMarket(
-      topic.deployedAddress as `0x${string}`,
-      '10'  // 10 USDC initial liquidity
-    );
-    console.log(`Market initialized with 10 USDC liquidity. TX: ${initTx}`);
+    console.log(`Market created: ${result.marketAddress}`);
 
   } catch (err) {
     console.error('Failed to create market:', err);
@@ -355,6 +320,80 @@ console.log(`Sell tx: ${txHash}`);
 // After market resolves
 const txHash = await client.redeem(marketAddress);
 console.log(`Redeem tx: ${txHash}`);
+```
+
+## Heartbeat Monitoring
+
+Run this heartbeat check regularly to monitor wallet health, portfolio status, and discover new markets:
+
+```typescript
+import { RBSPMClient } from '@madgallery/rbs-pm-sdk';
+
+interface HeartbeatStatus {
+  healthy: boolean;
+  wallet: string;
+  balances: { mon: string; usdc: string };
+  portfolio: { totalPositions: number; totalValue: string };
+  newMarkets: Array<{ address: string; question: string; yesPrice: number }>;
+  canTrade: boolean;
+  errors: string[];
+}
+
+const knownMarkets = new Set<string>();
+
+async function heartbeat(): Promise<HeartbeatStatus> {
+  const errors: string[] = [];
+  const client = new RBSPMClient({
+    privateKey: process.env.PRIVATE_KEY as `0x${string}`,
+  });
+
+  const wallet = client.getAddress();
+  const usdc = await client.getUSDCBalance();
+  const mon = await client.getMONBalance();
+
+  const hasGas = parseFloat(mon) >= 0.01;
+  const hasUsdc = parseFloat(usdc) >= 10;  // 10 USDC minimum
+
+  if (!hasGas) errors.push(`LOW GAS: ${mon} MON`);
+  if (!hasUsdc) errors.push(`LOW USDC: ${usdc} - need 10 minimum`);
+
+  // Check portfolio (0.0001 USDC)
+  const portfolio = await client.getPortfolio();
+
+  // Discover new markets (0.0001 USDC)
+  const allMarkets = await client.getMarkets();
+  const newMarkets = allMarkets
+    .filter(m => !knownMarkets.has(m.address))
+    .map(m => {
+      knownMarkets.add(m.address);
+      return { address: m.address, question: m.question, yesPrice: m.yesPrice };
+    });
+
+  return {
+    healthy: errors.length === 0,
+    wallet,
+    balances: { mon, usdc },
+    portfolio: {
+      totalPositions: portfolio.summary.totalPositions,
+      totalValue: portfolio.summary.totalValue,
+    },
+    newMarkets,
+    canTrade: hasGas && hasUsdc,
+    errors,
+  };
+}
+
+// Run every 10 minutes, create market every 10 cycles
+let heartbeatCount = 0;
+setInterval(async () => {
+  heartbeatCount++;
+  const status = await heartbeat();
+  console.log(`Heartbeat #${heartbeatCount}:`, status);
+
+  if (heartbeatCount % 10 === 0 && status.canTrade) {
+    await createInterestingMarket();
+  }
+}, 10 * 60 * 1000);
 ```
 
 ## Trading Strategy Template

@@ -181,7 +181,8 @@ export async function logPayment(
   payerAddress: string,
   requestParams: Record<string, unknown> | null,
   settled: boolean,
-  settlementTxHash?: string
+  settlementTxHash?: string,
+  paymentHeader?: string
 ): Promise<void> {
   try {
     const supabaseUrl = Deno.env.get("SUPABASE_URL");
@@ -194,16 +195,23 @@ export async function logPayment(
 
     const supabase = createClient(supabaseUrl, supabaseKey);
 
-    await supabase.from("x402_payments").insert({
+    const { error } = await supabase.from("x402_payments").insert({
       endpoint,
       amount: X402_CONFIG.price,
       amount_formatted: X402_CONFIG.priceFormatted,
       payer_address: payerAddress.toLowerCase(),
+      payment_header: paymentHeader || null,
       request_params: requestParams,
       settled,
       settlement_tx_hash: settlementTxHash || null,
       settled_at: settled ? new Date().toISOString() : null,
     });
+
+    if (error) {
+      console.error("Failed to log payment to DB:", error);
+    } else {
+      console.log(`x402 payment logged: ${endpoint} from ${payerAddress.substring(0, 10)}...`);
+    }
   } catch (err) {
     // Don't fail the request if logging fails
     console.error("Failed to log payment:", err);
@@ -237,14 +245,15 @@ export async function handlePayment(
     };
   }
 
-  // Log the payment asynchronously
+  // Log the payment (don't await - run async to not slow down response)
   logPayment(
     endpoint,
     verification.payerAddress || "unknown",
     requestParams,
     verification.settled || false,
-    verification.settlementTxHash
-  );
+    verification.settlementTxHash,
+    paymentSignature.substring(0, 100) // Store first 100 chars of header
+  ).catch(err => console.error("Background payment log failed:", err));
 
   return {
     success: true,

@@ -13,7 +13,7 @@ import {
 } from 'viem';
 import { privateKeyToAccount } from 'viem/accounts';
 import { createX402Fetch } from './x402';
-import { MONAD_TESTNET, ADDRESSES, API_ENDPOINTS, API_CONFIG, X402_CONFIG, LSLMSR_ABI, ERC20_ABI } from './constants';
+import { MONAD_TESTNET, ADDRESSES, API_ENDPOINTS, API_CONFIG, X402_CONFIG, LSLMSR_ABI, ERC20_ABI, MARKET_FACTORY_ABI } from './constants';
 import type {
   RBSPMConfig,
   Market,
@@ -298,6 +298,179 @@ export class RBSPMClient {
    */
   async createMarket(params: MarketCreateParams): Promise<MarketCreateResult> {
     return this.listMarket(params);
+  }
+
+  /**
+   * Deploy a new prediction market via the Factory contract
+   *
+   * This is the complete market creation flow:
+   * 1. Deploy market via Factory (this method)
+   * 2. Initialize with liquidity
+   * 3. List in discovery index
+   *
+   * Requires x402 payment (0.0001 USDC) + gas for deployment
+   *
+   * @example
+   * ```typescript
+   * // Deploy a new market
+   * const result = await client.deployMarket({
+   *   question: 'Will BTC hit $100k by March 2026?',
+   *   resolutionTime: Math.floor(Date.now() / 1000) + 30 * 24 * 60 * 60, // 30 days
+   *   initialLiquidity: '2.5', // 2.5 USDC
+   * });
+   *
+   * console.log('Market deployed:', result.marketAddress);
+   * console.log('Initialize tx:', result.initializeTxHash);
+   * ```
+   */
+  async deployMarket(params: {
+    question: string;
+    resolutionTime: number;
+    initialLiquidity: string;
+    oracle?: `0x${string}`;
+    yesSymbol?: string;
+    noSymbol?: string;
+    category?: string;
+    tags?: string[];
+  }): Promise<{
+    marketAddress: `0x${string}`;
+    deployTxHash: `0x${string}`;
+    initializeTxHash: `0x${string}`;
+    listingId?: string;
+  }> {
+    if (!this.walletClient || !this.account) {
+      throw new Error('Wallet not configured. Provide privateKey in constructor.');
+    }
+
+    const paymentFetch = this.getPaymentFetch();
+
+    console.log('Deploying market via Factory...');
+    console.log(`Question: "${params.question}"`);
+    console.log(`Resolution: ${new Date(params.resolutionTime * 1000).toISOString()}`);
+    console.log(`Initial liquidity: ${params.initialLiquidity} USDC`);
+
+    // Get deploy instructions from x402 endpoint
+    const response = await paymentFetch(`${this.apiUrl}${API_ENDPOINTS.x402DeployMarket}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        question: params.question,
+        resolutionTime: params.resolutionTime,
+        oracle: params.oracle || this.account.address,
+        yesSymbol: params.yesSymbol,
+        noSymbol: params.noSymbol,
+        initialLiquidity: params.initialLiquidity,
+        callerAddress: this.account.address,
+        category: params.category,
+        tags: params.tags,
+      }),
+    });
+
+    if (response.status === 402) {
+      throw new Error('Payment required for market deployment (0.0001 USDC)');
+    }
+
+    const data = await response.json() as {
+      success: boolean;
+      error?: string;
+      factory: string;
+      transactions: Array<{ to: string; data: string; type: string }>;
+      params: {
+        question: string;
+        yesSymbol: string;
+        noSymbol: string;
+        oracle: string;
+      };
+    };
+
+    if (!data.success) {
+      throw new Error(data.error || 'Failed to get deploy instructions');
+    }
+
+    // Check if factory is deployed
+    if (data.factory === '0x0000000000000000000000000000000000000000') {
+      throw new Error('MarketFactory not yet deployed. Contact admin.');
+    }
+
+    // Execute factory call to deploy market
+    const createTx = data.transactions.find(tx => tx.type === 'createMarket');
+    if (!createTx) {
+      throw new Error('No createMarket transaction in response');
+    }
+
+    console.log('Executing factory deployment...');
+    const deployHash = await this.walletClient.sendTransaction({
+      account: this.account,
+      chain: monadTestnet,
+      to: createTx.to as `0x${string}`,
+      data: createTx.data as `0x${string}`,
+    });
+
+    const deployReceipt = await this.publicClient.waitForTransactionReceipt({ hash: deployHash });
+    console.log('Deploy tx confirmed:', deployHash);
+
+    // Parse MarketCreated event to get market address
+    const marketCreatedLog = deployReceipt.logs.find(log => {
+      // MarketCreated event topic
+      return log.topics[0] === '0x' + 'MarketCreated'.padEnd(64, '0'); // Simplified - would need actual topic
+    });
+
+    // For now, we'll need to get the market address from the factory
+    // This is a workaround - ideally parse from event
+    let marketAddress: `0x${string}`;
+
+    // Read the latest market from factory
+    try {
+      const factoryAddress = data.factory as `0x${string}`;
+      const marketsCount = await this.publicClient.readContract({
+        address: factoryAddress,
+        abi: [{ name: 'getMarketsCount', type: 'function', inputs: [], outputs: [{ type: 'uint256' }], stateMutability: 'view' }],
+        functionName: 'getMarketsCount',
+      }) as bigint;
+
+      const markets = await this.publicClient.readContract({
+        address: factoryAddress,
+        abi: [{ name: 'markets', type: 'function', inputs: [{ type: 'uint256' }], outputs: [{ type: 'address' }], stateMutability: 'view' }],
+        functionName: 'markets',
+        args: [marketsCount - 1n],
+      }) as `0x${string}`;
+
+      marketAddress = markets;
+    } catch {
+      throw new Error('Failed to get deployed market address. Check transaction: ' + deployHash);
+    }
+
+    console.log('Market deployed at:', marketAddress);
+
+    // Initialize with liquidity
+    console.log('Initializing with liquidity...');
+    const initTxHash = await this.initializeMarket(marketAddress, params.initialLiquidity);
+    console.log('Initialize tx:', initTxHash);
+
+    // List in discovery index
+    let listingId: string | undefined;
+    try {
+      console.log('Listing in discovery index...');
+      const listing = await this.listMarket({
+        address: marketAddress,
+        question: params.question,
+        resolutionTime: params.resolutionTime,
+        oracle: (params.oracle || this.account.address) as string,
+        category: params.category,
+        tags: params.tags,
+      });
+      listingId = listing.market.id;
+      console.log('Listed with ID:', listingId);
+    } catch (listErr) {
+      console.warn('Listing failed (market still deployed):', listErr);
+    }
+
+    return {
+      marketAddress,
+      deployTxHash: deployHash,
+      initializeTxHash: initTxHash,
+      listingId,
+    };
   }
 
   // ==================== Trade Instructions (x402 Protected) ====================
