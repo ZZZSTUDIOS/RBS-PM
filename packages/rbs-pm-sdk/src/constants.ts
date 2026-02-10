@@ -28,26 +28,60 @@ export const ADDRESSES = {
   PROTOCOL_FEE_RECIPIENT: '0x048c2c9E869594a70c6Dc7CeAC168E724425cdFE' as `0x${string}`,
 } as const;
 
+// API Configuration
+export const API_CONFIG = {
+  base: 'https://qkcytrdhdtemyphsswou.supabase.co',
+  anonKey: 'sb_publishable_mKTNqXht6ek37VkHAGWoUQ_TMzoC3wp',
+} as const;
+
 // API Endpoints
+// All endpoints are x402 protected (require USDC micropayment)
 export const API_ENDPOINTS = {
   base: 'https://qkcytrdhdtemyphsswou.supabase.co',
-  markets: '/rest/v1/markets?select=*',
+  // Read operations (0.01 USDC each)
+  x402Markets: '/functions/v1/x402-markets',           // GET - list all markets
+  x402Prices: '/functions/v1/x402-prices',             // GET ?market=0x... - get prices
+  x402MarketInfo: '/functions/v1/x402-market-info',    // GET ?market=0x... - full market info
+  x402Position: '/functions/v1/x402-position',         // GET ?market=0x...&user=0x... - user position
+  x402MarketData: '/functions/v1/x402-market-data',    // GET ?market=0x... - premium analytics
+  // Write operations - return calldata (0.01 USDC each)
+  x402AgentTrade: '/functions/v1/x402-agent-trade',    // POST - buy/sell calldata
+  x402Resolve: '/functions/v1/x402-resolve',           // POST - resolve calldata
+  x402ClaimFees: '/functions/v1/x402-claim-fees',      // POST - claim fees calldata
+  // Market listing (0.10 USDC)
+  x402CreateMarket: '/functions/v1/x402-create-market', // POST - list market
+  // Authentication (free - required for agent identity)
   authMoltbook: '/functions/v1/auth-moltbook',
-  x402MarketData: '/functions/v1/x402-market-data',
-  x402CreateMarket: '/functions/v1/x402-create-market',
-  x402AgentTrade: '/functions/v1/x402-agent-trade',
 } as const;
 
 // x402 Payment Configuration
+// All API endpoints are x402 protected (0.0001 USDC per call)
 export const X402_CONFIG = {
   network: 'eip155:10143',
   facilitator: 'https://x402-facilitator.molandak.org',
   recipient: ADDRESSES.PROTOCOL_FEE_RECIPIENT,
   prices: {
-    marketData: '10000',     // 0.01 USDC
-    createMarket: '100000',  // 0.10 USDC
-    agentTrade: '0',         // FREE - no charge for trade instructions
+    default: '100',          // 0.0001 USDC - standard API call
+    markets: '100',          // 0.0001 USDC - list all markets
+    prices: '100',           // 0.0001 USDC - get prices
+    marketInfo: '100',       // 0.0001 USDC - full market info
+    position: '100',         // 0.0001 USDC - get position
+    marketData: '100',       // 0.0001 USDC - premium market data
+    tradeInstructions: '100', // 0.0001 USDC - get trade calldata
+    resolve: '100',          // 0.0001 USDC - get resolve calldata
+    claimFees: '100',        // 0.0001 USDC - get claim fees calldata
+    createMarket: '100',     // 0.0001 USDC - list market for discovery
   },
+} as const;
+
+// LSLMSR_ERC20 Contract Bytecode hash (for deployment verification)
+// Deploy using: new LSLMSR_ERC20(collateral, decimals, question, resolutionTime, oracle, alpha, minLiq, yesShares, noShares, yesName, yesSymbol, noName, noSymbol)
+export const LSLMSR_DEPLOY_PARAMS = {
+  collateral: ADDRESSES.USDC,
+  decimals: 6,
+  defaultAlpha: '30000000000000000', // 0.03e18 = 3%
+  defaultMinLiquidity: '100000000000000000000', // 100e18
+  defaultInitialShares: '100000000000000000000', // 100e18
 } as const;
 
 // LS-LMSR ERC-20 Market ABI (uses USDC as collateral)
@@ -187,6 +221,96 @@ export const LSLMSR_ABI = [
     inputs: [],
     outputs: [],
     stateMutability: 'nonpayable',
+  },
+  // Oracle/Resolution functions
+  {
+    name: 'resolve',
+    type: 'function',
+    inputs: [{ name: '_yesWins', type: 'bool' }],
+    outputs: [],
+    stateMutability: 'nonpayable',
+  },
+  {
+    name: 'oracle',
+    type: 'function',
+    inputs: [],
+    outputs: [{ type: 'address' }],
+    stateMutability: 'view',
+  },
+  {
+    name: 'resolved',
+    type: 'function',
+    inputs: [],
+    outputs: [{ type: 'bool' }],
+    stateMutability: 'view',
+  },
+  {
+    name: 'yesWins',
+    type: 'function',
+    inputs: [],
+    outputs: [{ type: 'bool' }],
+    stateMutability: 'view',
+  },
+  {
+    name: 'resolutionTime',
+    type: 'function',
+    inputs: [],
+    outputs: [{ type: 'uint256' }],
+    stateMutability: 'view',
+  },
+  // Fee functions
+  {
+    name: 'claimCreatorFees',
+    type: 'function',
+    inputs: [],
+    outputs: [],
+    stateMutability: 'nonpayable',
+  },
+  {
+    name: 'withdrawExcessCollateral',
+    type: 'function',
+    inputs: [],
+    outputs: [],
+    stateMutability: 'nonpayable',
+  },
+  {
+    name: 'getFeeInfo',
+    type: 'function',
+    inputs: [],
+    outputs: [
+      { name: 'pendingCreatorFees', type: 'uint256' },
+      { name: 'protocolFeesSent', type: 'uint256' },
+    ],
+    stateMutability: 'view',
+  },
+  {
+    name: 'marketCreator',
+    type: 'function',
+    inputs: [],
+    outputs: [{ type: 'address' }],
+    stateMutability: 'view',
+  },
+  {
+    name: 'creatorFeesAccrued',
+    type: 'function',
+    inputs: [],
+    outputs: [{ type: 'uint256' }],
+    stateMutability: 'view',
+  },
+  // Initialization
+  {
+    name: 'initialize',
+    type: 'function',
+    inputs: [{ name: '_initialLiquidity', type: 'uint256' }],
+    outputs: [],
+    stateMutability: 'nonpayable',
+  },
+  {
+    name: 'initialized',
+    type: 'function',
+    inputs: [],
+    outputs: [{ type: 'bool' }],
+    stateMutability: 'view',
   },
   // Events
   {

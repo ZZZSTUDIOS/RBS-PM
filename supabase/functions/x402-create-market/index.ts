@@ -1,16 +1,11 @@
 // Edge Function: x402-create-market
 // Market creation/indexing endpoint protected by x402 micropayments
-// Costs 0.10 USDC to list a market in the app
+// Costs 0.0001 USDC to list a market in the app
 // Uses x402 v2 protocol with the Monad facilitator
 
 import { serve } from "https://deno.land/std@0.177.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.39.0";
-
-const corsHeaders = {
-  "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type, x-payment, payment-signature",
-  "Access-Control-Allow-Methods": "POST, OPTIONS",
-};
+import { logPayment, corsHeaders } from "../_shared/x402.ts";
 
 // x402 Configuration
 // USDC contract address on Monad Testnet
@@ -24,7 +19,7 @@ const X402_CONFIG = {
   asset: USDC_ADDRESS, // Use contract address, not symbol
   maxTimeoutSeconds: 3600,
   prices: {
-    createMarket: "100000", // 0.10 USDC (6 decimals)
+    createMarket: "100", // 0.0001 USDC (6 decimals)
   },
   // Protocol fee recipient
   recipient: "0x048c2c9E869594a70c6Dc7CeAC168E724425cdFE",
@@ -198,8 +193,8 @@ serve(async (req: Request) => {
         JSON.stringify({
           ...body,
           error: "Payment required",
-          amountFormatted: "0.10 USDC",
-          description: "Market creation requires a 0.10 USDC listing fee",
+          amountFormatted: "0.0001 USDC",
+          description: "Market creation requires a 0.0001 USDC listing fee",
         }),
         {
           status: 402,
@@ -260,6 +255,18 @@ serve(async (req: Request) => {
 
     // Parse request body
     const body = await req.json() as MarketCreateRequest;
+
+    // Get payer address for logging
+    const payerAddressForLogging = (paymentPayload.payload as { authorization?: { from?: string } })?.authorization?.from || "unknown";
+
+    // Log payment to database
+    logPayment(
+      "x402-create-market",
+      payerAddressForLogging,
+      { address: body.address, question: body.question },
+      true,
+      settlement.txHash
+    );
 
     // Validate required fields
     if (!body.address || !body.question || !body.resolutionTime || !body.oracle) {
@@ -341,7 +348,7 @@ serve(async (req: Request) => {
         },
         payment: {
           amount: X402_CONFIG.prices.createMarket,
-          amountFormatted: "0.10 USDC",
+          amountFormatted: "0.0001 USDC",
           txHash: settlement.txHash,
           settled: true,
         },

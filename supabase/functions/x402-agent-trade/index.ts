@@ -1,16 +1,13 @@
 // Edge Function: x402-agent-trade
-// Free endpoint for AI agents to get trade instructions and log trades
-// No x402 payment required
+// Get trade instructions for AI agents - x402 protected (0.0001 USDC)
 
 import { serve } from "https://deno.land/std@0.177.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.39.0";
 import { encodeFunctionData } from "https://esm.sh/viem@2.0.0";
+import { corsHeaders, handlePayment, X402_CONFIG } from "../_shared/x402.ts";
 
-const corsHeaders = {
-  "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
-  "Access-Control-Allow-Methods": "POST, OPTIONS",
-};
+// USDC address on Monad Testnet
+const USDC_ADDRESS = "0x534b2f3A21130d7a60830c2Df862319e593943A3";
 
 // LSLMSR ABI for encoding trade calls
 const LSLMSR_ABI = [
@@ -36,16 +33,6 @@ const LSLMSR_ABI = [
     outputs: [],
     stateMutability: "nonpayable",
   },
-  {
-    name: "estimateSharesForPayment",
-    type: "function",
-    inputs: [
-      { name: "isYes", type: "bool" },
-      { name: "grossPayment", type: "uint256" },
-    ],
-    outputs: [{ name: "shares", type: "uint256" }],
-    stateMutability: "view",
-  },
 ] as const;
 
 // ERC20 ABI for approval
@@ -62,43 +49,23 @@ const ERC20_ABI = [
   },
 ] as const;
 
-// USDC address on Monad Testnet
-const USDC_ADDRESS = "0x534b2f3A21130d7a60830c2Df862319e593943A3";
-
 interface TradeRequest {
   marketAddress: string;
   traderAddress: string;
   direction: "buy" | "sell";
   outcome: "yes" | "no";
-  amount: string; // For buy: USDC amount (e.g., "10" for 10 USDC). For sell: shares amount
-  minOutput?: string; // minShares for buy, minPayout for sell
-  agentId?: string; // Optional agent identifier for tracking
+  amount: string;
+  minOutput?: string;
+  agentId?: string;
 }
 
 interface TradeInstructions {
-  // Step 1: Approve (only for buy)
-  approval?: {
-    to: string;
-    data: string;
-    description: string;
-  };
-  // Step 2: Execute trade
-  trade: {
-    to: string;
-    data: string;
-    description: string;
-  };
-  // Metadata
-  summary: {
-    direction: string;
-    outcome: string;
-    amount: string;
-    marketAddress: string;
-  };
+  approval?: { to: string; data: string; description: string };
+  trade: { to: string; data: string; description: string };
+  summary: { direction: string; outcome: string; amount: string; marketAddress: string };
 }
 
 serve(async (req: Request) => {
-  // Handle CORS preflight
   if (req.method === "OPTIONS") {
     return new Response("ok", { headers: corsHeaders });
   }
@@ -111,7 +78,19 @@ serve(async (req: Request) => {
   }
 
   try {
+    // Parse request body first to get request params for logging
     const body = await req.json() as TradeRequest;
+
+    // Handle x402 payment (verify, settle, and log)
+    const paymentResult = await handlePayment(req, "x402-agent-trade", {
+      marketAddress: body.marketAddress,
+      direction: body.direction,
+      outcome: body.outcome,
+      amount: body.amount,
+    });
+    if (!paymentResult.success) {
+      return paymentResult.response;
+    }
 
     // Validate required fields
     if (!body.marketAddress || !body.traderAddress || !body.direction || !body.outcome || !body.amount) {
@@ -150,7 +129,6 @@ serve(async (req: Request) => {
     let instructions: TradeInstructions;
 
     if (isBuy) {
-      // Buy: Need to approve USDC first, then call buy()
       const approvalData = encodeFunctionData({
         abi: ERC20_ABI,
         functionName: "approve",
@@ -182,7 +160,6 @@ serve(async (req: Request) => {
         },
       };
     } else {
-      // Sell: Call sell() directly (assumes token approval already done)
       const sellData = encodeFunctionData({
         abi: LSLMSR_ABI,
         functionName: "sell",
@@ -204,7 +181,7 @@ serve(async (req: Request) => {
       };
     }
 
-    // Log trade intent to Supabase (optional - for analytics)
+    // Log trade intent
     try {
       const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
       const supabaseServiceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
@@ -220,7 +197,6 @@ serve(async (req: Request) => {
         created_at: new Date().toISOString(),
       });
     } catch (logErr) {
-      // Don't fail if logging fails - table might not exist
       console.log("Trade logging skipped:", logErr);
     }
 
@@ -229,6 +205,11 @@ serve(async (req: Request) => {
         success: true,
         instructions,
         note: "Execute transactions in order: approval first (if present), then trade",
+        payment: {
+          amount: X402_CONFIG.price,
+          amountFormatted: X402_CONFIG.priceFormatted,
+          payer: paymentResult.payerAddress,
+        },
       }),
       { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
