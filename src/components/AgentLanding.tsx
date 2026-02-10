@@ -385,6 +385,10 @@ await client.writeContract({
             </tr>
           </thead>
           <tbody>
+            {/* Market Discovery */}
+            <tr>
+              <td style={styles.costTdCategory} colSpan={3}>Market Discovery</td>
+            </tr>
             <tr>
               <td style={styles.costTd}><code>getMarkets()</code></td>
               <td style={styles.costTdPrice}>0.0001</td>
@@ -401,6 +405,16 @@ await client.writeContract({
               <td style={styles.costTd}>Full market details</td>
             </tr>
             <tr>
+              <td style={styles.costTd}><code>getPremiumMarketData()</code></td>
+              <td style={styles.costTdPrice}>0.0001</td>
+              <td style={styles.costTd}>Premium analytics (volume, trades)</td>
+            </tr>
+
+            {/* Portfolio & Positions */}
+            <tr>
+              <td style={styles.costTdCategory} colSpan={3}>Portfolio & Positions</td>
+            </tr>
+            <tr>
               <td style={styles.costTd}><code>getPosition()</code></td>
               <td style={styles.costTdPrice}>0.0001</td>
               <td style={styles.costTd}>Position in single market</td>
@@ -410,10 +424,15 @@ await client.writeContract({
               <td style={styles.costTdPrice}>0.0001</td>
               <td style={styles.costTd}>Full portfolio (all positions)</td>
             </tr>
+
+            {/* Trading */}
+            <tr>
+              <td style={styles.costTdCategory} colSpan={3}>Trading</td>
+            </tr>
             <tr>
               <td style={styles.costTd}><code>getTradeInstructions()</code></td>
               <td style={styles.costTdPrice}>0.0001</td>
-              <td style={styles.costTd}>Get calldata for buy/sell</td>
+              <td style={styles.costTd}>Get encoded calldata for trades</td>
             </tr>
             <tr>
               <td style={styles.costTd}><code>buy()</code></td>
@@ -428,12 +447,37 @@ await client.writeContract({
             <tr>
               <td style={styles.costTd}><code>redeem()</code></td>
               <td style={styles.costTdPrice}>0.0001 + gas</td>
-              <td style={styles.costTd}>Redeem winnings (x402 + on-chain)</td>
+              <td style={styles.costTd}>Redeem winning shares after resolution</td>
+            </tr>
+
+            {/* Market Management */}
+            <tr>
+              <td style={styles.costTdCategory} colSpan={3}>Market Management (Creators/Oracles)</td>
             </tr>
             <tr>
               <td style={styles.costTd}><code>listMarket()</code></td>
               <td style={styles.costTdPrice}>0.0001</td>
-              <td style={styles.costTd}>List a new market in registry</td>
+              <td style={styles.costTd}>List a deployed market for discovery</td>
+            </tr>
+            <tr>
+              <td style={styles.costTd}><code>initializeMarket()</code></td>
+              <td style={styles.costTdPrice}>0.0001 + gas</td>
+              <td style={styles.costTd}>Initialize market with liquidity</td>
+            </tr>
+            <tr>
+              <td style={styles.costTd}><code>resolve()</code></td>
+              <td style={styles.costTdPrice}>0.0001 + gas</td>
+              <td style={styles.costTd}>Resolve market outcome (oracle only)</td>
+            </tr>
+            <tr>
+              <td style={styles.costTd}><code>getFeeInfo()</code></td>
+              <td style={styles.costTdPrice}>0.0001</td>
+              <td style={styles.costTd}>Get pending fees info</td>
+            </tr>
+            <tr>
+              <td style={styles.costTd}><code>claimCreatorFees()</code></td>
+              <td style={styles.costTdPrice}>0.0001 + gas</td>
+              <td style={styles.costTd}>Claim accumulated creator fees</td>
             </tr>
           </tbody>
         </table>
@@ -868,6 +912,16 @@ const styles: Record<string, React.CSSProperties> = {
     fontSize: '14px',
     fontWeight: 600,
     textAlign: 'center',
+  },
+  costTdCategory: {
+    padding: '10px 20px',
+    backgroundColor: '#1a1a1a',
+    color: '#888',
+    fontSize: '11px',
+    fontWeight: 700,
+    textTransform: 'uppercase',
+    letterSpacing: '1px',
+    borderBottom: '1px solid #333',
   },
   costNote: {
     marginTop: '16px',
