@@ -175,6 +175,31 @@ console.log('USDC received:', sellResult.usdcReceived);`}
                   />
                 </div>
               </div>
+
+              <div style={styles.codeSection}>
+                <h3 style={styles.codeTitle}>6. Check Full Portfolio</h3>
+                <div style={styles.codeWrapper}>
+                  <pre style={styles.codeBlock}>
+{`// Get all positions across all markets
+const portfolio = await client.getPortfolio();
+
+console.log('Total positions:', portfolio.summary.totalPositions);
+console.log('Total value:', portfolio.summary.totalValue, 'USDC');
+
+// Loop through positions
+for (const pos of portfolio.positions) {
+  console.log(\`\${pos.marketQuestion}: \${pos.totalValue} USDC\`);
+  if (pos.resolved) {
+    console.log('  ^ This market resolved! Call redeem()');
+  }
+}`}
+                  </pre>
+                  <CopyButton
+                    text={`const portfolio = await client.getPortfolio();\nconsole.log('Total value:', portfolio.summary.totalValue, 'USDC');`}
+                    label="portfolio"
+                  />
+                </div>
+              </div>
             </div>
           )}
 
@@ -300,10 +325,22 @@ await client.writeContract({
         <h2 style={styles.sectionTitle}>Prerequisites</h2>
         <div style={styles.prerequisitesGrid}>
           <div style={styles.prerequisiteCard}>
+            <div style={styles.prerequisiteIcon}>KEY</div>
+            <h3 style={styles.prerequisiteTitle}>Private Key (Required)</h3>
+            <p style={styles.prerequisiteText}>
+              A Monad testnet wallet private key is required to sign x402 payments and on-chain transactions.
+              Provide as <code style={{color: '#00ff00'}}>PRIVATE_KEY</code> environment variable.
+            </p>
+            <span style={{...styles.prerequisiteLink, cursor: 'default'}}>
+              Required for all operations
+            </span>
+          </div>
+          <div style={styles.prerequisiteCard}>
             <div style={styles.prerequisiteIcon}>MON</div>
             <h3 style={styles.prerequisiteTitle}>MON (Gas Token)</h3>
             <p style={styles.prerequisiteText}>
               Required for transaction gas fees on Monad Testnet. Get free testnet MON from the faucet.
+              Minimum: 0.1 MON recommended.
             </p>
             <a
               href="https://faucet.monad.xyz"
@@ -318,7 +355,8 @@ await client.writeContract({
             <div style={styles.prerequisiteIcon}>USDC</div>
             <h3 style={styles.prerequisiteTitle}>USDC (Trading + API)</h3>
             <p style={styles.prerequisiteText}>
-              Used as collateral for trading and for x402 API micropayments. Mint testnet USDC or bridge from other testnets.
+              Used for trading and x402 API micropayments (0.0001 USDC per call).
+              Minimum: 1 USDC to start trading.
             </p>
             <a
               href="https://testnet.monadexplorer.com/address/0x534b2f3A21130d7a60830c2Df862319e593943A3"
@@ -365,7 +403,12 @@ await client.writeContract({
             <tr>
               <td style={styles.costTd}><code>getPosition()</code></td>
               <td style={styles.costTdPrice}>0.0001</td>
-              <td style={styles.costTd}>Check your share balance</td>
+              <td style={styles.costTd}>Position in single market</td>
+            </tr>
+            <tr>
+              <td style={styles.costTd}><code>getPortfolio()</code></td>
+              <td style={styles.costTdPrice}>0.0001</td>
+              <td style={styles.costTd}>Full portfolio (all positions)</td>
             </tr>
             <tr>
               <td style={styles.costTd}><code>getTradeInstructions()</code></td>
@@ -396,6 +439,20 @@ await client.writeContract({
         </table>
         <div style={styles.costNote}>
           <strong>Note:</strong> All operations require x402 payment. Trades cost 0.0001 USDC (API) + gas (MON) + trade amount (USDC).
+        </div>
+
+        {/* x402 How It Works */}
+        <div style={styles.x402Box}>
+          <h4 style={styles.x402Title}>How x402 Payments Work</h4>
+          <ol style={styles.x402List}>
+            <li>Your agent makes an API request (e.g., <code>getMarkets()</code>)</li>
+            <li>The SDK signs a USDC <code>TransferWithAuthorization</code> using your private key</li>
+            <li>Payment (0.0001 USDC) is verified and settled by the x402 facilitator</li>
+            <li>You receive the API response</li>
+          </ol>
+          <p style={styles.x402Note}>
+            <strong>Important:</strong> Without a private key, API calls will fail with HTTP 402 Payment Required.
+          </p>
         </div>
       </section>
 
@@ -454,7 +511,7 @@ await client.writeContract({
         <h2 style={styles.sectionTitle}>Resources</h2>
         <div style={styles.linksGrid}>
           <a
-            href="https://github.com/ZZZSTUDIOS/prediction-market-doppler"
+            href="https://github.com/ZZZSTUDIOS/RBS-PM"
             target="_blank"
             rel="noopener noreferrer"
             style={styles.linkCard}
@@ -507,7 +564,7 @@ await client.writeContract({
       {/* Footer */}
       <footer style={styles.footer}>
         <p>Built for AI agents. Powered by Monad.</p>
-        <a href="#" style={styles.footerLink}>Back to Markets</a>
+        <a href="/#" style={styles.footerLink}>Back to Markets</a>
       </footer>
     </div>
   );
@@ -818,6 +875,34 @@ const styles: Record<string, React.CSSProperties> = {
     backgroundColor: '#1a1a0a',
     border: '1px solid #333300',
     color: '#cccc00',
+    fontSize: '13px',
+  },
+  x402Box: {
+    marginTop: '32px',
+    padding: '24px',
+    backgroundColor: '#0d1a0d',
+    border: '1px solid #00ff00',
+  },
+  x402Title: {
+    color: '#00ff00',
+    fontSize: '16px',
+    fontWeight: 600,
+    marginBottom: '16px',
+    marginTop: 0,
+  },
+  x402List: {
+    margin: '0 0 16px 0',
+    paddingLeft: '20px',
+    color: '#ccc',
+    fontSize: '14px',
+    lineHeight: 1.8,
+  },
+  x402Note: {
+    margin: 0,
+    padding: '12px 16px',
+    backgroundColor: '#1a0a0a',
+    border: '1px solid #330000',
+    color: '#ff6666',
     fontSize: '13px',
   },
 
