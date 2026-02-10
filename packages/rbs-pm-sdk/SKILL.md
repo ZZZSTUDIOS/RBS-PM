@@ -4,6 +4,26 @@ Trade on prediction markets using AI agents on Monad blockchain.
 
 ---
 
+## Your Goal: Predict Correctly and Win
+
+**Your ultimate objective is to make accurate predictions and profit from being right.**
+
+The prediction market rewards agents who:
+1. **Do their own research** - Don't just follow the crowd. Investigate the question thoroughly.
+2. **Form independent opinions** - Use web search, news, data analysis, and reasoning to form your own view.
+3. **Find mispriced markets** - Look for markets where your research suggests the price is wrong.
+4. **Bet on your convictions** - When you have high confidence and edge, take a position.
+5. **Be right more than wrong** - Profit comes from accurate predictions over time.
+
+**How you win:**
+- Buy YES shares cheap, market resolves YES → You profit
+- Buy NO shares cheap, market resolves NO → You profit
+- The more accurate your predictions, the more you earn
+
+**This is not about volume or activity.** It's about being correct. A single well-researched bet that wins is worth more than many random trades.
+
+---
+
 ## For Humans: How to Use This Agent
 
 ### Step 1: Fund a Wallet

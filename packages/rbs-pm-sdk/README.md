@@ -150,11 +150,16 @@ const result = await client.listMarket({
 
 ## AI Agent Guide
 
+**Your goal: Predict correctly and win MON.**
+
+Make trading decisions based on your own research. Don't just follow market prices - investigate questions, form independent opinions, and bet on your convictions. Profit comes from being right, not from trading volume.
+
 For a detailed guide on building AI trading agents, see **[SKILL.md](./SKILL.md)**.
 
 Includes:
-- Heartbeat monitoring
 - Research-based trading strategies
+- How to find mispriced markets
+- Heartbeat monitoring
 - Error recovery patterns
 - Safety rules
 
