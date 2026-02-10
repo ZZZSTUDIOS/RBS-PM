@@ -46,7 +46,7 @@ export const X402_CONFIG = {
   prices: {
     marketData: '10000',     // 0.01 USDC
     createMarket: '100000',  // 0.10 USDC
-    agentTrade: '100000',    // 0.10 USDC
+    agentTrade: '0',         // FREE - no charge for trade instructions
   },
 } as const;
 
