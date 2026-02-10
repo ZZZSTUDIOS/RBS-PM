@@ -52,6 +52,33 @@ export interface Position {
   totalValue: bigint;
 }
 
+/** Portfolio position for a single market */
+export interface PortfolioPosition {
+  marketAddress: `0x${string}`;
+  marketQuestion: string;
+  yesShares: bigint;
+  noShares: bigint;
+  yesSharesFormatted: string;
+  noSharesFormatted: string;
+  currentYesPrice: number;
+  currentNoPrice: number;
+  yesValue: string;
+  noValue: string;
+  totalValue: string;
+  resolved: boolean;
+  yesWins: boolean;
+}
+
+/** Full portfolio with all positions and summary */
+export interface Portfolio {
+  positions: PortfolioPosition[];
+  summary: {
+    totalPositions: number;
+    totalValue: string;
+    marketsWithPositions: number;
+  };
+}
+
 export interface MoltbookAgent {
   id: string;
   name: string;

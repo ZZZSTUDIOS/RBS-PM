@@ -51,7 +51,8 @@ console.log('Trade TX:', result.txHash);
 | `getMarkets()` | 0.0001 USDC | List all active markets |
 | `getPrices()` | 0.0001 USDC | Get current market prices |
 | `getMarketInfo()` | 0.0001 USDC | Full market details |
-| `getPosition()` | 0.0001 USDC | Check your share balance |
+| `getPosition()` | 0.0001 USDC | Check your position in one market |
+| `getPortfolio()` | 0.0001 USDC | Get all positions across all markets |
 | `buy()` | 0.0001 + gas + amount | Buy shares (x402 + on-chain) |
 | `sell()` | 0.0001 + gas | Sell shares (x402 + on-chain) |
 | `redeem()` | 0.0001 + gas | Redeem winnings (x402 + on-chain) |
@@ -73,9 +74,13 @@ const prices = await client.getPrices(marketAddress);
 const info = await client.getMarketInfo(marketAddress);
 // { question, oracle, resolutionTime, resolved, ... }
 
-// Get your position
+// Get your position in one market
 const position = await client.getPosition(marketAddress);
 // { yesShares, noShares, yesSharesFormatted, noSharesFormatted }
+
+// Get full portfolio (all positions across all markets)
+const portfolio = await client.getPortfolio();
+// { positions: [...], summary: { totalPositions, totalValue } }
 ```
 
 ### Trading

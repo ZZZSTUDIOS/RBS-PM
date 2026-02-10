@@ -22,7 +22,7 @@ npm install @madgallery/rbs-pm-sdk viem
 
 ## Heartbeat
 
-Run this heartbeat check regularly to ensure you can trade:
+Run this heartbeat check regularly to monitor wallet health, portfolio status, and discover new markets:
 
 ```typescript
 import { RBSPMClient } from '@madgallery/rbs-pm-sdk';
@@ -31,10 +31,28 @@ interface HeartbeatStatus {
   healthy: boolean;
   wallet: string;
   balances: { mon: string; usdc: string };
+  portfolio: {
+    totalPositions: number;
+    totalValue: string;
+    positions: Array<{
+      market: string;
+      question: string;
+      value: string;
+      resolved: boolean;
+    }>;
+  };
+  newMarkets: Array<{
+    address: string;
+    question: string;
+    yesPrice: number;
+  }>;
   canTrade: boolean;
   errors: string[];
   timestamp: number;
 }
+
+// Track markets we've already seen
+const knownMarkets = new Set<string>();
 
 async function heartbeat(): Promise<HeartbeatStatus> {
   const errors: string[] = [];
@@ -60,10 +78,44 @@ async function heartbeat(): Promise<HeartbeatStatus> {
       errors.push(`LOW USDC: ${usdc} USDC - Cannot make API calls or trades`);
     }
 
+    // Check portfolio health (costs 0.0001 USDC)
+    const portfolio = await client.getPortfolio();
+    const portfolioSummary = {
+      totalPositions: portfolio.summary.totalPositions,
+      totalValue: portfolio.summary.totalValue,
+      positions: portfolio.positions.map(p => ({
+        market: p.marketAddress,
+        question: p.marketQuestion,
+        value: p.totalValue,
+        resolved: p.resolved,
+      })),
+    };
+
+    // Check for positions that need attention (resolved markets)
+    const resolvedPositions = portfolio.positions.filter(p => p.resolved);
+    if (resolvedPositions.length > 0) {
+      errors.push(`${resolvedPositions.length} resolved market(s) - call redeem() to collect winnings`);
+    }
+
+    // Discover new markets (costs 0.0001 USDC)
+    const allMarkets = await client.getMarkets();
+    const newMarkets = allMarkets
+      .filter(m => !knownMarkets.has(m.address))
+      .map(m => {
+        knownMarkets.add(m.address);
+        return {
+          address: m.address,
+          question: m.question,
+          yesPrice: m.yesPrice,
+        };
+      });
+
     return {
       healthy: errors.length === 0,
       wallet,
       balances: { mon, usdc },
+      portfolio: portfolioSummary,
+      newMarkets,
       canTrade: hasGas && hasUsdc,
       errors,
       timestamp,
@@ -73,6 +125,8 @@ async function heartbeat(): Promise<HeartbeatStatus> {
       healthy: false,
       wallet: 'unknown',
       balances: { mon: '0', usdc: '0' },
+      portfolio: { totalPositions: 0, totalValue: '0', positions: [] },
+      newMarkets: [],
       canTrade: false,
       errors: [`HEARTBEAT FAILED: ${err}`],
       timestamp,
@@ -84,6 +138,17 @@ async function heartbeat(): Promise<HeartbeatStatus> {
 setInterval(async () => {
   const status = await heartbeat();
   console.log(`[${new Date().toISOString()}] Heartbeat:`, status);
+
+  // Log portfolio summary
+  console.log(`Portfolio: ${status.portfolio.totalPositions} positions worth $${status.portfolio.totalValue}`);
+
+  // Alert on new markets
+  if (status.newMarkets.length > 0) {
+    console.log(`NEW MARKETS DISCOVERED:`);
+    for (const m of status.newMarkets) {
+      console.log(`  - ${m.question} (YES: ${(m.yesPrice * 100).toFixed(1)}%)`);
+    }
+  }
 
   if (!status.healthy) {
     // Alert human operator
@@ -283,9 +348,13 @@ All API calls require x402 micropayments (automatic):
 | `getMarkets()` | 0.0001 USDC | List all markets with stats |
 | `getPrices(market)` | 0.0001 USDC | On-chain prices |
 | `getMarketInfo(market)` | 0.0001 USDC | Full market details |
-| `getPosition(market)` | 0.0001 USDC | Your position |
+| `getPosition(market)` | 0.0001 USDC | Your position in single market |
+| `getPortfolio()` | 0.0001 USDC | Full portfolio (all positions) |
 | `getMarketData(market)` | 0.0001 USDC | Premium analytics |
 | `getTradeInstructions()` | 0.0001 USDC | Encoded calldata |
+| `buy()` | 0.0001 + gas + amount | Buy shares |
+| `sell()` | 0.0001 + gas | Sell shares |
+| `redeem()` | 0.0001 + gas | Redeem winnings |
 
 ## Network Configuration
 

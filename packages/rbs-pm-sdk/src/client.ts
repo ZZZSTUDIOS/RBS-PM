@@ -21,6 +21,8 @@ import type {
   TradeQuote,
   TradeResult,
   Position,
+  Portfolio,
+  PortfolioPosition,
   AuthResult,
   PremiumMarketData,
   MarketCreateParams,
@@ -732,6 +734,88 @@ export class RBSPMClient {
   }
 
   /**
+   * Get full portfolio with all positions across all markets (requires x402 payment - 0.0001 USDC)
+   *
+   * Returns all markets where the user has a position, with current values and P&L.
+   * Use this for portfolio health checks and monitoring.
+   *
+   * @example
+   * ```typescript
+   * const portfolio = await client.getPortfolio();
+   * console.log(`Total positions: ${portfolio.summary.totalPositions}`);
+   * console.log(`Total value: $${portfolio.summary.totalValue} USDC`);
+   *
+   * for (const position of portfolio.positions) {
+   *   console.log(`${position.marketQuestion}: ${position.totalValue} USDC`);
+   * }
+   * ```
+   */
+  async getPortfolio(userAddress?: `0x${string}`): Promise<Portfolio> {
+    const address = userAddress || this.account?.address;
+    if (!address) {
+      throw new Error('No address provided and no wallet configured');
+    }
+
+    const paymentFetch = this.getPaymentFetch();
+
+    const response = await paymentFetch(
+      `${this.apiUrl}${API_ENDPOINTS.x402Portfolio}?user=${address}`,
+      { method: 'GET' }
+    );
+
+    if (response.status === 402) {
+      throw new Error('Payment required for portfolio (0.0001 USDC)');
+    }
+
+    if (!response.ok) {
+      throw new Error('Failed to fetch portfolio');
+    }
+
+    const data = await response.json() as {
+      success: boolean;
+      positions: Array<{
+        marketAddress: string;
+        marketQuestion: string;
+        yesShares: string;
+        noShares: string;
+        yesSharesFormatted: string;
+        noSharesFormatted: string;
+        currentYesPrice: number;
+        currentNoPrice: number;
+        yesValue: string;
+        noValue: string;
+        totalValue: string;
+        resolved: boolean;
+        yesWins: boolean;
+      }>;
+      summary: {
+        totalPositions: number;
+        totalValue: string;
+        marketsWithPositions: number;
+      };
+    };
+
+    return {
+      positions: data.positions.map(p => ({
+        marketAddress: p.marketAddress as `0x${string}`,
+        marketQuestion: p.marketQuestion,
+        yesShares: BigInt(p.yesShares),
+        noShares: BigInt(p.noShares),
+        yesSharesFormatted: p.yesSharesFormatted,
+        noSharesFormatted: p.noSharesFormatted,
+        currentYesPrice: p.currentYesPrice,
+        currentNoPrice: p.currentNoPrice,
+        yesValue: p.yesValue,
+        noValue: p.noValue,
+        totalValue: p.totalValue,
+        resolved: p.resolved,
+        yesWins: p.yesWins,
+      })),
+      summary: data.summary,
+    };
+  }
+
+  /**
    * Get USDC balance
    */
   async getUSDCBalance(userAddress?: `0x${string}`): Promise<string> {
@@ -1144,6 +1228,10 @@ export class RBSPMClient {
   getX402Prices() {
     return {
       markets: { raw: X402_CONFIG.prices.markets, formatted: '0.0001 USDC', description: 'List all markets' },
+      prices: { raw: X402_CONFIG.prices.prices, formatted: '0.0001 USDC', description: 'Get market prices' },
+      marketInfo: { raw: X402_CONFIG.prices.marketInfo, formatted: '0.0001 USDC', description: 'Full market info' },
+      position: { raw: X402_CONFIG.prices.position, formatted: '0.0001 USDC', description: 'Position in single market' },
+      portfolio: { raw: X402_CONFIG.prices.portfolio, formatted: '0.0001 USDC', description: 'Full portfolio (all positions)' },
       marketData: { raw: X402_CONFIG.prices.marketData, formatted: '0.0001 USDC', description: 'Premium market data' },
       tradeInstructions: { raw: X402_CONFIG.prices.tradeInstructions, formatted: '0.0001 USDC', description: 'Get trade calldata' },
       createMarket: { raw: X402_CONFIG.prices.createMarket, formatted: '0.0001 USDC', description: 'List market for discovery' },
