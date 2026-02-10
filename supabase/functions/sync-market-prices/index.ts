@@ -35,6 +35,20 @@ const LSLMSR_ABI = [
     ],
     stateMutability: "view",
   },
+  {
+    name: "yesToken",
+    type: "function",
+    inputs: [],
+    outputs: [{ type: "address" }],
+    stateMutability: "view",
+  },
+  {
+    name: "noToken",
+    type: "function",
+    inputs: [],
+    outputs: [{ type: "address" }],
+    stateMutability: "view",
+  },
 ] as const;
 
 const monadTestnet = {
@@ -66,11 +80,23 @@ serve(async (req: Request) => {
     });
 
     // Fetch market info from blockchain
-    const marketInfo = await client.readContract({
-      address: marketAddress as `0x${string}`,
-      abi: LSLMSR_ABI,
-      functionName: "getMarketInfo",
-    });
+    const [marketInfo, yesTokenAddress, noTokenAddress] = await Promise.all([
+      client.readContract({
+        address: marketAddress as `0x${string}`,
+        abi: LSLMSR_ABI,
+        functionName: "getMarketInfo",
+      }),
+      client.readContract({
+        address: marketAddress as `0x${string}`,
+        abi: LSLMSR_ABI,
+        functionName: "yesToken",
+      }),
+      client.readContract({
+        address: marketAddress as `0x${string}`,
+        abi: LSLMSR_ABI,
+        functionName: "noToken",
+      }),
+    ]);
 
     const [
       question,
@@ -113,8 +139,8 @@ serve(async (req: Request) => {
         resolution_time: new Date(Number(resolutionTime) * 1000).toISOString(),
         oracle_address: oracle.toLowerCase(),
         creator_address: oracle.toLowerCase(), // Default to oracle
-        yes_token_address: "0x0000000000000000000000000000000000000000", // Placeholder
-        no_token_address: "0x0000000000000000000000000000000000000000", // Placeholder
+        yes_token_address: (yesTokenAddress as string).toLowerCase(),
+        no_token_address: (noTokenAddress as string).toLowerCase(),
         yes_price: yesPriceDecimal,
         no_price: noPriceDecimal,
         yes_shares: yesSharesFormatted,
