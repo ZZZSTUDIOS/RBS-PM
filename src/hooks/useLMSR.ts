@@ -5,7 +5,7 @@ import {
   useWalletClient,
   useReadContract,
 } from 'wagmi';
-import { parseEther, formatEther, decodeEventLog, type Address } from 'viem';
+import { parseEther, formatEther, parseUnits, decodeEventLog, type Address } from 'viem';
 
 export type LogType = 'info' | 'success' | 'error' | 'pending';
 
@@ -58,6 +58,8 @@ export interface MarketInfo {
   totalCollateral: bigint;
   resolved: boolean;
   yesWins: boolean;
+  collateralDecimals: number; // 18 for native/WMON, 6 for USDC
+  collateralSymbol: string;
 }
 
 // Extended market info for LS-LMSR
@@ -1697,6 +1699,22 @@ export function useUnifiedMarketData(marketAddress: Address | undefined) {
           functionName: 'getMarketInfo',
         }) as [string, bigint, Address, bigint, bigint, bigint, bigint, bigint, bigint, bigint, bigint, bigint, boolean, boolean];
 
+        // Check if it's an ERC20 collateral market (has collateralDecimals function)
+        let collateralDecimals = 18;
+        let collateralSymbol = 'MON';
+        try {
+          const decimals = await publicClient.readContract({
+            address: marketAddress,
+            abi: [{ name: 'collateralDecimals', type: 'function', inputs: [], outputs: [{ type: 'uint8' }], stateMutability: 'view' }],
+            functionName: 'collateralDecimals',
+          }) as number;
+          collateralDecimals = decimals;
+          // If it has collateralDecimals, it's ERC20 - likely USDC
+          collateralSymbol = collateralDecimals === 6 ? 'USDC' : 'TOKEN';
+        } catch {
+          // Native collateral market (18 decimals)
+        }
+
         setMarketInfo({
           question: info[0],
           resolutionTime: info[1],
@@ -1708,6 +1726,8 @@ export function useUnifiedMarketData(marketAddress: Address | undefined) {
           totalCollateral: info[9],
           resolved: info[12],
           yesWins: info[13],
+          collateralDecimals,
+          collateralSymbol,
         });
       } catch {
         // It's legacy LMSR
@@ -1729,6 +1749,8 @@ export function useUnifiedMarketData(marketAddress: Address | undefined) {
           totalCollateral: info[7],
           resolved: info[8],
           yesWins: info[9],
+          collateralDecimals: 18, // Legacy LMSR uses native token
+          collateralSymbol: 'MON',
         });
       }
     } catch (err) {
@@ -1900,14 +1922,16 @@ export function useUnifiedEstimateShares() {
   const estimateShares = useCallback(async (
     marketAddress: Address,
     isYes: boolean,
-    paymentAmount: string
+    paymentAmount: string,
+    collateralDecimals: number = 18 // Default to 18 for native token
   ): Promise<string> => {
     if (!publicClient || !paymentAmount || parseFloat(paymentAmount) <= 0) {
       return '0';
     }
 
     try {
-      const grossPayment = parseEther(paymentAmount);
+      // Parse with correct collateral decimals
+      const grossPayment = parseUnits(paymentAmount, collateralDecimals);
 
       // First try the contract's estimation function (for newer deployments)
       try {
@@ -1918,6 +1942,7 @@ export function useUnifiedEstimateShares() {
           args: [isYes, grossPayment],
         }) as bigint;
 
+        // Shares are always 18 decimals internally
         return formatEther(shares);
       } catch (contractErr) {
         // Fallback: Calculate in JavaScript for older deployments

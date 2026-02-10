@@ -12,6 +12,9 @@ import {
   type Account,
 } from 'viem';
 import { privateKeyToAccount } from 'viem/accounts';
+import { x402Client } from '@x402/core/client';
+import { ExactEvmScheme } from '@x402/evm/exact/client';
+import { wrapFetchWithPayment } from '@x402/fetch';
 import { MONAD_TESTNET, ADDRESSES, API_ENDPOINTS, X402_CONFIG, LSLMSR_ABI, ERC20_ABI } from './constants';
 import type {
   RBSPMConfig,
@@ -48,6 +51,7 @@ export class RBSPMClient {
   private account: Account | null = null;
   private accessToken: string | null = null;
   private apiUrl: string;
+  private x402PaymentFetch: typeof fetch | null = null;
 
   constructor(config: RBSPMConfig = {}) {
     const rpcUrl = config.rpcUrl || MONAD_TESTNET.rpcUrl;
@@ -67,7 +71,30 @@ export class RBSPMClient {
         chain: monadTestnet,
         transport: http(rpcUrl),
       });
+
+      // Initialize x402 client for micropayments
+      this.initX402Client();
     }
+  }
+
+  /**
+   * Initialize x402 client for automatic payment handling
+   */
+  private initX402Client(): void {
+    if (!this.walletClient || !this.account) return;
+
+    const evmSigner = {
+      address: this.account.address,
+      signTypedData: async (message: Parameters<typeof this.walletClient!.signTypedData>[0]) => {
+        return this.walletClient!.signTypedData(message);
+      },
+    };
+
+    const exactScheme = new ExactEvmScheme(evmSigner);
+    const client = new x402Client();
+    client.register(X402_CONFIG.network, exactScheme);
+
+    this.x402PaymentFetch = wrapFetchWithPayment(fetch, client);
   }
 
   // ==================== Authentication ====================
@@ -138,64 +165,20 @@ export class RBSPMClient {
   // ==================== x402 Payment ====================
 
   /**
-   * Create x402 payment header for API calls
+   * Check if x402 payments are available
    */
-  private async createX402Payment(amount: string): Promise<string> {
-    if (!this.walletClient || !this.account) {
-      throw new Error('Wallet not configured. Provide privateKey in constructor.');
+  hasPaymentCapability(): boolean {
+    return this.x402PaymentFetch !== null;
+  }
+
+  /**
+   * Get the fetch function with x402 payment capability
+   */
+  getPaymentFetch(): typeof fetch {
+    if (!this.x402PaymentFetch) {
+      throw new Error('x402 payments not configured. Provide privateKey in constructor.');
     }
-
-    const now = Math.floor(Date.now() / 1000);
-    const validAfter = now - 60;
-    const validBefore = now + 3600;
-
-    // Generate random nonce
-    const nonce = '0x' + Array.from(crypto.getRandomValues(new Uint8Array(32)))
-      .map(b => b.toString(16).padStart(2, '0'))
-      .join('');
-
-    const payload = {
-      from: this.account.address,
-      to: X402_CONFIG.recipient,
-      value: amount,
-      validAfter: validAfter.toString(),
-      validBefore: validBefore.toString(),
-      nonce,
-    };
-
-    // Sign the TransferWithAuthorization
-    const signature = await this.walletClient.signTypedData({
-      account: this.account,
-      domain: {
-        name: 'USDC',
-        version: '2',
-        chainId: MONAD_TESTNET.id,
-        verifyingContract: ADDRESSES.USDC,
-      },
-      types: {
-        TransferWithAuthorization: [
-          { name: 'from', type: 'address' },
-          { name: 'to', type: 'address' },
-          { name: 'value', type: 'uint256' },
-          { name: 'validAfter', type: 'uint256' },
-          { name: 'validBefore', type: 'uint256' },
-          { name: 'nonce', type: 'bytes32' },
-        ],
-      },
-      primaryType: 'TransferWithAuthorization',
-      message: {
-        from: this.account.address,
-        to: X402_CONFIG.recipient as `0x${string}`,
-        value: BigInt(amount),
-        validAfter: BigInt(validAfter),
-        validBefore: BigInt(validBefore),
-        nonce: nonce as `0x${string}`,
-      },
-    });
-
-    // Build payment header
-    const payloadB64 = btoa(JSON.stringify(payload));
-    return `x402 1:${X402_CONFIG.network}:${payloadB64}:${signature}`;
+    return this.x402PaymentFetch;
   }
 
   // ==================== Market Discovery ====================
@@ -216,22 +199,18 @@ export class RBSPMClient {
   }
 
   /**
-   * Get premium market data (requires x402 payment)
+   * Get premium market data (requires x402 payment - 0.01 USDC)
    */
   async getPremiumMarketData(marketAddress: `0x${string}`): Promise<PremiumMarketData> {
-    const paymentHeader = await this.createX402Payment(X402_CONFIG.prices.marketData);
+    const paymentFetch = this.getPaymentFetch();
 
-    const response = await fetch(
+    const response = await paymentFetch(
       `${this.apiUrl}${API_ENDPOINTS.x402MarketData}?market=${marketAddress}`,
-      {
-        headers: {
-          'X-Payment': paymentHeader,
-        },
-      }
+      { method: 'GET' }
     );
 
     if (response.status === 402) {
-      throw new Error('Payment required for premium market data');
+      throw new Error('Payment required for premium market data (0.01 USDC)');
     }
 
     if (!response.ok) {
@@ -242,19 +221,38 @@ export class RBSPMClient {
     return response.json() as Promise<PremiumMarketData>;
   }
 
-  // ==================== Market Creation ====================
+  // ==================== Market Listing ====================
 
   /**
-   * Create and list a new market (requires 0.10 USDC x402 payment)
+   * List a deployed market in the discovery index (requires 0.10 USDC x402 payment)
+   *
+   * After deploying a market contract on-chain, call this method to make it
+   * discoverable by other agents. The listing fee (0.10 USDC) is paid via x402.
+   *
+   * @example
+   * ```typescript
+   * // After deploying market contract...
+   * const result = await client.listMarket({
+   *   address: deployedMarketAddress,
+   *   question: 'Will ETH reach $10k in 2025?',
+   *   resolutionTime: 1735689600, // Unix timestamp
+   *   oracle: oracleAddress,
+   *   category: 'crypto',
+   *   tags: ['ethereum', 'price'],
+   * });
+   * console.log('Market listed! ID:', result.market.id);
+   * ```
    */
-  async createMarket(params: MarketCreateParams): Promise<MarketCreateResult> {
-    const paymentHeader = await this.createX402Payment(X402_CONFIG.prices.createMarket);
+  async listMarket(params: MarketCreateParams): Promise<MarketCreateResult> {
+    const paymentFetch = this.getPaymentFetch();
 
-    const response = await fetch(`${this.apiUrl}${API_ENDPOINTS.x402CreateMarket}`, {
+    console.log(`Listing market at ${params.address}...`);
+    console.log('This will cost 0.10 USDC (paid via x402)');
+
+    const response = await paymentFetch(`${this.apiUrl}${API_ENDPOINTS.x402CreateMarket}`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'X-Payment': paymentHeader,
       },
       body: JSON.stringify({
         address: params.address,
@@ -271,15 +269,24 @@ export class RBSPMClient {
     });
 
     if (response.status === 402) {
-      throw new Error('Payment required: 0.10 USDC listing fee');
+      const challenge = await response.json();
+      throw new Error(`Payment required: 0.10 USDC listing fee. Challenge: ${JSON.stringify(challenge)}`);
     }
 
     const data = await response.json() as {
       error?: string;
+      success?: boolean;
       market?: { id: string; address: string; question: string; status: string };
+      payment?: { amount: string; amountFormatted: string; txHash?: string; settled: boolean };
     };
+
     if (!response.ok) {
-      throw new Error(data.error || 'Failed to create market');
+      throw new Error(data.error || 'Failed to list market');
+    }
+
+    console.log('Market listed successfully!');
+    if (data.payment?.txHash) {
+      console.log('Payment tx:', data.payment.txHash);
     }
 
     return {
@@ -287,6 +294,13 @@ export class RBSPMClient {
       market: data.market!,
       paymentAmount: X402_CONFIG.prices.createMarket,
     };
+  }
+
+  /**
+   * Alias for listMarket - for backwards compatibility
+   */
+  async createMarket(params: MarketCreateParams): Promise<MarketCreateResult> {
+    return this.listMarket(params);
   }
 
   // ==================== Price Queries ====================

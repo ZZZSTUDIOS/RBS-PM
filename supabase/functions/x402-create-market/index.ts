@@ -1,35 +1,42 @@
 // Edge Function: x402-create-market
 // Market creation/indexing endpoint protected by x402 micropayments
 // Costs 0.10 USDC to list a market in the app
+// Uses x402 v2 protocol with the Monad facilitator
 
 import { serve } from "https://deno.land/std@0.177.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.39.0";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type, x-payment",
+  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type, x-payment, payment-signature",
   "Access-Control-Allow-Methods": "POST, OPTIONS",
 };
 
 // x402 Configuration
+// USDC contract address on Monad Testnet
+const USDC_ADDRESS = "0x534b2f3A21130d7a60830c2Df862319e593943A3";
+
 const X402_CONFIG = {
+  version: 2,
   network: "eip155:10143",
   facilitator: "https://x402-facilitator.molandak.org",
+  scheme: "exact",
+  asset: USDC_ADDRESS, // Use contract address, not symbol
+  maxTimeoutSeconds: 3600,
   prices: {
     createMarket: "100000", // 0.10 USDC (6 decimals)
   },
   // Protocol fee recipient
   recipient: "0x048c2c9E869594a70c6Dc7CeAC168E724425cdFE",
+  // EIP-712 domain for USDC TransferWithAuthorization
+  // Monad USDC uses 'USDC' (not 'USD Coin')
+  usdcDomain: {
+    name: "USDC",
+    version: "2",
+    chainId: 10143,
+    verifyingContract: USDC_ADDRESS,
+  },
 };
-
-interface PaymentPayload {
-  from: string;
-  to: string;
-  value: string;
-  validAfter: string;
-  validBefore: string;
-  nonce: string;
-}
 
 interface MarketCreateRequest {
   address: string;
@@ -44,101 +51,123 @@ interface MarketCreateRequest {
   tags?: string[];
 }
 
-// Parse x402 payment header
-// Format: x402 version|network|payloadB64|signature (using | as delimiter to avoid conflict with network format)
-// Or legacy: x402 version:network:payloadB64:signature (where network doesn't contain :)
-function parsePaymentHeader(header: string): { version: string; network: string; payload: PaymentPayload; signature: string } | null {
-  if (!header.startsWith("x402 ")) {
-    return null;
-  }
+// Base64 encode/decode helpers
+function safeBase64Encode(str: string): string {
+  return btoa(str);
+}
 
-  const content = header.slice(5);
+function safeBase64Decode(str: string): string {
+  return atob(str);
+}
 
-  // Try pipe delimiter first (new format)
-  let parts = content.split("|");
+// Create x402 v2 payment required response
+function createPaymentRequiredResponse(url: string, error?: string) {
+  const paymentRequired = {
+    x402Version: X402_CONFIG.version,
+    error: error,
+    resource: {
+      url: url,
+      description: "Market creation listing fee",
+      mimeType: "application/json",
+    },
+    accepts: [
+      {
+        scheme: X402_CONFIG.scheme,
+        network: X402_CONFIG.network,
+        amount: X402_CONFIG.prices.createMarket,
+        asset: X402_CONFIG.asset,
+        payTo: X402_CONFIG.recipient,
+        maxTimeoutSeconds: X402_CONFIG.maxTimeoutSeconds,
+        extra: {
+          name: X402_CONFIG.usdcDomain.name,
+          version: X402_CONFIG.usdcDomain.version,
+          chainId: X402_CONFIG.usdcDomain.chainId,
+          verifyingContract: X402_CONFIG.usdcDomain.verifyingContract,
+        },
+      },
+    ],
+  };
 
-  // Fall back to colon delimiter if pipe doesn't give us 4 parts
-  if (parts.length !== 4) {
-    // For colon delimiter with network like "eip155:10143", we need to handle it specially
-    // Format: version:chainPrefix:chainId:payloadB64:signature
-    const colonParts = content.split(":");
-    if (colonParts.length === 5) {
-      // Reconstruct: version, network (chainPrefix:chainId), payload, signature
-      parts = [colonParts[0], `${colonParts[1]}:${colonParts[2]}`, colonParts[3], colonParts[4]];
-    } else if (colonParts.length === 4) {
-      parts = colonParts;
-    } else {
-      return null;
-    }
-  }
+  return {
+    header: safeBase64Encode(JSON.stringify(paymentRequired)),
+    body: paymentRequired,
+  };
+}
 
-  if (parts.length !== 4) {
-    return null;
-  }
-
-  const [version, network, payloadB64, signature] = parts;
-
+// Parse x402 v2 payment signature header
+function parsePaymentSignature(header: string): { x402Version: number; accepted: unknown; payload: unknown } | null {
   try {
-    const payload = JSON.parse(atob(payloadB64)) as PaymentPayload;
-    return { version, network, payload, signature };
+    const decoded = safeBase64Decode(header);
+    return JSON.parse(decoded);
   } catch {
     return null;
   }
 }
 
-// Verify payment with x402 facilitator
-async function verifyPayment(payment: ReturnType<typeof parsePaymentHeader>): Promise<{ valid: boolean; error?: string }> {
-  if (!payment) {
-    return { valid: false, error: "Invalid payment header format" };
-  }
-
-  // Check network
-  if (payment.network !== X402_CONFIG.network) {
-    return { valid: false, error: `Invalid network: ${payment.network}` };
-  }
-
-  // Check amount (0.10 USDC for market creation)
-  if (BigInt(payment.payload.value) < BigInt(X402_CONFIG.prices.createMarket)) {
-    return { valid: false, error: `Insufficient payment. Required: ${X402_CONFIG.prices.createMarket}, received: ${payment.payload.value}` };
-  }
-
-  // Check recipient
-  if (payment.payload.to.toLowerCase() !== X402_CONFIG.recipient.toLowerCase()) {
-    return { valid: false, error: "Invalid payment recipient" };
-  }
-
-  // Check validity window
-  const now = Math.floor(Date.now() / 1000);
-  if (BigInt(payment.payload.validAfter) > BigInt(now)) {
-    return { valid: false, error: "Payment not yet valid" };
-  }
-  if (BigInt(payment.payload.validBefore) < BigInt(now)) {
-    return { valid: false, error: "Payment expired" };
-  }
-
-  // Verify signature with facilitator
+// Verify and settle payment with facilitator
+async function verifyAndSettlePayment(
+  paymentPayload: unknown,
+  paymentRequirements: unknown
+): Promise<{ success: boolean; txHash?: string; error?: string }> {
   try {
-    const facilitatorResponse = await fetch(`${X402_CONFIG.facilitator}/verify`, {
+    console.log("Verifying payment with facilitator...");
+
+    // First verify
+    const verifyResponse = await fetch(`${X402_CONFIG.facilitator}/verify`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
-        network: payment.network,
-        payload: payment.payload,
-        signature: payment.signature,
+        x402Version: X402_CONFIG.version,
+        paymentPayload,
+        paymentRequirements,
       }),
     });
 
-    if (facilitatorResponse.ok) {
-      const result = await facilitatorResponse.json();
-      return { valid: result.valid };
+    if (!verifyResponse.ok) {
+      const errorText = await verifyResponse.text();
+      console.error("Verify failed:", verifyResponse.status, errorText);
+      return { success: false, error: `Verification failed: ${errorText}` };
     }
 
-    // If facilitator is unavailable, do basic validation
-    console.warn("Facilitator unavailable, using basic validation");
-    return { valid: true };
+    const verifyResult = await verifyResponse.json();
+    console.log("Verify result:", verifyResult);
+
+    if (!verifyResult.isValid) {
+      return { success: false, error: verifyResult.invalidReason || "Invalid payment" };
+    }
+
+    // Then settle
+    console.log("Settling payment with facilitator...");
+    const settleResponse = await fetch(`${X402_CONFIG.facilitator}/settle`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        x402Version: X402_CONFIG.version,
+        paymentPayload,
+        paymentRequirements,
+      }),
+    });
+
+    if (!settleResponse.ok) {
+      const errorText = await settleResponse.text();
+      console.error("Settle failed:", settleResponse.status, errorText);
+      return { success: false, error: `Settlement failed: ${errorText}` };
+    }
+
+    const settleResult = await settleResponse.json();
+    console.log("Settle result:", settleResult);
+
+    if (!settleResult.success) {
+      return { success: false, error: settleResult.error || "Settlement failed" };
+    }
+
+    return {
+      success: true,
+      txHash: settleResult.txHash || settleResult.transactionHash,
+    };
   } catch (err) {
-    console.warn("Facilitator error:", err);
-    return { valid: true };
+    console.error("Payment processing error:", err);
+    return { success: false, error: `Error: ${err}` };
   }
 }
 
@@ -155,27 +184,21 @@ serve(async (req: Request) => {
     );
   }
 
-  try {
-    // Check for payment header
-    const paymentHeader = req.headers.get("X-Payment");
+  const url = req.url;
 
-    if (!paymentHeader) {
-      // Return 402 with payment requirement
-      const challenge = btoa(JSON.stringify({
-        amount: X402_CONFIG.prices.createMarket,
-        recipient: X402_CONFIG.recipient,
-        network: X402_CONFIG.network,
-        asset: "USDC",
-        description: "Market creation listing fee",
-      }));
+  try {
+    // Check for payment signature header (x402 v2 uses PAYMENT-SIGNATURE)
+    const paymentSignatureHeader = req.headers.get("PAYMENT-SIGNATURE") || req.headers.get("X-Payment");
+
+    if (!paymentSignatureHeader) {
+      // Return 402 with x402 v2 payment required
+      const { header, body } = createPaymentRequiredResponse(url);
 
       return new Response(
         JSON.stringify({
+          ...body,
           error: "Payment required",
-          amount: X402_CONFIG.prices.createMarket,
           amountFormatted: "0.10 USDC",
-          asset: "USDC",
-          network: X402_CONFIG.network,
           description: "Market creation requires a 0.10 USDC listing fee",
         }),
         {
@@ -183,22 +206,57 @@ serve(async (req: Request) => {
           headers: {
             ...corsHeaders,
             "Content-Type": "application/json",
-            "WWW-Authenticate": `x402 ${challenge}`,
+            "PAYMENT-REQUIRED": header,
           },
         }
       );
     }
 
-    // Parse and verify payment
-    const payment = parsePaymentHeader(paymentHeader);
-    const verification = await verifyPayment(payment);
+    // Parse payment signature
+    const paymentPayload = parsePaymentSignature(paymentSignatureHeader);
 
-    if (!verification.valid) {
+    if (!paymentPayload) {
+      const { header } = createPaymentRequiredResponse(url, "Invalid payment signature format");
       return new Response(
-        JSON.stringify({ error: "Invalid payment", details: verification.error }),
-        { status: 402, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        JSON.stringify({ error: "Invalid payment signature format" }),
+        {
+          status: 402,
+          headers: { ...corsHeaders, "Content-Type": "application/json", "PAYMENT-REQUIRED": header },
+        }
       );
     }
+
+    // Build payment requirements for verification
+    const paymentRequirements = {
+      scheme: X402_CONFIG.scheme,
+      network: X402_CONFIG.network,
+      amount: X402_CONFIG.prices.createMarket,
+      asset: X402_CONFIG.asset,
+      payTo: X402_CONFIG.recipient,
+      maxTimeoutSeconds: X402_CONFIG.maxTimeoutSeconds,
+      extra: {
+        name: X402_CONFIG.usdcDomain.name,
+        version: X402_CONFIG.usdcDomain.version,
+        chainId: X402_CONFIG.usdcDomain.chainId,
+        verifyingContract: X402_CONFIG.usdcDomain.verifyingContract,
+      },
+    };
+
+    // Verify and settle with facilitator
+    const settlement = await verifyAndSettlePayment(paymentPayload, paymentRequirements);
+
+    if (!settlement.success) {
+      const { header } = createPaymentRequiredResponse(url, settlement.error);
+      return new Response(
+        JSON.stringify({ error: "Payment failed", details: settlement.error }),
+        {
+          status: 402,
+          headers: { ...corsHeaders, "Content-Type": "application/json", "PAYMENT-REQUIRED": header },
+        }
+      );
+    }
+
+    console.log("Payment settled, txHash:", settlement.txHash);
 
     // Parse request body
     const body = await req.json() as MarketCreateRequest;
@@ -238,43 +296,8 @@ serve(async (req: Request) => {
       );
     }
 
-    // Record the x402 payment
-    let agentId: string | null = null;
-    if (payment) {
-      // Try to find agent by address
-      const { data: agentData } = await supabase
-        .from("agents")
-        .select("id")
-        .ilike("controller_address", payment.payload.from)
-        .single();
-
-      agentId = agentData?.id || null;
-
-      await supabase.rpc("record_x402_payment", {
-        p_agent_id: agentId,
-        p_endpoint: "x402-create-market",
-        p_amount: payment.payload.value,
-        p_payment_header: paymentHeader,
-      });
-    }
-
-    // Get or create user for the creator
-    const creatorAddress = payment?.payload.from || body.oracle;
-    const { data: userData } = await supabase
-      .from("users")
-      .select("id")
-      .ilike("address", creatorAddress)
-      .single();
-
-    let creatorId = userData?.id;
-    if (!creatorId) {
-      const { data: newUser } = await supabase
-        .from("users")
-        .insert({ address: creatorAddress.toLowerCase() })
-        .select("id")
-        .single();
-      creatorId = newUser?.id;
-    }
+    // Get payer address from payment payload
+    const payerAddress = (paymentPayload.payload as { authorization?: { from?: string } })?.authorization?.from || body.oracle;
 
     // Insert the market
     const { data: market, error: insertError } = await supabase
@@ -284,7 +307,7 @@ serve(async (req: Request) => {
         question: body.question,
         resolution_time: new Date(body.resolutionTime * 1000).toISOString(),
         oracle_address: body.oracle.toLowerCase(),
-        creator_address: creatorAddress.toLowerCase(),
+        creator_address: payerAddress.toLowerCase(),
         yes_token_address: body.yesTokenAddress?.toLowerCase() || "",
         no_token_address: body.noTokenAddress?.toLowerCase() || "",
         status: "ACTIVE",
@@ -319,7 +342,8 @@ serve(async (req: Request) => {
         payment: {
           amount: X402_CONFIG.prices.createMarket,
           amountFormatted: "0.10 USDC",
-          from: payment?.payload.from,
+          txHash: settlement.txHash,
+          settled: true,
         },
       }),
       { status: 201, headers: { ...corsHeaders, "Content-Type": "application/json" } }

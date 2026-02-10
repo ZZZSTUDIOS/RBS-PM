@@ -4,7 +4,7 @@
 import { createContext, useContext, useMemo, type ReactNode } from 'react';
 import { useERC8004 } from '../hooks/useERC8004';
 import { useMoltbookAuth } from '../hooks/useMoltbookAuth';
-import { useX402, useX402Endpoints } from '../hooks/useX402';
+import { useX402 } from '../hooks/useX402';
 import type { OnChainAgent, ReputationDetails, AgentMetadata } from '../config/erc8004';
 
 // Moltbook agent type
@@ -55,12 +55,11 @@ interface AgentContextValue {
   moltbookError: string | null;
 
   // x402 payments
-  createX402Payment: (amount: string, recipient: string) => Promise<string | null>;
-  fetchWithX402Payment: (url: string, amount: string, recipient?: string, options?: RequestInit) => Promise<Response>;
-  fetchMarketData: (marketAddress: string) => Promise<unknown>;
-  executeAgentTrade: (params: { marketAddress: string; isYes: boolean; amount: string }) => Promise<unknown>;
-  isCreatingPayment: boolean;
+  listMarket: (params: import('../hooks/useX402').MarketListingParams) => Promise<import('../hooks/useX402').MarketListingResult>;
+  fetchPremiumMarketData: (marketAddress: string) => Promise<unknown>;
+  isX402Processing: boolean;
   x402Error: string | null;
+  x402Ready: boolean;
 }
 
 const AgentContext = createContext<AgentContextValue | null>(null);
@@ -96,16 +95,12 @@ export function AgentProvider({ children }: AgentProviderProps) {
 
   // x402 hooks
   const {
-    createPayment: createX402Payment,
-    fetchWithPayment: fetchWithX402Payment,
-    isCreatingPayment,
-    paymentError: x402Error,
+    listMarket,
+    fetchPremiumMarketData,
+    isProcessing: isX402Processing,
+    error: x402Error,
+    isReady: x402Ready,
   } = useX402();
-
-  const {
-    fetchMarketData,
-    executeAgentTrade,
-  } = useX402Endpoints();
 
   // Build combined identity
   const identity = useMemo((): AgentIdentity => {
@@ -180,12 +175,11 @@ export function AgentProvider({ children }: AgentProviderProps) {
       moltbookError,
 
       // x402
-      createX402Payment,
-      fetchWithX402Payment,
-      fetchMarketData,
-      executeAgentTrade,
-      isCreatingPayment,
+      listMarket,
+      fetchPremiumMarketData,
+      isX402Processing,
       x402Error,
+      x402Ready,
     }),
     [
       identity,
@@ -198,12 +192,11 @@ export function AgentProvider({ children }: AgentProviderProps) {
       signInWithMoltbookApiKey,
       signOutMoltbook,
       moltbookError,
-      createX402Payment,
-      fetchWithX402Payment,
-      fetchMarketData,
-      executeAgentTrade,
-      isCreatingPayment,
+      listMarket,
+      fetchPremiumMarketData,
+      isX402Processing,
       x402Error,
+      x402Ready,
     ]
   );
 
@@ -236,21 +229,19 @@ export function useAgentReputation() {
 
 export function useAgentPayments() {
   const {
-    createX402Payment,
-    fetchWithX402Payment,
-    fetchMarketData,
-    executeAgentTrade,
-    isCreatingPayment,
+    listMarket,
+    fetchPremiumMarketData,
+    isX402Processing,
     x402Error,
+    x402Ready,
   } = useAgent();
 
   return {
-    createPayment: createX402Payment,
-    fetchWithPayment: fetchWithX402Payment,
-    fetchMarketData,
-    executeAgentTrade,
-    isCreatingPayment,
+    listMarket,
+    fetchPremiumMarketData,
+    isProcessing: isX402Processing,
     error: x402Error,
+    isReady: x402Ready,
   };
 }
 

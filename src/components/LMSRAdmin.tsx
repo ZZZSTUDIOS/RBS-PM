@@ -474,10 +474,13 @@ export default function LMSRAdmin() {
 
       setIsEstimating(true);
       try {
+        // Pass collateral decimals (default to 18 for native token)
+        const decimals = marketInfo?.collateralDecimals ?? 18;
         const shares = await estimateShares(
           tradeParams.marketAddress as Address,
           tradeParams.isYes,
-          tradeParams.amount
+          tradeParams.amount,
+          decimals
         );
         setEstimatedShares(shares);
       } catch (err) {
@@ -491,7 +494,7 @@ export default function LMSRAdmin() {
     // Debounce the estimate call
     const timeoutId = setTimeout(updateEstimate, 300);
     return () => clearTimeout(timeoutId);
-  }, [tradeParams.marketAddress, tradeParams.amount, tradeParams.isYes, tradeParams.direction, estimateShares]);
+  }, [tradeParams.marketAddress, tradeParams.amount, tradeParams.isYes, tradeParams.direction, estimateShares, marketInfo?.collateralDecimals]);
 
   // Fetch user's token balances and symbols when market changes
   useEffect(() => {
@@ -1280,7 +1283,7 @@ export default function LMSRAdmin() {
 
                     {/* Market Stats */}
                     <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px', padding: '12px', backgroundColor: '#0a0a0a', border: '1px solid #333' }}>
-                      <InfoRow label="COLLATERAL POOL" value={`${formatEther(marketInfo.totalCollateral)} USDC`} />
+                      <InfoRow label="COLLATERAL POOL" value={`${formatUnits(marketInfo.totalCollateral, marketInfo.collateralDecimals || 18)} ${marketInfo.collateralSymbol || 'MON'}`} />
                       <InfoRow
                         label="STATUS"
                         value={marketInfo.resolved ? `${marketInfo.yesWins ? yesSymbol : noSymbol} WINS` : 'ACTIVE'}
@@ -1529,7 +1532,7 @@ export default function LMSRAdmin() {
                     <div style={{ color: '#666', fontSize: '11px', marginTop: '4px' }}>
                       {tradeParams.isYes ? yesSymbol : noSymbol} shares
                       {parseFloat(estimatedShares) > 0 && !isEstimating && (
-                        <> (avg {(parseFloat(tradeParams.amount) / parseFloat(estimatedShares)).toFixed(4)} USDC/share)</>
+                        <> (avg {(parseFloat(tradeParams.amount) / parseFloat(estimatedShares)).toFixed(4)} {marketInfo?.collateralSymbol || 'USDC'}/share)</>
                       )}
                     </div>
                     <div style={{ color: '#444', fontSize: '10px', marginTop: '8px' }}>

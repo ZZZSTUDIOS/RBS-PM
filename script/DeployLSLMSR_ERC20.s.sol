@@ -29,7 +29,7 @@ contract DeployLSLMSR_ERC20Script is Script {
         address deployer = vm.addr(deployerPrivateKey);
 
         // Market parameters - customize these
-        string memory question = "Will Monad hit 1M daily active users by end of 2026?";
+        string memory question = "Will ETH flip BTC market cap by 2027?";
         uint256 resolutionTime = 1798761600; // January 1, 2027 00:00:00 UTC
         address oracle = deployer; // Set to deployer, can be changed later
 
@@ -40,10 +40,10 @@ contract DeployLSLMSR_ERC20Script is Script {
         uint256 initialNoShares = 100e18;   // Start with 100 NO shares
 
         // Token names
-        string memory yesName = "Monad 1M Users YES";
-        string memory yesSymbol = "YES-MONAD1M";
-        string memory noName = "Monad 1M Users NO";
-        string memory noSymbol = "NO-MONAD1M";
+        string memory yesName = "ETH Flip YES";
+        string memory yesSymbol = "YES-ETHFLIP";
+        string memory noName = "ETH Flip NO";
+        string memory noSymbol = "NO-ETHFLIP";
 
         console.log("Deploying LSLMSR_ERC20 Market...");
         console.log("Deployer:", deployer);
