@@ -66,7 +66,10 @@
       "Bash(PRIVATE_KEY=0x39733f3e7a837d5c5a2c0e77c52345ca8016641914c8f8b68621deed2a0ba78a npx tsx:*)",
       "Bash(npm publish:*)",
       "Bash(npm login:*)",
-      "WebFetch(domain:www.npmjs.com)"
+      "WebFetch(domain:www.npmjs.com)",
+      "Bash(~/.foundry/bin/cast call:*)",
+      "Bash(PRIVATE_KEY=0x39733f3e7a837d5c5a2c0e77c52345ca8016641914c8f8b68621deed2a0ba78a ~/.foundry/bin/forge script:*)",
+      "Bash(~/.foundry/bin/cast send 0xDEB9A3497A01BFA57052245707505977326dEbf8 \"initialize\\(uint256\\)\" 5000000 --rpc-url https://testnet-rpc.monad.xyz --private-key 0x39733f3e7a837d5c5a2c0e77c52345ca8016641914c8f8b68621deed2a0ba78a --legacy)"
     ]
   }
 }

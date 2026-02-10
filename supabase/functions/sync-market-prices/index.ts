@@ -100,14 +100,21 @@ serve(async (req: Request) => {
     const noSharesFormatted = formatUnits(noShares, 18);
     const totalCollateralFormatted = formatUnits(totalCollateral, 6); // USDC has 6 decimals
 
-    // Update database
+    // Upsert to database (insert if not exists, update if exists)
     const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
     const supabaseServiceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
     const supabase = createClient(supabaseUrl, supabaseServiceKey);
 
     const { data, error } = await supabase
       .from("markets")
-      .update({
+      .upsert({
+        address: marketAddress.toLowerCase(),
+        question: question,
+        resolution_time: new Date(Number(resolutionTime) * 1000).toISOString(),
+        oracle_address: oracle.toLowerCase(),
+        creator_address: oracle.toLowerCase(), // Default to oracle
+        yes_token_address: "0x0000000000000000000000000000000000000000", // Placeholder
+        no_token_address: "0x0000000000000000000000000000000000000000", // Placeholder
         yes_price: yesPriceDecimal,
         no_price: noPriceDecimal,
         yes_shares: yesSharesFormatted,
@@ -115,16 +122,18 @@ serve(async (req: Request) => {
         total_collateral: totalCollateralFormatted,
         resolved: resolved,
         yes_wins: yesWins,
+        status: resolved ? "RESOLVED" : "ACTIVE",
         updated_at: new Date().toISOString(),
+      }, {
+        onConflict: "address",
       })
-      .ilike("address", marketAddress)
       .select()
       .single();
 
     if (error) {
-      console.error("Database update error:", error);
+      console.error("Database upsert error:", error);
       return new Response(
-        JSON.stringify({ error: "Failed to update market", details: error.message }),
+        JSON.stringify({ error: "Failed to upsert market", details: error.message }),
         { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }

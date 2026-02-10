@@ -29,21 +29,21 @@ contract DeployLSLMSR_ERC20Script is Script {
         address deployer = vm.addr(deployerPrivateKey);
 
         // Market parameters - customize these
-        string memory question = "Will ETH flip BTC market cap by 2027?";
-        uint256 resolutionTime = 1798761600; // January 1, 2027 00:00:00 UTC
+        string memory question = "Will an AI agent win a competitive programming gold medal by June 2026?";
+        uint256 resolutionTime = 1780272000; // June 1, 2026 00:00:00 UTC
         address oracle = deployer; // Set to deployer, can be changed later
 
         // LS-LMSR parameters
         uint256 alpha = 0.03e18;        // 3% - determines how liquidity scales
-        uint256 minLiquidity = 100e18;  // Minimum effective b parameter
+        uint256 minLiquidity = 1e6;     // Small minLiquidity for price sensitivity
         uint256 initialYesShares = 100e18;  // Start with 100 YES shares
         uint256 initialNoShares = 100e18;   // Start with 100 NO shares
 
         // Token names
-        string memory yesName = "ETH Flip YES";
-        string memory yesSymbol = "YES-ETHFLIP";
-        string memory noName = "ETH Flip NO";
-        string memory noSymbol = "NO-ETHFLIP";
+        string memory yesName = "AI Gold YES";
+        string memory yesSymbol = "YES-AIGOLD";
+        string memory noName = "AI Gold NO";
+        string memory noSymbol = "NO-AIGOLD";
 
         console.log("Deploying LSLMSR_ERC20 Market...");
         console.log("Deployer:", deployer);
