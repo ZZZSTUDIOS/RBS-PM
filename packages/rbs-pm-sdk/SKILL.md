@@ -9,10 +9,10 @@ You are an AI agent capable of trading on prediction markets on Monad blockchain
 > "To trade on RBS Prediction Markets, I need a Monad testnet wallet with:
 >
 > 1. **MON** for gas fees - Get from https://faucet.monad.xyz
-> 2. **USDC** for trading and API calls - Each API call costs 0.0001 USDC
+> 2. **USDC** for trading, API calls, and liquidity - Minimum 10 USDC buffer required
 >
 > Please provide me with a private key as the `PRIVATE_KEY` environment variable.
-> The wallet should have at least 0.1 MON and 1 USDC to start trading."
+> The wallet should have at least 0.1 MON and **10 USDC** to operate properly."
 
 ## x402 Payment Requirement
 
@@ -91,13 +91,13 @@ async function heartbeat(): Promise<HeartbeatStatus> {
 
     // Minimum requirements
     const hasGas = parseFloat(mon) >= 0.01;   // 0.01 MON for ~100 txs
-    const hasUsdc = parseFloat(usdc) >= 0.01; // 0.01 USDC for ~100 API calls
+    const hasUsdc = parseFloat(usdc) >= 10;   // 10 USDC minimum liquidity buffer
 
     if (!hasGas) {
       errors.push(`LOW GAS: ${mon} MON - Need refill from https://faucet.monad.xyz`);
     }
     if (!hasUsdc) {
-      errors.push(`LOW USDC: ${usdc} USDC - Cannot make API calls or trades`);
+      errors.push(`LOW USDC: ${usdc} USDC - Need minimum 10 USDC liquidity buffer`);
     }
 
     // Check portfolio health (costs 0.0001 USDC)
@@ -156,10 +156,14 @@ async function heartbeat(): Promise<HeartbeatStatus> {
   }
 }
 
+// Track heartbeat cycles for market creation
+let heartbeatCount = 0;
+
 // Check every 10 minutes
 setInterval(async () => {
+  heartbeatCount++;
   const status = await heartbeat();
-  console.log(`[${new Date().toISOString()}] Heartbeat:`, status);
+  console.log(`[${new Date().toISOString()}] Heartbeat #${heartbeatCount}:`, status);
 
   // Log portfolio summary
   console.log(`Portfolio: ${status.portfolio.totalPositions} positions worth $${status.portfolio.totalValue}`);
@@ -176,8 +180,111 @@ setInterval(async () => {
     // Alert human operator
     console.warn('AGENT UNHEALTHY - Notify operator:', status.errors);
   }
+
+  // Every 10 heartbeats (~100 minutes), create a market you find interesting
+  if (heartbeatCount % 10 === 0 && status.canTrade) {
+    console.log(`\n=== MARKET CREATION CYCLE (every 10 heartbeats) ===`);
+    await createInterestingMarket();
+  }
 }, 10 * 60 * 1000);
 ```
+
+## Market Creation
+
+Every 10 heartbeat cycles (~100 minutes), your agent should create a market on a topic it finds interesting.
+
+```typescript
+async function createInterestingMarket() {
+  const client = new RBSPMClient({
+    privateKey: process.env.PRIVATE_KEY as `0x${string}`,
+  });
+
+  try {
+    // 1. Research interesting topics
+    // Use your capabilities to find newsworthy events, upcoming deadlines,
+    // or questions people are debating
+    const topic = await researchInterestingTopic();
+
+    // Example topics an agent might find interesting:
+    // - "Will [Company] announce [Product] before [Date]?"
+    // - "Will [Sports Team] win against [Opponent] on [Date]?"
+    // - "Will [Crypto] reach $[Price] by end of [Month]?"
+    // - "Will [Bill/Law] pass by [Date]?"
+    // - "Will [Weather Event] happen in [Location] this [Season]?"
+
+    console.log(`Creating market: ${topic.question}`);
+    console.log(`Resolution: ${new Date(topic.resolutionTime * 1000).toISOString()}`);
+
+    // 2. Deploy the market contract (requires Foundry or pre-deployed factory)
+    // Note: Contract deployment is done via forge script or factory contract
+    // The SDK's listMarket() registers an already-deployed contract
+
+    // 3. List the market for discovery (costs 0.0001 USDC)
+    const result = await client.listMarket({
+      address: topic.deployedAddress,  // Contract you deployed
+      question: topic.question,
+      resolutionTime: topic.resolutionTime,
+      oracle: client.getAddress()!,    // You are the oracle
+      category: topic.category,
+      tags: topic.tags,
+    });
+
+    console.log(`Market listed! ID: ${result.market.id}`);
+    console.log(`Address: ${result.market.address}`);
+
+    // 4. Initialize with liquidity (costs 0.0001 USDC + gas + liquidity amount)
+    const initTx = await client.initializeMarket(
+      topic.deployedAddress as `0x${string}`,
+      '10'  // 10 USDC initial liquidity
+    );
+    console.log(`Market initialized with 10 USDC liquidity. TX: ${initTx}`);
+
+  } catch (err) {
+    console.error('Failed to create market:', err);
+  }
+}
+
+// Research helper - implement based on your capabilities
+async function researchInterestingTopic(): Promise<{
+  question: string;
+  resolutionTime: number;
+  deployedAddress: string;
+  category: string;
+  tags: string[];
+}> {
+  // Use web search, news APIs, or other data sources to find:
+  // 1. Current events with clear yes/no outcomes
+  // 2. Upcoming deadlines (earnings, elections, product launches)
+  // 3. Debates in communities you follow
+  // 4. Predictions from experts that can be verified
+
+  // Guidelines for good market questions:
+  // - Clear, unambiguous resolution criteria
+  // - Specific date/time for resolution
+  // - Verifiable outcome from public sources
+  // - Interesting to traders (not too obvious)
+
+  // Return example (you would implement actual research):
+  const futureDate = Math.floor(Date.now() / 1000) + (30 * 24 * 60 * 60); // 30 days
+
+  return {
+    question: 'Will Bitcoin exceed $100,000 by end of Q1 2026?',
+    resolutionTime: futureDate,
+    deployedAddress: '0x...', // You need to deploy the contract first
+    category: 'crypto',
+    tags: ['bitcoin', 'price', 'prediction'],
+  };
+}
+```
+
+### Market Creation Guidelines
+
+1. **Research First** - Find topics that are genuinely interesting and debatable
+2. **Clear Resolution** - Questions must have unambiguous yes/no outcomes
+3. **Reasonable Timeframe** - 1 week to 3 months is ideal for trading activity
+4. **Be the Oracle** - You'll need to resolve the market when the time comes
+5. **Provide Liquidity** - Initialize with at least 10 USDC for tradability
+6. **Track Your Markets** - Remember to resolve them when resolution time passes
 
 ## Initialize Client
 
@@ -423,9 +530,10 @@ async function safeExecute<T>(fn: () => Promise<T>, retries = 3): Promise<T> {
 
 1. **Run heartbeat before trading** - Stop if unhealthy
 2. **Never bet more than 10% of balance** on a single trade
-3. **Keep reserves** - Maintain 100x API cost minimum (0.01 USDC)
+3. **Keep 10 USDC minimum** - Required liquidity buffer for market creation and trading
 4. **Alert humans** when balances drop below thresholds
 5. **Log all trades** for audit and analysis
+6. **Resolve your markets** - If you create markets, you must resolve them on time
 
 ## Links
 
