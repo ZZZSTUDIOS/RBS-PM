@@ -1,252 +1,164 @@
-# Doppler Prediction Market on Monad
+# RBS Prediction Markets
 
-A prediction market implementation using [Doppler](https://doppler.lol) for token launches on [Monad](https://monad.xyz), featuring a brutalist admin UI with real wallet connection and Doppler SDK integration.
+A prediction market platform on Monad with **LS-LMSR AMM**, **USDC collateral**, and **x402 micropayments** for AI agent access.
 
 ## Features
 
-- **Real Wallet Connection** via wagmi/viem
-- **Doppler SDK Integration** for token creation and trading
-- **Brutalist Admin UI** for managing prediction markets
-- **Full Market Lifecycle** - create, trade, resolve, redeem
+- **LS-LMSR AMM** - Liquidity-sensitive market maker for accurate price discovery
+- **USDC Collateral** - Trade with stablecoins, not volatile tokens
+- **x402 Micropayments** - Pay-per-API-call access (0.0001 USDC per call)
+- **AI Agent SDK** - TypeScript SDK for programmatic trading
+- **On-chain Settlement** - All trades settled on Monad blockchain
+
+## Quick Start for AI Agents
+
+### Installation
+
+```bash
+npm install @madgallery/rbs-pm-sdk viem
+```
+
+### Usage
+
+```typescript
+import { RBSPMClient } from '@madgallery/rbs-pm-sdk';
+
+const client = new RBSPMClient({
+  privateKey: process.env.PRIVATE_KEY as `0x${string}`,
+});
+
+// Get markets (costs 0.0001 USDC)
+const markets = await client.getMarkets();
+
+// Get prices (costs 0.0001 USDC)
+const prices = await client.getPrices(markets[0].address);
+console.log(`YES: ${(prices.yes * 100).toFixed(1)}%`);
+
+// Buy YES shares (costs 0.0001 USDC + gas + trade amount)
+const result = await client.buy(markets[0].address, true, '10');
+console.log('Trade TX:', result.txHash);
+```
+
+### Requirements
+
+- **MON** for gas fees - Get from https://faucet.monad.xyz
+- **USDC** for trading and API calls - Each API call costs 0.0001 USDC
+
+## x402 API Costs
+
+All API endpoints require x402 micropayments:
+
+| Method | Cost | Description |
+|--------|------|-------------|
+| `getMarkets()` | 0.0001 USDC | List all active markets |
+| `getPrices()` | 0.0001 USDC | Get current market prices |
+| `getMarketInfo()` | 0.0001 USDC | Full market details |
+| `getPosition()` | 0.0001 USDC | Check your share balance |
+| `buy()` | 0.0001 + gas + amount | Buy shares |
+| `sell()` | 0.0001 + gas | Sell shares |
+| `redeem()` | 0.0001 + gas | Redeem winnings |
+| `listMarket()` | 0.0001 USDC | List a new market |
 
 ## Architecture
 
 ```
 ┌─────────────────────────────────────────────────────────────────────┐
-│                     PREDICTION MARKET FLOW                          │
+│                     RBS PREDICTION MARKETS                          │
 ├─────────────────────────────────────────────────────────────────────┤
 │                                                                     │
-│  1. CREATE MARKET                                                   │
-│     ┌──────────┐        ┌──────────┐        ┌──────────────┐       │
-│     │ Doppler  │───────▶│ YES/NO   │───────▶│  Prediction  │       │
-│     │   SDK    │        │  Tokens  │        │   Market     │       │
-│     └──────────┘        └──────────┘        └──────────────┘       │
-│                                                                     │
-│  2. TRADING                                                         │
-│     ┌──────────┐        ┌──────────┐        ┌──────────────┐       │
-│     │  Trader  │───────▶│ Bonding  │───────▶│  YES or NO   │       │
-│     │   WMON   │        │  Curves  │        │   Tokens     │       │
-│     └──────────┘        └──────────┘        └──────────────┘       │
-│                                                                     │
-│  3. RESOLUTION                                                      │
-│     ┌──────────┐        ┌──────────┐        ┌──────────────┐       │
-│     │  Oracle  │───────▶│ Resolve  │───────▶│   Winners    │       │
-│     │          │        │  Market  │        │   Redeem     │       │
-│     └──────────┘        └──────────┘        └──────────────┘       │
+│  AGENT/USER                                                         │
+│     │                                                               │
+│     ▼                                                               │
+│  ┌──────────────────┐      x402 Payment (USDC)                     │
+│  │ @madgallery/     │─────────────────────────┐                    │
+│  │ rbs-pm-sdk       │                         │                    │
+│  └──────────────────┘                         ▼                    │
+│     │                              ┌──────────────────┐            │
+│     │                              │  Supabase Edge   │            │
+│     │                              │  Functions       │            │
+│     │                              │  (x402 Gateway)  │            │
+│     │                              └──────────────────┘            │
+│     │                                        │                     │
+│     │  On-chain TX (MON gas)                 │ Price sync         │
+│     ▼                                        ▼                     │
+│  ┌──────────────────┐              ┌──────────────────┐            │
+│  │  LSLMSR_ERC20    │◀────────────▶│  Supabase DB     │            │
+│  │  Market Contract │              │  (markets, trades)│            │
+│  └──────────────────┘              └──────────────────┘            │
+│     │                                                               │
+│     ▼                                                               │
+│  ┌──────────────────┐                                              │
+│  │  YES/NO Tokens   │  (ERC-20 outcome tokens)                     │
+│  └──────────────────┘                                              │
 │                                                                     │
 └─────────────────────────────────────────────────────────────────────┘
 ```
 
-## How It Works
+## Network Configuration
 
-### Outcome Tokens
-- Each market has two tokens: **YES** and **NO**
-- Tokens are launched via Doppler's multicurve bonding curves
-- Prices reflect market consensus on outcome probability
+| Property | Value |
+|----------|-------|
+| Network | Monad Testnet |
+| Chain ID | 10143 |
+| RPC | https://testnet-rpc.monad.xyz |
+| Explorer | https://testnet.monadexplorer.com |
+| Faucet | https://faucet.monad.xyz |
 
-### Price Discovery
-```
-If traders believe YES is likely:
-  → Buy YES tokens → YES price ↑ → Implied probability ↑
+## Contract Addresses (Monad Testnet)
 
-If traders believe NO is likely:
-  → Buy NO tokens → NO price ↑ → Implied probability ↑
-```
+| Contract | Address |
+|----------|---------|
+| USDC | `0x534b2f3A21130d7a60830c2Df862319e593943A3` |
+| Prediction Factory | `0xc4546422291F1860bbCe379075a077563B0e0777` |
+| Protocol Fee Recipient | `0x048c2c9E869594a70c6Dc7CeAC168E724425cdFE` |
+| Sample Market | `0x3f9498ef0a9cc5a88678d4d4a900ec16875a1f9f` |
 
-### Resolution
-- Oracle resolves market to: `YES`, `NO`, or `INVALID`
-- Winning token holders redeem for collateral (WMON)
-- Losing tokens become worthless
-
-## Quick Start
+## Development
 
 ### Prerequisites
 
 - Node.js 18+
 - Foundry (for contract deployment)
-- WMON on Monad Testnet
 
-### Installation
+### Setup
 
 ```bash
 # Clone
-git clone <repo>
-cd prediction-market-doppler
+git clone https://github.com/ZZZSTUDIOS/RBS-PM.git
+cd RBS-PM
 
 # Install dependencies
 npm install
 
-# Install Foundry (for contracts)
+# Run frontend
+npm run dev
+```
+
+### Deploy Contracts
+
+```bash
+# Install Foundry
 curl -L https://foundry.paradigm.xyz | bash
 foundryup
+
+# Deploy LSLMSR_ERC20 market
+forge script script/DeployLSLMSR_ERC20.s.sol --rpc-url https://testnet-rpc.monad.xyz --private-key $PRIVATE_KEY --broadcast --legacy
 ```
 
-### 1. Deploy Contracts
+### Run Agent Simulation
 
 ```bash
-# Set environment
-export PRIVATE_KEY="your-private-key"
-export RPC_URL="https://testnet-rpc.monad.xyz"
-
-# Deploy factory
-forge create contracts/PredictionMarketFactory.sol:PredictionMarketFactory \
-  --rpc-url $RPC_URL \
-  --private-key $PRIVATE_KEY \
-  --constructor-args \
-    0x0000000000000000000000000000000000000000 \  # Doppler Airlock (get from docs)
-    0x760AfE86e5de5fa0Ee542fc7B7B713e1c5425701   # WMON
+cd packages/rbs-pm-sdk
+PRIVATE_KEY=0x... npx tsx agent-trade-simulation.ts
 ```
 
-### 2. Create Outcome Tokens (via Doppler)
+## Links
 
-```typescript
-import { DopplerSDK } from '@whetstone-research/doppler-sdk';
-import { createPublicClient, createWalletClient, http, parseEther } from 'viem';
-
-const WMON = '0x760AfE86e5de5fa0Ee542fc7B7B713e1c5425701';
-
-// Initialize SDK (see src/sdk.ts for chain config)
-const sdk = new DopplerSDK({
-  publicClient,
-  walletClient,
-  chainId: 10143, // Monad testnet
-});
-
-// Create YES token
-const yesParams = sdk
-  .buildMulticurveAuction()
-  .tokenConfig({
-    name: 'ETH10K-YES',
-    symbol: 'YES-ETH10K',
-    tokenURI: 'https://api.example.com/yes.json',
-  })
-  .saleConfig({
-    initialSupply: parseEther('1000000000'),
-    numTokensToSell: parseEther('900000000'),
-    numeraire: WMON,
-  })
-  .withCurves({
-    numerairePrice: 1,
-    curves: [
-      { marketCap: { start: 1_000, end: 10_000 }, numPositions: 5, shares: parseEther('0.3') },
-      { marketCap: { start: 10_000, end: 100_000 }, numPositions: 10, shares: parseEther('0.5') },
-      { marketCap: { start: 100_000, end: 'max' }, numPositions: 5, shares: parseEther('0.2') },
-    ],
-  })
-  .withGovernance({ type: 'noOp' })
-  .withMigration({ type: 'noOp' })
-  .withUserAddress(account.address)
-  .build();
-
-const yesResult = await sdk.factory.createMulticurve(yesParams);
-console.log('YES Token:', yesResult.tokenAddress);
-
-// Repeat for NO token...
-```
-
-### 3. Create Prediction Market
-
-```typescript
-import { DopplerPredictionMarketSDK } from './src/sdk';
-
-const pmSdk = new DopplerPredictionMarketSDK();
-pmSdk.setWallet(process.env.PRIVATE_KEY);
-
-const { marketAddress } = await pmSdk.createMarket(
-  yesTokenAddress,
-  noTokenAddress,
-  'Will ETH hit $10,000 by end of 2026?',
-  new Date('2026-12-31'),
-  oracleAddress
-);
-```
-
-### 4. Trade & Resolve
-
-```typescript
-// Trading happens on Doppler's bonding curves
-// Use Doppler SDK's Quoter + Universal Router for swaps
-
-// After event occurs, oracle resolves:
-await pmSdk.resolveMarket(marketAddress, Outcome.YES);
-
-// Winners redeem:
-const balance = await pmSdk.getTokenBalance(yesToken, userAddress);
-await pmSdk.redeem(marketAddress, balance);
-```
-
-## Contract Structure
-
-### PredictionMarket.sol
-
-Main market contract that:
-- Holds YES/NO token references
-- Manages collateral
-- Handles resolution
-- Processes redemptions
-
-### PredictionMarketFactory.sol
-
-Factory that:
-- Deploys new prediction markets
-- Tracks all markets
-- Stores market metadata
-
-## Configuration
-
-### Bonding Curve Strategy
-
-For prediction markets, we recommend:
-
-```typescript
-curves: [
-  // Early discovery phase - cheap tokens
-  { marketCap: { start: 1_000, end: 10_000 }, numPositions: 5, shares: parseEther('0.3') },
-  
-  // Main trading range
-  { marketCap: { start: 10_000, end: 100_000 }, numPositions: 10, shares: parseEther('0.5') },
-  
-  // High conviction / late stage
-  { marketCap: { start: 100_000, end: 'max' }, numPositions: 5, shares: parseEther('0.2') },
-]
-```
-
-This creates:
-- Low entry prices for early participants
-- Smooth price discovery as interest grows
-- Natural price ceiling as market cap increases
-
-## Important Links
-
-- [Doppler Docs](https://docs.doppler.lol)
-- [Monad Docs](https://docs.monad.xyz)
-- [Monad Testnet Explorer](https://testnet.monadexplorer.com)
-
-## Contract Addresses
-
-| Contract | Address | Network |
-|----------|---------|---------|
-| PredictionMarketFactory | `TBD` | Monad Testnet |
-| WMON | `0x760AfE86e5de5fa0Ee542fc7B7B713e1c5425701` | Monad Testnet |
-| Doppler Airlock | Check [Doppler Docs](https://docs.doppler.lol/resources/contract-addresses) | Monad Testnet |
-
-## Development
-
-```bash
-# Run example script
-npx ts-node scripts/create-market.ts
-
-# Build
-npm run build
-
-# Test contracts (requires Foundry)
-forge test
-```
+- **Live App**: https://prediction-market-rbs.vercel.app
+- **Agent Page**: https://prediction-market-rbs.vercel.app/#agents
+- **NPM SDK**: https://www.npmjs.com/package/@madgallery/rbs-pm-sdk
+- **x402 Protocol**: https://www.x402.org
 
 ## License
 
 MIT
-# Trigger redeploy
-
-# Prediction Market
-
