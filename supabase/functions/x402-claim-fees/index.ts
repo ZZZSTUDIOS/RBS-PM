@@ -16,7 +16,7 @@ const LSLMSR_ABI = [
     name: "getFeeInfo",
     type: "function",
     inputs: [],
-    outputs: [{ name: "pendingCreatorFees", type: "uint256" }, { name: "protocolFeesSent", type: "uint256" }],
+    outputs: [{ name: "pendingCreatorFees", type: "uint256" }],
     stateMutability: "view",
   },
 ] as const;
@@ -65,7 +65,8 @@ serve(async (req: Request) => {
     ]);
 
     const decimals = Number(collateralDecimals);
-    const pendingFees = feeInfo[0];
+    // getFeeInfo now returns single value: pendingCreatorFees
+    const pendingFees = feeInfo as unknown as bigint;
     const isCreator = callerAddress ? marketCreator.toLowerCase() === callerAddress.toLowerCase() : null;
 
     const transactions = [];
@@ -112,8 +113,7 @@ serve(async (req: Request) => {
         fees: {
           pending: pendingFees.toString(),
           pendingFormatted: `${formatUnits(pendingFees, decimals)} USDC`,
-          protocolSent: feeInfo[1].toString(),
-          protocolSentFormatted: `${formatUnits(feeInfo[1], decimals)} USDC`,
+          // Note: 0.5% trading fee goes 100% to market creator (no protocol fee)
         },
         excessCollateral: {
           amount: totalCollateral.toString(),

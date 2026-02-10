@@ -1,16 +1,19 @@
 /**
- * Script to claim protocol fees from all markets
+ * Script to claim creator fees from all markets
  *
  * Usage: npx tsx scripts/claim-all-fees.ts
  *
  * This script will:
- * 1. Load all markets from localStorage or the provided list
- * 2. Check pending protocol fees for each market
+ * 1. Load all markets from the provided list
+ * 2. Check pending creator fees for each market
  * 3. Claim fees from each market where fees > 0
  *
  * Requirements:
- * - Set PRIVATE_KEY environment variable for the protocol fee recipient wallet
- * - Markets must have the connected wallet as protocolFeeRecipient
+ * - Set PRIVATE_KEY environment variable for the market creator wallet
+ * - Markets must have the connected wallet as marketCreator
+ * - Market must be resolved or past resolution time to claim fees
+ *
+ * Note: Trading fee is 0.5% and goes 100% to market creator (no protocol fee)
  */
 
 import { createPublicClient, createWalletClient, http, formatEther, parseEther } from 'viem';
@@ -36,28 +39,11 @@ const monadTestnet = {
 // LS-LMSR ABI (minimal for fee claiming)
 const LSLMSR_ABI = [
   {
-    name: 'getPendingFees',
+    name: 'getFeeInfo',
     type: 'function',
     inputs: [],
-    outputs: [
-      { name: 'protocolFees', type: 'uint256' },
-      { name: 'creatorFees', type: 'uint256' },
-    ],
+    outputs: [{ name: 'pendingCreatorFees', type: 'uint256' }],
     stateMutability: 'view',
-  },
-  {
-    name: 'protocolFeeRecipient',
-    type: 'function',
-    inputs: [],
-    outputs: [{ type: 'address' }],
-    stateMutability: 'view',
-  },
-  {
-    name: 'claimProtocolFees',
-    type: 'function',
-    inputs: [],
-    outputs: [],
-    stateMutability: 'nonpayable',
   },
   {
     name: 'claimCreatorFees',
@@ -73,10 +59,21 @@ const LSLMSR_ABI = [
     outputs: [{ type: 'address' }],
     stateMutability: 'view',
   },
+  {
+    name: 'resolved',
+    type: 'function',
+    inputs: [],
+    outputs: [{ type: 'bool' }],
+    stateMutability: 'view',
+  },
+  {
+    name: 'resolutionTime',
+    type: 'function',
+    inputs: [],
+    outputs: [{ type: 'uint256' }],
+    stateMutability: 'view',
+  },
 ] as const;
-
-// Default protocol fee recipient
-const PROTOCOL_FEE_RECIPIENT = '0x048c2c9E869594a70c6Dc7CeAC168E724425cdFE';
 
 // Add your market addresses here, or they will be loaded from localStorage backup
 const MARKET_ADDRESSES: `0x${string}`[] = [
@@ -116,66 +113,49 @@ async function main() {
     process.exit(0);
   }
 
-  console.log(`\n📊 Checking ${markets.length} markets for claimable fees...\n`);
+  console.log(`\n📊 Checking ${markets.length} markets for claimable creator fees...\n`);
+  console.log(`ℹ️  Note: 0.5% trading fee goes 100% to market creator (no protocol fee)\n`);
 
-  let totalProtocolFees = 0n;
   let totalCreatorFees = 0n;
-  let claimedProtocol = 0n;
   let claimedCreator = 0n;
+  const now = BigInt(Math.floor(Date.now() / 1000));
 
   for (const marketAddress of markets) {
     try {
-      // Get pending fees
-      const [pendingFees, protocolRecipient, marketCreator] = await Promise.all([
+      // Get fee info and market state
+      const [pendingFees, marketCreator, resolved, resolutionTime] = await Promise.all([
         publicClient.readContract({
           address: marketAddress,
           abi: LSLMSR_ABI,
-          functionName: 'getPendingFees',
-        }),
-        publicClient.readContract({
-          address: marketAddress,
-          abi: LSLMSR_ABI,
-          functionName: 'protocolFeeRecipient',
-        }),
+          functionName: 'getFeeInfo',
+        }) as Promise<bigint>,
         publicClient.readContract({
           address: marketAddress,
           abi: LSLMSR_ABI,
           functionName: 'marketCreator',
-        }),
+        }) as Promise<`0x${string}`>,
+        publicClient.readContract({
+          address: marketAddress,
+          abi: LSLMSR_ABI,
+          functionName: 'resolved',
+        }) as Promise<boolean>,
+        publicClient.readContract({
+          address: marketAddress,
+          abi: LSLMSR_ABI,
+          functionName: 'resolutionTime',
+        }) as Promise<bigint>,
       ]);
 
-      const protocolFees = pendingFees[0];
-      const creatorFees = pendingFees[1];
+      totalCreatorFees += pendingFees;
 
-      totalProtocolFees += protocolFees;
-      totalCreatorFees += creatorFees;
-
-      const isProtocolRecipient = account.address.toLowerCase() === protocolRecipient.toLowerCase();
       const isCreator = account.address.toLowerCase() === marketCreator.toLowerCase();
+      const canClaim = isCreator && (resolved || now >= resolutionTime);
 
       console.log(`📍 Market: ${marketAddress}`);
-      console.log(`   Protocol fees: ${formatEther(protocolFees)} MON ${isProtocolRecipient ? '(can claim)' : ''}`);
-      console.log(`   Creator fees: ${formatEther(creatorFees)} MON ${isCreator ? '(can claim)' : ''}`);
-
-      // Claim protocol fees if eligible
-      if (isProtocolRecipient && protocolFees > 0n) {
-        console.log(`   ⏳ Claiming protocol fees...`);
-        try {
-          const hash = await walletClient.writeContract({
-            address: marketAddress,
-            abi: LSLMSR_ABI,
-            functionName: 'claimProtocolFees',
-          });
-          await publicClient.waitForTransactionReceipt({ hash });
-          console.log(`   ✅ Claimed ${formatEther(protocolFees)} MON (tx: ${hash.slice(0, 10)}...)`);
-          claimedProtocol += protocolFees;
-        } catch (err: any) {
-          console.log(`   ❌ Failed: ${err.shortMessage || err.message}`);
-        }
-      }
+      console.log(`   Creator fees: ${formatEther(pendingFees)} MON ${isCreator ? (canClaim ? '(can claim)' : '(market not resolved)') : ''}`);
 
       // Claim creator fees if eligible
-      if (isCreator && creatorFees > 0n) {
+      if (canClaim && pendingFees > 0n) {
         console.log(`   ⏳ Claiming creator fees...`);
         try {
           const hash = await walletClient.writeContract({
@@ -184,8 +164,8 @@ async function main() {
             functionName: 'claimCreatorFees',
           });
           await publicClient.waitForTransactionReceipt({ hash });
-          console.log(`   ✅ Claimed ${formatEther(creatorFees)} MON (tx: ${hash.slice(0, 10)}...)`);
-          claimedCreator += creatorFees;
+          console.log(`   ✅ Claimed ${formatEther(pendingFees)} MON (tx: ${hash.slice(0, 10)}...)`);
+          claimedCreator += pendingFees;
         } catch (err: any) {
           console.log(`   ❌ Failed: ${err.shortMessage || err.message}`);
         }
@@ -198,9 +178,7 @@ async function main() {
   }
 
   console.log('\n📈 Summary:');
-  console.log(`   Total protocol fees found: ${formatEther(totalProtocolFees)} MON`);
   console.log(`   Total creator fees found: ${formatEther(totalCreatorFees)} MON`);
-  console.log(`   Protocol fees claimed: ${formatEther(claimedProtocol)} MON`);
   console.log(`   Creator fees claimed: ${formatEther(claimedCreator)} MON`);
 }
 

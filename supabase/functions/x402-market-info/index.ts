@@ -37,7 +37,7 @@ const LSLMSR_ABI = [
     name: "getFeeInfo",
     type: "function",
     inputs: [],
-    outputs: [{ name: "pendingCreatorFees", type: "uint256" }, { name: "protocolFeesSent", type: "uint256" }],
+    outputs: [{ name: "pendingCreatorFees", type: "uint256" }],
     stateMutability: "view",
   },
 ] as const;
@@ -124,10 +124,9 @@ serve(async (req: Request) => {
           liquidityParameter: marketInfo[10].toString(),
         },
         fees: {
-          pendingCreatorFees: feeInfo[0].toString(),
-          pendingCreatorFeesFormatted: formatUnits(feeInfo[0], decimals),
-          protocolFeesSent: feeInfo[1].toString(),
-          protocolFeesSentFormatted: formatUnits(feeInfo[1], decimals),
+          // Note: 0.5% trading fee goes 100% to market creator (no protocol fee)
+          pendingCreatorFees: (feeInfo as unknown as bigint).toString(),
+          pendingCreatorFeesFormatted: formatUnits(feeInfo as unknown as bigint, decimals),
         },
         payment: {
           amount: X402_CONFIG.price,

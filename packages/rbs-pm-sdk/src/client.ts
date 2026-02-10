@@ -1187,12 +1187,11 @@ export class RBSPMClient {
 
   /**
    * Get fee information and claim calldata (requires x402 payment - 0.0001 USDC)
+   * Note: 0.5% trading fee goes 100% to market creator (no protocol fee)
    */
   async getFeeInfo(marketAddress: `0x${string}`): Promise<{
     pendingCreatorFees: bigint;
     pendingCreatorFeesFormatted: string;
-    protocolFeesSent: bigint;
-    protocolFeesSentFormatted: string;
     marketCreator: `0x${string}`;
     isCreator: boolean;
     transactions: Array<{ to: string; data: string; description: string; type: string }>;
@@ -1223,8 +1222,6 @@ export class RBSPMClient {
       fees: {
         pending: string;
         pendingFormatted: string;
-        protocolSent: string;
-        protocolSentFormatted: string;
       };
       transactions: Array<{ to: string; data: string; description: string; type: string }>;
     };
@@ -1232,8 +1229,6 @@ export class RBSPMClient {
     return {
       pendingCreatorFees: BigInt(data.fees.pending),
       pendingCreatorFeesFormatted: data.fees.pendingFormatted.replace(' USDC', ''),
-      protocolFeesSent: BigInt(data.fees.protocolSent),
-      protocolFeesSentFormatted: data.fees.protocolSentFormatted.replace(' USDC', ''),
       marketCreator: data.marketCreator as `0x${string}`,
       isCreator: data.isCreator || false,
       transactions: data.transactions,

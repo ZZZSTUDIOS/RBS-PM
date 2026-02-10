@@ -98,7 +98,7 @@ serve(async (req: Request) => {
         recentTrades: market.recent_trades || [],
       },
       fees: {
-        totalProtocolFees: market.total_protocol_fees || "0",
+        // Note: 0.5% trading fee goes 100% to market creator (no protocol fee)
         totalCreatorFees: market.total_creator_fees || "0",
       },
       metadata: {

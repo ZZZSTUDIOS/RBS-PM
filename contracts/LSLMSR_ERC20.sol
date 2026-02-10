@@ -48,14 +48,12 @@ contract LSLMSR_ERC20 is Ownable, ReentrancyGuard, Pausable {
     uint256 public totalCollateral;
 
     // Fee configuration
-    uint256 public constant TRADING_FEE_BPS = 100; // 1%
+    uint256 public constant TRADING_FEE_BPS = 50; // 0.5% - 100% goes to market creator
     uint256 public constant FEE_DENOMINATOR = 10000;
-    address public constant PROTOCOL_FEE_RECIPIENT = 0x048c2c9E869594a70c6Dc7CeAC168E724425cdFE;
     address public immutable marketCreator;
 
     // Accumulated fees
     uint256 public creatorFeesAccrued;
-    uint256 public totalProtocolFeesSent;
     uint256 public creatorLiquidityBuffer;
 
     // Scaling factor for shares to collateral conversion
@@ -70,7 +68,7 @@ contract LSLMSR_ERC20 is Ownable, ReentrancyGuard, Pausable {
     event LiquidityAdded(address indexed provider, uint256 amount);
     event OracleChanged(address indexed oldOracle, address indexed newOracle);
     event CreatorFeesClaimed(address indexed creator, uint256 amount);
-    event TradingFeeCollected(uint256 totalFee, uint256 protocolShare, uint256 creatorShare);
+    event TradingFeeCollected(uint256 totalFee);
     event ExcessCollateralWithdrawn(address indexed creator, uint256 amount);
 
     // ============ Errors ============
@@ -284,24 +282,14 @@ contract LSLMSR_ERC20 is Ownable, ReentrancyGuard, Pausable {
         // Transfer collateral from user
         collateralToken.safeTransferFrom(msg.sender, address(this), collateralAmount);
 
-        // Calculate trading fee
+        // Calculate trading fee (0.5% goes 100% to market creator)
         uint256 tradingFee = (collateralAmount * TRADING_FEE_BPS) / FEE_DENOMINATOR;
         uint256 paymentAfterFee = collateralAmount - tradingFee;
 
-        // Split fee 50/50
-        uint256 protocolShare = tradingFee / 2;
-        uint256 creatorShare = tradingFee - protocolShare;
+        // Accumulate creator fee (100% of trading fee)
+        creatorFeesAccrued += tradingFee;
 
-        // Transfer protocol fee immediately
-        if (protocolShare > 0) {
-            collateralToken.safeTransfer(PROTOCOL_FEE_RECIPIENT, protocolShare);
-            totalProtocolFeesSent += protocolShare;
-        }
-
-        // Accumulate creator fee
-        creatorFeesAccrued += creatorShare;
-
-        emit TradingFeeCollected(tradingFee, protocolShare, creatorShare);
+        emit TradingFeeCollected(tradingFee);
 
         // Convert collateral to share-scale for calculation
         uint256 paymentInShareScale = paymentAfterFee * SHARE_SCALE;
@@ -353,25 +341,16 @@ contract LSLMSR_ERC20 is Ownable, ReentrancyGuard, Pausable {
         uint256 grossPayout = grossPayoutInShareScale / SHARE_SCALE;
         if (grossPayout > totalCollateral) grossPayout = totalCollateral;
 
-        // Calculate fee
+        // Calculate fee (0.5% goes 100% to market creator)
         uint256 tradingFee = (grossPayout * TRADING_FEE_BPS) / FEE_DENOMINATOR;
         uint256 netPayout = grossPayout - tradingFee;
 
         if (netPayout < minPayout) revert InsufficientPayment();
 
-        // Split fee 50/50
-        uint256 protocolShare = tradingFee / 2;
-        uint256 creatorShare = tradingFee - protocolShare;
+        // Accumulate creator fee (100% of trading fee)
+        creatorFeesAccrued += tradingFee;
 
-        // Transfer protocol fee
-        if (protocolShare > 0) {
-            collateralToken.safeTransfer(PROTOCOL_FEE_RECIPIENT, protocolShare);
-            totalProtocolFeesSent += protocolShare;
-        }
-
-        creatorFeesAccrued += creatorShare;
-
-        emit TradingFeeCollected(tradingFee, protocolShare, creatorShare);
+        emit TradingFeeCollected(tradingFee);
 
         // Burn tokens
         if (isYes) {
@@ -619,7 +598,7 @@ contract LSLMSR_ERC20 is Ownable, ReentrancyGuard, Pausable {
         emit ExcessCollateralWithdrawn(marketCreator, amount);
     }
 
-    function getFeeInfo() external view returns (uint256 pendingCreatorFees, uint256 protocolFeesSent) {
-        return (creatorFeesAccrued, totalProtocolFeesSent);
+    function getFeeInfo() external view returns (uint256 pendingCreatorFees) {
+        return creatorFeesAccrued;
     }
 }

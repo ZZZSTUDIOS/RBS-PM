@@ -27,8 +27,8 @@ export const ADDRESSES = {
   AGENT_REGISTRY: '0x8004A169FB4a3325136EB29fA0ceB6D2e539a432' as `0x${string}`,
   REPUTATION_REGISTRY: '0x8004BAa17C55a88189AE136b182e5fdA19dE9b63' as `0x${string}`,
 
-  // Protocol Fee Recipient
-  PROTOCOL_FEE_RECIPIENT: '0x048c2c9E869594a70c6Dc7CeAC168E724425cdFE' as `0x${string}`,
+  // x402 API payment recipient
+  X402_RECIPIENT: '0x048c2c9E869594a70c6Dc7CeAC168E724425cdFE' as `0x${string}`,
 } as const;
 
 // API Configuration
@@ -66,7 +66,7 @@ export const API_ENDPOINTS = {
 export const X402_CONFIG = {
   network: 'eip155:10143',
   facilitator: 'https://x402-facilitator.molandak.org',
-  recipient: ADDRESSES.PROTOCOL_FEE_RECIPIENT,
+  recipient: ADDRESSES.X402_RECIPIENT,
   prices: {
     default: '100',          // 0.0001 USDC - standard API call
     markets: '100',          // 0.0001 USDC - list all markets
@@ -287,7 +287,6 @@ export const LSLMSR_ABI = [
     inputs: [],
     outputs: [
       { name: 'pendingCreatorFees', type: 'uint256' },
-      { name: 'protocolFeesSent', type: 'uint256' },
     ],
     stateMutability: 'view',
   },

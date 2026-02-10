@@ -54,16 +54,12 @@ contract LSLMSR is Ownable, ReentrancyGuard, Pausable {
     uint256 public totalCollateral;
 
     // Fee configuration
-    uint256 public constant TRADING_FEE_BPS = 100; // 1% = 100 basis points
+    uint256 public constant TRADING_FEE_BPS = 50; // 0.5% - 100% goes to market creator
     uint256 public constant FEE_DENOMINATOR = 10000;
-    address public constant PROTOCOL_FEE_RECIPIENT = 0x048c2c9E869594a70c6Dc7CeAC168E724425cdFE;
     address public immutable marketCreator;
 
-    // Accumulated fees (only creator fees now - protocol fees auto-transferred)
+    // Accumulated fees
     uint256 public creatorFeesAccrued;
-
-    // Track total protocol fees sent (for transparency)
-    uint256 public totalProtocolFeesSent;
 
     // Liquidity buffer deposited by creator at market creation
     // Helps ensure solvency for 1 MON per winning share redemptions
@@ -77,9 +73,8 @@ contract LSLMSR is Ownable, ReentrancyGuard, Pausable {
     event Redeemed(address indexed user, uint256 shares, uint256 payout);
     event LiquidityAdded(address indexed provider, uint256 amount);
     event OracleChanged(address indexed oldOracle, address indexed newOracle);
-    event ProtocolFeesClaimed(address indexed recipient, uint256 amount);
     event CreatorFeesClaimed(address indexed creator, uint256 amount);
-    event TradingFeeCollected(uint256 totalFee, uint256 protocolShare, uint256 creatorShare);
+    event TradingFeeCollected(uint256 totalFee);
     event ExcessCollateralWithdrawn(address indexed creator, uint256 amount);
 
     // ============ Errors ============
@@ -271,24 +266,14 @@ contract LSLMSR is Ownable, ReentrancyGuard, Pausable {
         if (resolved) revert MarketAlreadyResolved();
         if (msg.value == 0) revert InsufficientPayment();
 
-        // Calculate trading fee (1% of payment)
+        // Calculate trading fee (0.5% of payment - 100% to creator)
         uint256 tradingFee = (msg.value * TRADING_FEE_BPS) / FEE_DENOMINATOR;
         uint256 paymentAfterFee = msg.value - tradingFee;
 
-        // Split fee 50/50 between protocol and creator
-        uint256 protocolShare = tradingFee / 2;
-        uint256 creatorShare = tradingFee - protocolShare;
+        // Accumulate creator fee (100% of trading fee, claimable after resolution)
+        creatorFeesAccrued += tradingFee;
 
-        // Auto-transfer protocol fee immediately
-        (bool feeSuccess, ) = payable(PROTOCOL_FEE_RECIPIENT).call{value: protocolShare}("");
-        if (feeSuccess) {
-            totalProtocolFeesSent += protocolShare;
-        }
-
-        // Accumulate creator fee (claimable after resolution)
-        creatorFeesAccrued += creatorShare;
-
-        emit TradingFeeCollected(tradingFee, protocolShare, creatorShare);
+        emit TradingFeeCollected(tradingFee);
 
         // Binary search to find how many shares we can buy with payment after fee
         uint256 shares = _calculateSharesForPayment(isYes, paymentAfterFee);
@@ -340,26 +325,16 @@ contract LSLMSR is Ownable, ReentrancyGuard, Pausable {
         uint256 grossPayout = getPayoutForSell(isYes, shares);
         if (grossPayout > totalCollateral) grossPayout = totalCollateral;
 
-        // Calculate trading fee (1% of payout)
+        // Calculate trading fee (0.5% of payout - 100% to creator)
         uint256 tradingFee = (grossPayout * TRADING_FEE_BPS) / FEE_DENOMINATOR;
         uint256 netPayout = grossPayout - tradingFee;
 
         if (netPayout < minPayout) revert InsufficientPayment();
 
-        // Split fee 50/50 between protocol and creator
-        uint256 protocolShare = tradingFee / 2;
-        uint256 creatorShare = tradingFee - protocolShare;
+        // Accumulate creator fee (100% of trading fee, claimable after resolution)
+        creatorFeesAccrued += tradingFee;
 
-        // Auto-transfer protocol fee immediately
-        (bool feeSuccess, ) = payable(PROTOCOL_FEE_RECIPIENT).call{value: protocolShare}("");
-        if (feeSuccess) {
-            totalProtocolFeesSent += protocolShare;
-        }
-
-        // Accumulate creator fee (claimable after resolution)
-        creatorFeesAccrued += creatorShare;
-
-        emit TradingFeeCollected(tradingFee, protocolShare, creatorShare);
+        emit TradingFeeCollected(tradingFee);
 
         // Transfer and burn tokens
         if (isYes) {
@@ -648,9 +623,9 @@ contract LSLMSR is Ownable, ReentrancyGuard, Pausable {
     }
 
     /**
-     * @notice View pending creator fees and total protocol fees sent
+     * @notice View pending creator fees
      */
-    function getFeeInfo() external view returns (uint256 pendingCreatorFees, uint256 protocolFeesSent) {
-        return (creatorFeesAccrued, totalProtocolFeesSent);
+    function getFeeInfo() external view returns (uint256 pendingCreatorFees) {
+        return creatorFeesAccrued;
     }
 }

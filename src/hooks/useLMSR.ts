@@ -362,34 +362,12 @@ export const LSLMSR_ABI = [
     type: 'function',
     inputs: [],
     outputs: [
-      { name: 'creatorFeesAccrued', type: 'uint256' },
-      { name: 'totalProtocolFeesSent', type: 'uint256' },
+      { name: 'pendingCreatorFees', type: 'uint256' },
     ],
     stateMutability: 'view',
   },
   {
     name: 'creatorFeesAccrued',
-    type: 'function',
-    inputs: [],
-    outputs: [{ type: 'uint256' }],
-    stateMutability: 'view',
-  },
-  {
-    name: 'creatorFeesAccrued',
-    type: 'function',
-    inputs: [],
-    outputs: [{ type: 'uint256' }],
-    stateMutability: 'view',
-  },
-  {
-    name: 'PROTOCOL_FEE_RECIPIENT',
-    type: 'function',
-    inputs: [],
-    outputs: [{ type: 'address' }],
-    stateMutability: 'view',
-  },
-  {
-    name: 'totalProtocolFeesSent',
     type: 'function',
     inputs: [],
     outputs: [{ type: 'uint256' }],
@@ -1282,17 +1260,12 @@ export function useMarketFees(marketAddress: Address | undefined) {
   const { address } = useAccount();
   const publicClient = usePublicClient();
   const [feeInfo, setFeeInfo] = useState<{
-    totalProtocolFeesSent: string; // Total protocol fees already sent
-    creatorFees: string; // Pending creator fees that can be claimed
-    protocolFeeRecipient: Address;
+    creatorFees: string; // Pending creator fees that can be claimed (100% of 0.5% trading fee)
     marketCreator: Address | null;
     isMarketCreator: boolean;
     canClaimCreatorFees: boolean;
   } | null>(null);
   const [isLoading, setIsLoading] = useState(false);
-
-  // Hardcoded protocol fee recipient address
-  const PROTOCOL_FEE_RECIPIENT: Address = '0x048c2c9E869594a70c6Dc7CeAC168E724425cdFE';
 
   const fetchFeeInfo = useCallback(async () => {
     if (!publicClient || !marketAddress) {
@@ -1302,12 +1275,12 @@ export function useMarketFees(marketAddress: Address | undefined) {
 
     setIsLoading(true);
     try {
-      const [feeInfoResult, marketCreator, resolved, resolutionTime] = await Promise.all([
+      const [pendingCreatorFees, marketCreator, resolved, resolutionTime] = await Promise.all([
         publicClient.readContract({
           address: marketAddress,
           abi: LSLMSR_ABI,
           functionName: 'getFeeInfo',
-        }) as Promise<[bigint, bigint]>, // [creatorFeesAccrued, totalProtocolFeesSent]
+        }) as Promise<bigint>, // Returns single value: pendingCreatorFees
         publicClient.readContract({
           address: marketAddress,
           abi: LSLMSR_ABI,
@@ -1332,12 +1305,10 @@ export function useMarketFees(marketAddress: Address | undefined) {
       const canClaimCreatorFees = isMarketCreator && (resolved || now >= resolutionTime);
 
       setFeeInfo({
-        creatorFees: formatEther(feeInfoResult[0]),
-        totalProtocolFeesSent: formatEther(feeInfoResult[1]),
-        protocolFeeRecipient: PROTOCOL_FEE_RECIPIENT,
+        creatorFees: formatEther(pendingCreatorFees),
         marketCreator,
         isMarketCreator,
-        canClaimCreatorFees: canClaimCreatorFees && feeInfoResult[0] > 0n,
+        canClaimCreatorFees: canClaimCreatorFees && pendingCreatorFees > 0n,
       });
     } catch (err) {
       console.error('Failed to fetch fee info:', err);
@@ -1776,7 +1747,7 @@ export function useUnifiedMarketData(marketAddress: Address | undefined) {
 }
 
 // LS-LMSR math helpers for JavaScript fallback
-const TRADING_FEE_BPS = 100n; // 1%
+const TRADING_FEE_BPS = 50n; // 0.5% - 100% goes to market creator
 const FEE_DENOMINATOR = 10000n;
 const SCALE = BigInt(1e18);
 

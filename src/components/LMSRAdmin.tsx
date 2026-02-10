@@ -356,7 +356,7 @@ export default function LMSRAdmin() {
   const { resolve, isLoading: isResolving } = useLMSRResolve();
   const { redeem, isLoading: isRedeeming } = useLMSRRedeem();
   const { claimFees, isLoading: isClaimingCreatorFees } = useClaimCreatorFees();
-  // Protocol fees are now auto-transferred on every trade, no claiming needed
+  // 0.5% trading fee goes 100% to market creator (no protocol fee)
   const { marketInfo, marketType: detectedMarketType, refetch: refetchMarketInfo } = useUnifiedMarketData(selectedMarket);
   const { estimateShares } = useUnifiedEstimateShares();
 
@@ -400,7 +400,7 @@ export default function LMSRAdmin() {
     noName: 'ETH10K-NO',
     noSymbol: 'NO',
     initialLiquidity: '10', // Liquidity buffer - recommend 2-5% of expected volume
-    // Note: Protocol fees auto-transfer to 0x048c2c9E869594a70c6Dc7CeAC168E724425cdFE on every trade
+    // Note: 0.5% trading fee goes 100% to market creator
   });
 
   // Market creation confirmation
@@ -764,7 +764,7 @@ export default function LMSRAdmin() {
         txHash: result.txHash,
         alpha: marketConfig.alpha,
         minLiquidity: marketConfig.minLiquidity,
-        protocolFeeRecipient: address,
+        // No protocol fee - 0.5% trading fee goes 100% to market creator
       }).then(success => {
         if (success) {
           addLog('Market synced to Supabase', 'success');
@@ -870,11 +870,10 @@ export default function LMSRAdmin() {
         ? marketInfo?.yesPrice
         : marketInfo?.noPrice;
 
-      // Calculate fees: 1% trading fee, split 50/50 between protocol and creator
+      // Calculate fees: 0.5% trading fee, 100% to market creator
       const tradeAmount = parseFloat(tradeParams.amount);
-      const tradingFee = tradeAmount * 0.01; // 1% fee
-      const protocolFee = (tradingFee / 2).toFixed(18); // 50% to protocol (auto-transferred)
-      const creatorFee = (tradingFee / 2).toFixed(18);  // 50% to creator (accumulated)
+      const tradingFee = tradeAmount * 0.005; // 0.5% fee
+      const creatorFee = tradingFee.toFixed(18);  // 100% to creator
 
       await syncTradeToSupabase({
         marketAddress: tradeParams.marketAddress,
@@ -884,7 +883,6 @@ export default function LMSRAdmin() {
         amount: tradeParams.amount,
         txHash: result.txHash,
         priceAtTrade: priceAtTrade ? String(priceAtTrade) : undefined,
-        protocolFee,
         creatorFee,
       });
 
@@ -932,8 +930,8 @@ export default function LMSRAdmin() {
     }
   };
 
-  // Protocol fees are now auto-transferred on every trade to 0x048c2c9E869594a70c6Dc7CeAC168E724425cdFE
-  // No manual claiming needed
+  // 0.5% trading fee goes 100% to market creator (no protocol fee)
+  // Creator can claim fees after market resolution
 
   // Tabs configuration
   const tabs = [
@@ -2159,7 +2157,7 @@ export default function LMSRAdmin() {
                   </div>
                 )}
 
-                {/* Protocol fees are auto-transferred on every trade, no claim button needed */}
+                {/* 0.5% trading fee goes 100% to market creator */}
 
                 {/* CLAIM CREATOR FEES BUTTON */}
                 {(() => {

@@ -7,6 +7,7 @@ import "../contracts/LSLMSR_ERC20.sol";
 /**
  * @title Deploy Test Market with 2.5 USDC liquidity
  * @notice Deploys a prediction market for SDK testing
+ * @dev Fee structure: 0.5% trading fee, 100% to market creator (no protocol fee)
  *
  * Usage:
  *   forge script script/DeployTestMarket.s.sol:DeployTestMarketScript \
@@ -26,8 +27,8 @@ contract DeployTestMarketScript is Script {
         address deployer = vm.addr(deployerPrivateKey);
 
         // Test market parameters
-        string memory question = "Will Claude Opus 4.5 be the best AI model on Feb 15, 2026?";
-        uint256 resolutionTime = block.timestamp + 5 days; // 5 days from now
+        string memory question = "Fee test: 0.5% to creator, no protocol fee";
+        uint256 resolutionTime = block.timestamp + 1 hours; // 1 hour from now for quick testing
         address oracle = deployer;
 
         // LS-LMSR parameters (smaller for test)
@@ -36,10 +37,10 @@ contract DeployTestMarketScript is Script {
         uint256 initialYesShares = 50e18;
         uint256 initialNoShares = 50e18;
 
-        string memory yesName = "Claude Best YES";
-        string memory yesSymbol = "YES-CLAUDE";
-        string memory noName = "Claude Best NO";
-        string memory noSymbol = "NO-CLAUDE";
+        string memory yesName = "Fee Test YES";
+        string memory yesSymbol = "YES-FEE";
+        string memory noName = "Fee Test NO";
+        string memory noSymbol = "NO-FEE";
 
         console.log("Deploying Test Market...");
         console.log("Deployer:", deployer);

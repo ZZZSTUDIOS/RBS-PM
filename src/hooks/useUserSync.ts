@@ -60,7 +60,7 @@ export function useUserSync() {
   }, [isConnected, address, syncUser]);
 
   // Sync a trade to Supabase (looks up market by address)
-  // Includes protocol fee tracking - fees are auto-transferred on every trade
+  // Note: 0.5% trading fee goes 100% to market creator (no protocol fee)
   const syncTrade = useCallback(async (trade: {
     marketAddress: string;
     tradeType: 'BUY' | 'SELL' | 'REDEEM';
@@ -69,8 +69,7 @@ export function useUserSync() {
     amount: string;
     txHash: string;
     priceAtTrade?: string;
-    protocolFee?: string; // Protocol fee auto-sent to 0x048c...cdFE
-    creatorFee?: string;  // Creator fee accumulated in contract
+    creatorFee?: string;  // Creator fee (100% of 0.5% trading fee)
   }): Promise<boolean> => {
     if (!user?.id) {
       console.log('No user ID, skipping trade sync');
@@ -111,10 +110,8 @@ export function useUserSync() {
         }
       }
 
-      // Calculate total trading fee if we have the individual fees
-      const tradingFee = trade.protocolFee && trade.creatorFee
-        ? (parseFloat(trade.protocolFee) + parseFloat(trade.creatorFee)).toString()
-        : undefined;
+      // Trading fee is now 100% creator fee
+      const tradingFee = trade.creatorFee;
 
       // Insert trade with fee information
       const { data: tradeData, error } = await supabase.from('trades').upsert({
@@ -128,7 +125,6 @@ export function useUserSync() {
         price_at_trade: trade.priceAtTrade,
         block_number: blockNumber,
         block_timestamp: blockTimestamp,
-        protocol_fee: trade.protocolFee,
         creator_fee: trade.creatorFee,
         trading_fee: tradingFee,
       } as Record<string, unknown>, {
@@ -140,22 +136,7 @@ export function useUserSync() {
         return false;
       }
 
-      // If we have a protocol fee, also record it in protocol_fee_transfers for transparency
-      if (trade.protocolFee && parseFloat(trade.protocolFee) > 0 && tradeData?.id) {
-        await supabase.from('protocol_fee_transfers').upsert({
-          trade_id: tradeData.id,
-          market_id: marketData.id,
-          amount: trade.protocolFee,
-          recipient: '0x048c2c9E869594a70c6Dc7CeAC168E724425cdFE',
-          tx_hash: trade.txHash,
-          block_number: blockNumber,
-          block_timestamp: blockTimestamp,
-        } as Record<string, unknown>, {
-          onConflict: 'tx_hash,trade_id'
-        });
-      }
-
-      console.log('Trade synced to Supabase:', trade.txHash, trade.protocolFee ? `(protocol fee: ${trade.protocolFee})` : '');
+      console.log('Trade synced to Supabase:', trade.txHash, trade.creatorFee ? `(creator fee: ${trade.creatorFee})` : '');
       return true;
     } catch (err) {
       console.error('Error syncing trade:', err);
@@ -167,40 +148,44 @@ export function useUserSync() {
 }
 
 /**
- * Hook to fetch protocol fee statistics from Supabase
+ * Hook to fetch creator fee statistics from Supabase
+ * Note: Trading fee is 0.5% and goes 100% to market creator (no protocol fee)
  */
-export function useProtocolFeeStats() {
+export function useCreatorFeeStats() {
   const [stats, setStats] = useState<{
-    totalFeesCollected: string;
-    totalTransfers: number;
+    totalCreatorFees: string;
     marketsWithFees: number;
-    firstFeeAt: string | null;
-    lastFeeAt: string | null;
   } | null>(null);
   const [isLoading, setIsLoading] = useState(false);
 
   const fetchStats = useCallback(async () => {
     setIsLoading(true);
     try {
-      const { data, error } = await supabase.rpc('get_protocol_fee_summary');
+      // Sum creator fees from all trades
+      const { data, error } = await supabase
+        .from('trades')
+        .select('creator_fee');
 
       if (error) {
-        console.error('Failed to fetch protocol fee stats:', error);
+        console.error('Failed to fetch creator fee stats:', error);
         return;
       }
 
-      if (data && data.length > 0) {
-        const row = data[0];
-        setStats({
-          totalFeesCollected: row.total_fees_collected || '0',
-          totalTransfers: row.total_transfers || 0,
-          marketsWithFees: row.markets_with_fees || 0,
-          firstFeeAt: row.first_fee_at,
-          lastFeeAt: row.last_fee_at,
-        });
-      }
+      const totalFees = (data || []).reduce((sum, t) => {
+        return sum + (parseFloat(t.creator_fee || '0'));
+      }, 0);
+
+      // Count unique markets with fees
+      const marketsWithFees = new Set(
+        (data || []).filter(t => parseFloat(t.creator_fee || '0') > 0)
+      ).size;
+
+      setStats({
+        totalCreatorFees: totalFees.toString(),
+        marketsWithFees,
+      });
     } catch (err) {
-      console.error('Error fetching protocol fee stats:', err);
+      console.error('Error fetching creator fee stats:', err);
     } finally {
       setIsLoading(false);
     }
@@ -214,18 +199,13 @@ export function useProtocolFeeStats() {
 }
 
 /**
- * Hook to fetch protocol fee transfers for a specific market
+ * Hook to fetch creator fees for a specific market
+ * Note: Trading fee is 0.5% and goes 100% to market creator (no protocol fee)
  */
-export function useMarketProtocolFees(marketAddress: string | undefined) {
+export function useMarketCreatorFees(marketAddress: string | undefined) {
   const [fees, setFees] = useState<{
-    totalProtocolFees: string;
     totalCreatorFees: string;
-    transfers: Array<{
-      id: string;
-      amount: string;
-      txHash: string;
-      blockTimestamp: string | null;
-    }>;
+    tradeCount: number;
   } | null>(null);
   const [isLoading, setIsLoading] = useState(false);
 
@@ -240,7 +220,7 @@ export function useMarketProtocolFees(marketAddress: string | undefined) {
       // Get market ID first
       const { data: marketData, error: marketError } = await supabase
         .from('markets')
-        .select('id, total_protocol_fees, total_creator_fees')
+        .select('id, total_creator_fees')
         .ilike('address', marketAddress)
         .single();
 
@@ -250,29 +230,23 @@ export function useMarketProtocolFees(marketAddress: string | undefined) {
         return;
       }
 
-      // Get all protocol fee transfers for this market
-      const { data: transfers, error: transfersError } = await supabase
-        .from('protocol_fee_transfers')
-        .select('id, amount, tx_hash, block_timestamp')
+      // Count trades with creator fees
+      const { count, error: countError } = await supabase
+        .from('trades')
+        .select('id', { count: 'exact', head: true })
         .eq('market_id', marketData.id)
-        .order('created_at', { ascending: false });
+        .gt('creator_fee', '0');
 
-      if (transfersError) {
-        console.error('Failed to fetch protocol fee transfers:', transfersError);
+      if (countError) {
+        console.error('Failed to count trades:', countError);
       }
 
       setFees({
-        totalProtocolFees: marketData.total_protocol_fees || '0',
         totalCreatorFees: marketData.total_creator_fees || '0',
-        transfers: (transfers || []).map(t => ({
-          id: t.id,
-          amount: t.amount,
-          txHash: t.tx_hash,
-          blockTimestamp: t.block_timestamp,
-        })),
+        tradeCount: count || 0,
       });
     } catch (err) {
-      console.error('Error fetching market protocol fees:', err);
+      console.error('Error fetching market creator fees:', err);
       setFees(null);
     } finally {
       setIsLoading(false);
