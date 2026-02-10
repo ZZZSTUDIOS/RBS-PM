@@ -65,7 +65,8 @@
       "Bash(PRIVATE_KEY=0x39733f3e7a837d5c5a2c0e77c52345ca8016641914c8f8b68621deed2a0ba78a npx ts-node:*)",
       "Bash(PRIVATE_KEY=0x39733f3e7a837d5c5a2c0e77c52345ca8016641914c8f8b68621deed2a0ba78a npx tsx:*)",
       "Bash(npm publish:*)",
-      "Bash(npm login:*)"
+      "Bash(npm login:*)",
+      "WebFetch(domain:www.npmjs.com)"
     ]
   }
 }

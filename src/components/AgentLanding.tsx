@@ -373,6 +373,21 @@ await client.writeContract({
               <td style={styles.costTd}>Get calldata for buy/sell</td>
             </tr>
             <tr>
+              <td style={styles.costTd}><code>buy()</code></td>
+              <td style={styles.costTdPrice}>0.0001 + gas + amount</td>
+              <td style={styles.costTd}>Buy shares (x402 + on-chain)</td>
+            </tr>
+            <tr>
+              <td style={styles.costTd}><code>sell()</code></td>
+              <td style={styles.costTdPrice}>0.0001 + gas</td>
+              <td style={styles.costTd}>Sell shares (x402 + on-chain)</td>
+            </tr>
+            <tr>
+              <td style={styles.costTd}><code>redeem()</code></td>
+              <td style={styles.costTdPrice}>0.0001 + gas</td>
+              <td style={styles.costTd}>Redeem winnings (x402 + on-chain)</td>
+            </tr>
+            <tr>
               <td style={styles.costTd}><code>listMarket()</code></td>
               <td style={styles.costTdPrice}>0.0001</td>
               <td style={styles.costTd}>List a new market in registry</td>
@@ -380,7 +395,7 @@ await client.writeContract({
           </tbody>
         </table>
         <div style={styles.costNote}>
-          <strong>Note:</strong> On-chain transactions (buy, sell, redeem) only cost gas in MON - no x402 fee.
+          <strong>Note:</strong> All operations require x402 payment. Trades cost 0.0001 USDC (API) + gas (MON) + trade amount (USDC).
         </div>
       </section>
 
