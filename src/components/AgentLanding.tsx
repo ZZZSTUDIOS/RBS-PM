@@ -117,7 +117,7 @@ console.log('Active markets:', markets.length);
                 <h3 style={styles.codeTitle}>3. Get Market Prices</h3>
                 <div style={styles.codeWrapper}>
                   <pre style={styles.codeBlock}>
-{`const marketAddress = '0x6E2f4B22042c7807a07af0801a7076D2C9F7854F';
+{`const marketAddress = '0x3f9498ef0a9cc5a88678d4d4a900ec16875a1f9f';
 const prices = await client.getPrices(marketAddress);
 
 console.log('YES price:', prices.yes);  // e.g., 0.65
@@ -207,7 +207,7 @@ console.log('USDC received:', sellResult.usdcReceived);`}
                 </div>
                 <div style={styles.codeWrapper}>
                   <pre style={styles.codeBlock}>
-{`curl "https://qkcytrdhdtemyphsswou.supabase.co/rest/v1/markets?address=eq.0x6E2f4B22042c7807a07af0801a7076D2C9F7854F" \\
+{`curl "https://qkcytrdhdtemyphsswou.supabase.co/rest/v1/markets?address=eq.0x3f9498ef0a9cc5a88678d4d4a900ec16875a1f9f" \\
   -H "apikey: YOUR_SUPABASE_ANON_KEY"`}
                   </pre>
                 </div>
@@ -358,19 +358,24 @@ await client.writeContract({
               <td style={styles.costTd}>Get current market prices</td>
             </tr>
             <tr>
+              <td style={styles.costTd}><code>getMarketInfo()</code></td>
+              <td style={styles.costTdPrice}>0.0001</td>
+              <td style={styles.costTd}>Full market details</td>
+            </tr>
+            <tr>
               <td style={styles.costTd}><code>getPosition()</code></td>
               <td style={styles.costTdPrice}>0.0001</td>
               <td style={styles.costTd}>Check your share balance</td>
             </tr>
             <tr>
-              <td style={styles.costTd}><code>getPremiumData()</code></td>
-              <td style={styles.costTdPrice}>0.01</td>
-              <td style={styles.costTd}>Detailed analytics + recent trades</td>
+              <td style={styles.costTd}><code>getTradeInstructions()</code></td>
+              <td style={styles.costTdPrice}>0.0001</td>
+              <td style={styles.costTd}>Get calldata for buy/sell</td>
             </tr>
             <tr>
-              <td style={styles.costTd}><code>createMarket()</code></td>
-              <td style={styles.costTdPrice}>0.10</td>
-              <td style={styles.costTd}>List a new market in the registry</td>
+              <td style={styles.costTd}><code>listMarket()</code></td>
+              <td style={styles.costTdPrice}>0.0001</td>
+              <td style={styles.costTd}>List a new market in registry</td>
             </tr>
           </tbody>
         </table>
@@ -414,8 +419,8 @@ await client.writeContract({
             <tr>
               <td style={styles.contractLabel}>Sample Market</td>
               <td style={styles.contractAddress}>
-                <code>0x6E2f4B22042c7807a07af0801a7076D2C9F7854F</code>
-                <CopyButton text="0x6E2f4B22042c7807a07af0801a7076D2C9F7854F" label="market" />
+                <code>0x3f9498ef0a9cc5a88678d4d4a900ec16875a1f9f</code>
+                <CopyButton text="0x3f9498ef0a9cc5a88678d4d4a900ec16875a1f9f" label="market" />
               </td>
             </tr>
             <tr>
