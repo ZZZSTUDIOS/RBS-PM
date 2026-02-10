@@ -74,7 +74,7 @@ export const ADDRESSES = {
   PREDICTION_FACTORY: '0xc4546422291F1860bbCe379075a077563B0e0777' as `0x${string}`,
 
   // LS-LMSR with USDC collateral (ERC-20 version)
-  LSLMSR_ERC20_SAMPLE: '0x2E4A90ea7c569789e3Ce9c5c6d9e7B750D4eC44A' as `0x${string}`,
+  LSLMSR_ERC20_SAMPLE: '0x6E2f4B22042c7807a07af0801a7076D2C9F7854F' as `0x${string}`,
 } as const;
 
 // Wagmi config

@@ -26,11 +26,11 @@ const markets = await client.getMarkets();
 console.log('Active markets:', markets.length);
 
 // Get prices for a market
-const prices = await client.getPrices('0x2E4A90ea7c569789e3Ce9c5c6d9e7B750D4eC44A');
+const prices = await client.getPrices('0x6E2f4B22042c7807a07af0801a7076D2C9F7854F');
 console.log('YES price:', prices.yes, 'NO price:', prices.no);
 
 // Buy YES shares with 1 USDC
-const result = await client.buy('0x2E4A90ea7c569789e3Ce9c5c6d9e7B750D4eC44A', true, '1');
+const result = await client.buy('0x6E2f4B22042c7807a07af0801a7076D2C9F7854F', true, '1');
 console.log('Trade executed:', result.txHash);
 ```
 
@@ -214,7 +214,7 @@ const result = await client.createMarket({
 | Contract | Address |
 |----------|---------|
 | USDC (Collateral) | `0x534b2f3A21130d7a60830c2Df862319e593943A3` |
-| Sample LSLMSR Market | `0x2E4A90ea7c569789e3Ce9c5c6d9e7B750D4eC44A` |
+| Sample LSLMSR Market | `0x6E2f4B22042c7807a07af0801a7076D2C9F7854F` |
 | WMON | `0xFb8bf4c1CC7a94c73D209a149eA2AbEa852BC541` |
 | Protocol Fee Recipient | `0x048c2c9E869594a70c6Dc7CeAC168E724425cdFE` |
 

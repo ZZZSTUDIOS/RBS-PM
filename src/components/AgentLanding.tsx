@@ -125,7 +125,7 @@ const client = new RBSPMClient({
 
             <h3 style={styles.subTitle}>2. Get market prices</h3>
             <pre style={styles.pre}>
-              {`const prices = await client.getPrices('0x2E4A90ea7c569789e3Ce9c5c6d9e7B750D4eC44A');
+              {`const prices = await client.getPrices('0x6E2f4B22042c7807a07af0801a7076D2C9F7854F');
 console.log('YES:', prices.yes, 'NO:', prices.no);
 // { yes: 0.65, no: 0.35, impliedProbability: { yes: 0.65, no: 0.35 } }`}
             </pre>
@@ -393,7 +393,7 @@ const score = await reputationRegistry.getReputation(tokenId);`}
             </tr>
             <tr>
               <td style={styles.td}>Sample LSLMSR Market</td>
-              <td style={styles.tdCode}>0x2E4A90ea7c569789e3Ce9c5c6d9e7B750D4eC44A</td>
+              <td style={styles.tdCode}>0x6E2f4B22042c7807a07af0801a7076D2C9F7854F</td>
             </tr>
             <tr>
               <td style={styles.td}>WMON</td>

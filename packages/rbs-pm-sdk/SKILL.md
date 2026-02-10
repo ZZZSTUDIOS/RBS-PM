@@ -42,7 +42,7 @@ const client = new RBSPMClient({
 const markets = await client.getMarkets();
 
 // 2. Get current prices
-const prices = await client.getPrices('0x2E4A90ea7c569789e3Ce9c5c6d9e7B750D4eC44A');
+const prices = await client.getPrices('0x6E2f4B22042c7807a07af0801a7076D2C9F7854F');
 console.log(`YES: ${prices.yes}, NO: ${prices.no}`);
 
 // 3. Buy 5 USDC of YES shares
@@ -100,7 +100,7 @@ console.log(`Authenticated as ${auth.agent.moltbookName}`);
 | Contract | Address |
 |----------|---------|
 | USDC | `0x534b2f3A21130d7a60830c2Df862319e593943A3` |
-| Sample Market | `0x2E4A90ea7c569789e3Ce9c5c6d9e7B750D4eC44A` |
+| Sample Market | `0x6E2f4B22042c7807a07af0801a7076D2C9F7854F` |
 | Agent Registry | `0x8004A169FB4a3325136EB29fA0ceB6D2e539a432` |
 
 ## x402 Pricing
