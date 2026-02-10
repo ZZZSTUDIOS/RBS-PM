@@ -4,9 +4,8 @@ import { useState, useEffect } from 'react';
 import { Providers } from './components/Providers';
 import LMSRAdmin from './components/LMSRAdmin';
 import AgentLanding from './components/AgentLanding';
-import ListMarket from './components/ListMarket';
 
-type Route = 'admin' | 'agents' | 'list';
+type Route = 'admin' | 'agents';
 
 function Router() {
   const [route, setRoute] = useState<Route>('admin');
@@ -17,8 +16,6 @@ function Router() {
       const hash = window.location.hash.slice(1); // Remove #
       if (hash === 'agents') {
         setRoute('agents');
-      } else if (hash === 'list') {
-        setRoute('list');
       } else {
         setRoute('admin');
       }
@@ -45,15 +42,6 @@ function Router() {
         Markets
       </a>
       <a
-        href="#list"
-        style={{
-          ...navStyles.link,
-          ...(route === 'list' ? navStyles.active : {}),
-        }}
-      >
-        List Market
-      </a>
-      <a
         href="#agents"
         style={{
           ...navStyles.link,
@@ -65,25 +53,10 @@ function Router() {
     </nav>
   );
 
-  const renderRoute = () => {
-    switch (route) {
-      case 'agents':
-        return <AgentLanding />;
-      case 'list':
-        return (
-          <div style={{ maxWidth: '600px', margin: '40px auto', padding: '0 20px' }}>
-            <ListMarket />
-          </div>
-        );
-      default:
-        return <LMSRAdmin />;
-    }
-  };
-
   return (
     <>
       {nav}
-      {renderRoute()}
+      {route === 'agents' ? <AgentLanding /> : <LMSRAdmin />}
     </>
   );
 }

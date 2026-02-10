@@ -24,6 +24,7 @@ import {
   type LSLMSRMarketConfig,
 } from '../hooks/useLMSR';
 import { useLSLMSR_ERC20 } from '../hooks/useLMSR_ERC20';
+import { useX402 } from '../hooks/useX402';
 import { monadTestnet, ADDRESSES } from '../config/wagmi';
 import { useMarkets } from '../hooks/useMarkets';
 import { useUserSync } from '../hooks/useUserSync';
@@ -396,7 +397,15 @@ export default function LMSRAdmin() {
     address: string;
     question: string;
     txHash?: string;
+    resolutionTime?: number;
+    yesToken?: string;
+    noToken?: string;
+    listed?: boolean;
+    listingError?: string;
   } | null>(null);
+
+  // x402 listing hook
+  const { listMarket, isProcessing: isListing, isReady: x402Ready } = useX402();
 
   // Trade State
   const [tradeParams, setTradeParams] = useState({
@@ -757,11 +766,15 @@ export default function LMSRAdmin() {
       setTradeParams(prev => ({ ...prev, marketAddress: result.marketAddress }));
       setSelectedMarket(result.marketAddress);
 
-      // Show confirmation modal
+      // Show confirmation modal with listing prompt
       setCreatedMarket({
         address: result.marketAddress,
         question: marketConfig.question,
         txHash: result.txHash,
+        resolutionTime: Math.floor(new Date(marketConfig.resolutionDate).getTime() / 1000),
+        yesToken: result.yesToken,
+        noToken: result.noToken,
+        listed: false,
       });
 
       // Reset form for next market creation
@@ -2435,7 +2448,7 @@ export default function LMSRAdmin() {
               marginBottom: '8px',
               textAlign: 'center',
             }}>
-              MARKET CREATED
+              {createdMarket.listed ? 'MARKET LISTED!' : 'MARKET CREATED'}
             </div>
             <div style={{
               color: '#666',
@@ -2443,7 +2456,9 @@ export default function LMSRAdmin() {
               textAlign: 'center',
               marginBottom: '24px',
             }}>
-              Your prediction market is now live on Monad Testnet
+              {createdMarket.listed
+                ? 'Your market is now discoverable by other traders and agents'
+                : 'List your market so others can discover and trade on it'}
             </div>
 
             <div style={{
@@ -2518,6 +2533,75 @@ export default function LMSRAdmin() {
               >
                 View creation transaction →
               </a>
+            )}
+
+            {/* x402 Listing Section */}
+            {!createdMarket.listed ? (
+              <div style={{
+                backgroundColor: '#1a1a00',
+                border: '2px solid #ffff00',
+                padding: '16px',
+                marginBottom: '16px',
+              }}>
+                <div style={{ color: '#ffff00', fontSize: '14px', fontWeight: 'bold', marginBottom: '8px' }}>
+                  LIST FOR DISCOVERY
+                </div>
+                <div style={{ color: '#999', fontSize: '12px', marginBottom: '12px' }}>
+                  Pay 0.10 USDC to list your market so other traders and AI agents can find it.
+                </div>
+                {createdMarket.listingError && (
+                  <div style={{ color: '#ff6600', fontSize: '11px', marginBottom: '8px' }}>
+                    {createdMarket.listingError}
+                  </div>
+                )}
+                <button
+                  onClick={async () => {
+                    if (!createdMarket || !address) return;
+                    try {
+                      await listMarket({
+                        address: createdMarket.address,
+                        question: createdMarket.question,
+                        resolutionTime: createdMarket.resolutionTime || Math.floor(Date.now() / 1000) + 86400 * 30,
+                        oracle: address,
+                        yesTokenAddress: createdMarket.yesToken,
+                        noTokenAddress: createdMarket.noToken,
+                        category: 'general',
+                        tags: [],
+                      });
+                      setCreatedMarket(prev => prev ? { ...prev, listed: true, listingError: undefined } : null);
+                      addLog('Market listed successfully via x402!', 'success');
+                    } catch (err) {
+                      const msg = err instanceof Error ? err.message : 'Listing failed';
+                      setCreatedMarket(prev => prev ? { ...prev, listingError: msg } : null);
+                      addLog(`Listing failed: ${msg}`, 'error');
+                    }
+                  }}
+                  disabled={isListing || !x402Ready}
+                  style={{
+                    ...styles.button,
+                    width: '100%',
+                    padding: '14px',
+                    backgroundColor: isListing ? '#333' : '#ffff00',
+                    color: '#000',
+                    fontWeight: 'bold',
+                    cursor: isListing || !x402Ready ? 'not-allowed' : 'pointer',
+                  }}
+                >
+                  {isListing ? 'PROCESSING PAYMENT...' : 'LIST MARKET (0.10 USDC)'}
+                </button>
+              </div>
+            ) : (
+              <div style={{
+                backgroundColor: '#001a00',
+                border: '2px solid #00ff00',
+                padding: '16px',
+                marginBottom: '16px',
+                textAlign: 'center',
+              }}>
+                <div style={{ color: '#00ff00', fontSize: '14px' }}>
+                  ✓ Listed for discovery
+                </div>
+              </div>
             )}
 
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px' }}>
