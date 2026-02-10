@@ -209,6 +209,16 @@ const result = await client.createMarket({
 });
 ```
 
+## Network Configuration
+
+| Property | Value |
+|----------|-------|
+| Network | Monad Testnet |
+| Chain ID | 10143 |
+| RPC | https://testnet-rpc.monad.xyz |
+| Explorer | https://testnet.monadexplorer.com |
+| Faucet | https://faucet.monad.xyz |
+
 ## Contract Addresses (Monad Testnet)
 
 | Contract | Address |
@@ -299,9 +309,19 @@ try {
 }
 ```
 
+## AI Agent Guide
+
+For a detailed guide on building AI agents that trade on RBS Prediction Markets, see **[SKILL.md](./SKILL.md)**.
+
+The guide includes:
+- Heartbeat monitoring for agent health
+- Trading strategy templates
+- Error recovery patterns
+- Safety rules and best practices
+
 ## Links
 
-- [GitHub](https://github.com/ZZZSTUDIOS/prediction-market-doppler)
+- [GitHub](https://github.com/ZZZSTUDIOS/RBS-PM)
 - [Monad Testnet Explorer](https://testnet.monadexplorer.com)
 - [Get Testnet USDC](https://faucet.monad.xyz)
 

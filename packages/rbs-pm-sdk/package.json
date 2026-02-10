@@ -6,7 +6,9 @@
   "module": "dist/index.mjs",
   "types": "dist/index.d.ts",
   "files": [
-    "dist"
+    "dist",
+    "README.md",
+    "SKILL.md"
   ],
   "scripts": {
     "build": "tsup src/index.ts --format cjs,esm --dts",
@@ -30,16 +32,21 @@
     "ai-agent",
     "monad",
     "x402",
-    "erc8004",
-    "moltbook",
-    "web3",
-    "trading"
+    "trading",
+    "sdk"
   ],
   "author": "RBS",
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "https://github.com/ZZZSTUDIOS/RBS-PM"
+    "url": "git+https://github.com/ZZZSTUDIOS/RBS-PM.git"
+  },
+  "homepage": "https://github.com/ZZZSTUDIOS/RBS-PM#readme",
+  "bugs": {
+    "url": "https://github.com/ZZZSTUDIOS/RBS-PM/issues"
+  },
+  "publishConfig": {
+    "access": "public"
   },
   "engines": {
     "node": ">=18"

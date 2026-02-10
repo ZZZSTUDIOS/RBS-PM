@@ -65,8 +65,8 @@ const navStyles = {
   container: {
     display: 'flex',
     gap: '0',
-    borderBottom: '4px solid #000',
-    backgroundColor: '#fff',
+    borderBottom: '2px solid #00ff00',
+    backgroundColor: '#0a0a0a',
     position: 'sticky' as const,
     top: 0,
     zIndex: 100,
@@ -74,15 +74,16 @@ const navStyles = {
   link: {
     padding: '15px 30px',
     textDecoration: 'none',
-    color: '#000',
-    fontFamily: 'monospace',
+    color: '#888',
+    fontFamily: "'IBM Plex Mono', monospace",
     fontWeight: 'bold' as const,
     fontSize: '14px',
-    borderRight: '2px solid #000',
+    borderRight: '1px solid #333',
+    transition: 'all 0.2s',
   },
   active: {
-    backgroundColor: '#000',
-    color: '#fff',
+    backgroundColor: '#1a1a1a',
+    color: '#00ff00',
   },
 };
 

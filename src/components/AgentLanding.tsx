@@ -1,651 +1,922 @@
 // Agent Landing Page
-// Onboarding page for AI agents to get started with RBS Prediction Markets
+// Developer-focused onboarding page for AI agents to get started with RBS Prediction Markets SDK
 
 import React, { useState } from 'react';
-import { useAgent } from '../contexts/AgentContext';
 
-type TabType = 'npm' | 'manual' | 'auth' | 'x402';
+type TabType = 'npm' | 'manual';
 
 export function AgentLanding() {
   const [activeTab, setActiveTab] = useState<TabType>('npm');
-  const [moltbookToken, setMoltbookToken] = useState('');
-  const [isAuthenticating, setIsAuthenticating] = useState(false);
-  const [authError, setAuthError] = useState<string | null>(null);
+  const [copiedText, setCopiedText] = useState<string | null>(null);
 
-  const { identity, signInWithMoltbook, registerERC8004Agent, isRegisteringERC8004 } = useAgent();
-
-  const handleMoltbookAuth = async () => {
-    if (!moltbookToken.trim()) return;
-
-    setIsAuthenticating(true);
-    setAuthError(null);
-
-    try {
-      const success = await signInWithMoltbook(moltbookToken);
-      if (!success) {
-        setAuthError('Authentication failed. Check your token.');
-      }
-    } catch (err) {
-      setAuthError(err instanceof Error ? err.message : 'Unknown error');
-    } finally {
-      setIsAuthenticating(false);
-    }
+  const copyToClipboard = (text: string, label: string) => {
+    navigator.clipboard.writeText(text);
+    setCopiedText(label);
+    setTimeout(() => setCopiedText(null), 2000);
   };
 
-  const handleERC8004Register = async () => {
-    const name = prompt('Enter agent name:');
-    if (!name) return;
-
-    await registerERC8004Agent(name, { type: 'trader' });
-  };
+  const CopyButton = ({ text, label }: { text: string; label: string }) => (
+    <button
+      onClick={() => copyToClipboard(text, label)}
+      style={styles.copyButton}
+      title="Copy to clipboard"
+    >
+      {copiedText === label ? 'Copied!' : 'Copy'}
+    </button>
+  );
 
   return (
     <div style={styles.container}>
-      {/* Header */}
-      <header style={styles.header}>
-        <h1 style={styles.title}>RBS Prediction Markets for AI Agents</h1>
-        <p style={styles.subtitle}>
+      {/* Hero Section */}
+      <header style={styles.hero}>
+        <div style={styles.heroGlow} />
+        <h1 style={styles.heroTitle}>RBS Prediction Markets for AI Agents</h1>
+        <p style={styles.heroSubtitle}>
           Trade on prediction markets programmatically. Built for AI agents on Monad Testnet.
         </p>
         <div style={styles.badges}>
+          <span style={styles.badge}>TypeScript SDK</span>
+          <span style={styles.badge}>REST API</span>
           <span style={styles.badge}>USDC Collateral</span>
           <span style={styles.badge}>x402 Micropayments</span>
-          <span style={styles.badge}>LS-LMSR AMM</span>
         </div>
       </header>
 
-      {/* Auth Status */}
-      {identity.isAgent && (
-        <div style={styles.authStatus}>
-          <span style={styles.authBadge}>Authenticated</span>
-          <span style={styles.agentName}>
-            {identity.displayName} ({identity.type})
-          </span>
+      {/* Quick Start Tabs */}
+      <section style={styles.section}>
+        <h2 style={styles.sectionTitle}>Quick Start</h2>
+        <div style={styles.tabs}>
+          <button
+            style={{
+              ...styles.tab,
+              ...(activeTab === 'npm' ? styles.tabActive : {}),
+            }}
+            onClick={() => setActiveTab('npm')}
+          >
+            NPM Package
+          </button>
+          <button
+            style={{
+              ...styles.tab,
+              ...(activeTab === 'manual' ? styles.tabActive : {}),
+            }}
+            onClick={() => setActiveTab('manual')}
+          >
+            Manual API
+          </button>
         </div>
-      )}
 
-      {/* Tabs */}
-      <div style={styles.tabs}>
-        <button
-          style={{
-            ...styles.tab,
-            ...(activeTab === 'npm' ? styles.tabActive : {}),
-          }}
-          onClick={() => setActiveTab('npm')}
-        >
-          SDK
-        </button>
-        <button
-          style={{
-            ...styles.tab,
-            ...(activeTab === 'manual' ? styles.tabActive : {}),
-          }}
-          onClick={() => setActiveTab('manual')}
-        >
-          REST API
-        </button>
-        <button
-          style={{
-            ...styles.tab,
-            ...(activeTab === 'x402' ? styles.tabActive : {}),
-          }}
-          onClick={() => setActiveTab('x402')}
-        >
-          x402 Payments
-        </button>
-        <button
-          style={{
-            ...styles.tab,
-            ...(activeTab === 'auth' ? styles.tabActive : {}),
-          }}
-          onClick={() => setActiveTab('auth')}
-        >
-          Authentication
-        </button>
-      </div>
+        <div style={styles.tabContent}>
+          {activeTab === 'npm' && (
+            <div>
+              {/* Install Command */}
+              <div style={styles.installBlock}>
+                <code style={styles.installCode}>npm install @rbs-pm/sdk viem</code>
+                <CopyButton text="npm install @rbs-pm/sdk viem" label="install" />
+              </div>
 
-      {/* Tab Content */}
-      <div style={styles.content}>
-        {activeTab === 'npm' && (
-          <div>
-            <h2 style={styles.sectionTitle}>Quick Start with NPM</h2>
-
-            <div style={styles.codeBlock}>
-              <code>npm install @rbs-pm/sdk</code>
-            </div>
-
-            <h3 style={styles.subTitle}>1. Initialize the client</h3>
-            <pre style={styles.pre}>
-              {`import { RBSPMClient } from '@rbs-pm/sdk';
+              {/* Code Examples */}
+              <div style={styles.codeSection}>
+                <h3 style={styles.codeTitle}>1. Initialize the Client</h3>
+                <div style={styles.codeWrapper}>
+                  <pre style={styles.codeBlock}>
+{`import { RBSPMClient } from '@rbs-pm/sdk';
 
 const client = new RBSPMClient({
   privateKey: process.env.PRIVATE_KEY as \`0x\${string}\`,
 });`}
-            </pre>
-
-            <h3 style={styles.subTitle}>2. Get market prices</h3>
-            <pre style={styles.pre}>
-              {`const prices = await client.getPrices('0x6E2f4B22042c7807a07af0801a7076D2C9F7854F');
-console.log('YES:', prices.yes, 'NO:', prices.no);
-// { yes: 0.65, no: 0.35, impliedProbability: { yes: 0.65, no: 0.35 } }`}
-            </pre>
-
-            <h3 style={styles.subTitle}>3. Buy shares with USDC</h3>
-            <pre style={styles.pre}>
-              {`// Buy 5 USDC worth of YES shares
-const result = await client.buy(marketAddress, true, '5');
-console.log('Trade executed:', result.txHash);
-
-// Check USDC balance
-const balance = await client.getUSDCBalance();
-console.log('USDC Balance:', balance);`}
-            </pre>
-
-            <h3 style={styles.subTitle}>4. Check your position</h3>
-            <pre style={styles.pre}>
-              {`const position = await client.getPosition(marketAddress);
-console.log('YES shares:', position.yesShares);
-console.log('NO shares:', position.noShares);
-console.log('Total value:', position.totalValue);`}
-            </pre>
-
-            <h3 style={styles.subTitle}>5. Sell shares for USDC</h3>
-            <pre style={styles.pre}>
-              {`// Sell 100 YES shares (shares use 18 decimals)
-const sellResult = await client.sell(marketAddress, true, 100000000000000000000n);
-console.log('Sold for USDC:', sellResult.txHash);`}
-            </pre>
-
-            <div style={styles.linkBox}>
-              <a
-                href="https://www.npmjs.com/package/@rbs-pm/sdk"
-                target="_blank"
-                rel="noopener noreferrer"
-                style={styles.link}
-              >
-                View on NPM
-              </a>
-              <a
-                href="https://github.com/ZZZSTUDIOS/prediction-market-doppler/tree/main/packages/rbs-pm-sdk"
-                target="_blank"
-                rel="noopener noreferrer"
-                style={styles.link}
-              >
-                GitHub
-              </a>
-            </div>
-          </div>
-        )}
-
-        {activeTab === 'manual' && (
-          <div>
-            <h2 style={styles.sectionTitle}>REST API Integration</h2>
-
-            <h3 style={styles.subTitle}>Get All Markets</h3>
-            <div style={styles.endpoint}>
-              <span style={styles.method}>GET</span>
-              <code>/rest/v1/markets?select=*&status=eq.active</code>
-            </div>
-            <pre style={styles.pre}>
-              {`curl "https://qkcytrdhdtemyphsswou.supabase.co/rest/v1/markets?select=*&status=eq.active" \\
-  -H "apikey: YOUR_SUPABASE_ANON_KEY"`}
-            </pre>
-
-            <h3 style={styles.subTitle}>On-Chain Trading (USDC Collateral)</h3>
-            <p style={styles.text}>
-              Trading is done directly on-chain via the LSLMSR_ERC20 contract using USDC as collateral.
-            </p>
-            <pre style={styles.pre}>
-              {`import { parseUnits } from 'viem';
-
-// 1. Approve USDC spending
-await usdcContract.write.approve([marketAddress, parseUnits('10', 6)]);
-
-// 2. Buy shares with USDC
-await marketContract.write.buy([
-  true,                    // isYes
-  parseUnits('10', 6),     // 10 USDC (6 decimals)
-  0n                       // minShares
-]);
-
-// 3. Sell shares (approve token first)
-await yesToken.write.approve([marketAddress, shares]);
-await marketContract.write.sell([true, shares, 0n]);`}
-            </pre>
-
-            <h3 style={styles.subTitle}>Contract Functions</h3>
-            <table style={styles.table}>
-              <tbody>
-                <tr>
-                  <td style={styles.td}>buy(isYes, usdcAmount, minShares)</td>
-                  <td style={styles.tdCode}>Buy shares with USDC</td>
-                </tr>
-                <tr>
-                  <td style={styles.td}>sell(isYes, shares, minPayout)</td>
-                  <td style={styles.tdCode}>Sell shares for USDC</td>
-                </tr>
-                <tr>
-                  <td style={styles.td}>getYesPrice()</td>
-                  <td style={styles.tdCode}>Current YES price (18 decimals)</td>
-                </tr>
-                <tr>
-                  <td style={styles.td}>getNoPrice()</td>
-                  <td style={styles.tdCode}>Current NO price (18 decimals)</td>
-                </tr>
-                <tr>
-                  <td style={styles.td}>redeem()</td>
-                  <td style={styles.tdCode}>Redeem winning shares after resolution</td>
-                </tr>
-              </tbody>
-            </table>
-          </div>
-        )}
-
-        {activeTab === 'x402' && (
-          <div>
-            <h2 style={styles.sectionTitle}>x402 Micropayments</h2>
-            <p style={styles.text}>
-              Some premium endpoints require x402 USDC micropayments. The SDK handles this automatically.
-            </p>
-
-            <h3 style={styles.subTitle}>Pricing</h3>
-            <table style={styles.table}>
-              <tbody>
-                <tr>
-                  <td style={styles.td}>Premium Market Data</td>
-                  <td style={styles.tdCode}>0.01 USDC</td>
-                  <td style={styles.tdCode}>Detailed analytics, recent trades</td>
-                </tr>
-                <tr>
-                  <td style={styles.td}>Create Market</td>
-                  <td style={styles.tdCode}>0.10 USDC</td>
-                  <td style={styles.tdCode}>List a new market in the app</td>
-                </tr>
-              </tbody>
-            </table>
-
-            <h3 style={styles.subTitle}>Using x402 with SDK</h3>
-            <pre style={styles.pre}>
-              {`// Premium market data (auto-pays 0.01 USDC)
-const data = await client.getPremiumMarketData('0x...');
-console.log('Volume:', data.activity.totalVolume);
-console.log('Recent trades:', data.activity.recentTrades);
-
-// Create market (auto-pays 0.10 USDC)
-const result = await client.createMarket({
-  address: '0x...',        // Deployed contract address
-  question: 'Will ETH hit $10k?',
-  resolutionTime: 1767225600,
-  oracle: '0x...',
-  initialLiquidity: '10',  // USDC
-});`}
-            </pre>
-
-            <h3 style={styles.subTitle}>Manual x402 Payment</h3>
-            <pre style={styles.pre}>
-              {`// Payment header format
-X-Payment: x402 1:eip155:10143:BASE64_PAYLOAD:SIGNATURE
-
-// The payload contains a USDC TransferWithAuthorization
-// signed with EIP-712. See SDK source for details.`}
-            </pre>
-          </div>
-        )}
-
-        {activeTab === 'auth' && (
-          <div>
-            <h2 style={styles.sectionTitle}>Agent Authentication</h2>
-
-            {/* Moltbook Auth */}
-            <div style={styles.authSection}>
-              <h3 style={styles.subTitle}>Moltbook Sign-In</h3>
-              <p style={styles.text}>
-                Authenticate with your Moltbook identity token. Requires 100+ karma.
-              </p>
-
-              <div style={styles.inputGroup}>
-                <input
-                  type="password"
-                  placeholder="Paste your Moltbook identity token..."
-                  value={moltbookToken}
-                  onChange={(e) => setMoltbookToken(e.target.value)}
-                  style={styles.input}
-                />
-                <button
-                  onClick={handleMoltbookAuth}
-                  disabled={isAuthenticating || !moltbookToken.trim()}
-                  style={styles.button}
-                >
-                  {isAuthenticating ? 'Authenticating...' : 'Sign In'}
-                </button>
+                  </pre>
+                  <CopyButton
+                    text={`import { RBSPMClient } from '@rbs-pm/sdk';\n\nconst client = new RBSPMClient({\n  privateKey: process.env.PRIVATE_KEY as \`0x\${string}\`,\n});`}
+                    label="init"
+                  />
+                </div>
               </div>
 
-              {authError && <p style={styles.error}>{authError}</p>}
+              <div style={styles.codeSection}>
+                <h3 style={styles.codeTitle}>2. Get Available Markets</h3>
+                <div style={styles.codeWrapper}>
+                  <pre style={styles.codeBlock}>
+{`const markets = await client.getMarkets();
+console.log('Active markets:', markets.length);
 
-              <pre style={styles.pre}>
-                {`// Get identity token from Moltbook
-POST https://moltbook.com/api/v1/agents/me/identity-token
-Authorization: Bearer YOUR_API_KEY
-Body: { "audience": "prediction-market-rbs" }
+// Each market contains:
+// - address: Contract address
+// - question: Market question
+// - resolutionTime: When market resolves
+// - status: 'active' | 'resolved'`}
+                  </pre>
+                  <CopyButton
+                    text={`const markets = await client.getMarkets();\nconsole.log('Active markets:', markets.length);`}
+                    label="markets"
+                  />
+                </div>
+              </div>
 
-// Use token with our API
-POST /functions/v1/auth-moltbook
-Body: { "identity_token": "..." }`}
-              </pre>
+              <div style={styles.codeSection}>
+                <h3 style={styles.codeTitle}>3. Get Market Prices</h3>
+                <div style={styles.codeWrapper}>
+                  <pre style={styles.codeBlock}>
+{`const marketAddress = '0x6E2f4B22042c7807a07af0801a7076D2C9F7854F';
+const prices = await client.getPrices(marketAddress);
+
+console.log('YES price:', prices.yes);  // e.g., 0.65
+console.log('NO price:', prices.no);    // e.g., 0.35
+// Prices always sum to 1.0 (100%)`}
+                  </pre>
+                  <CopyButton
+                    text={`const prices = await client.getPrices(marketAddress);\nconsole.log('YES:', prices.yes, 'NO:', prices.no);`}
+                    label="prices"
+                  />
+                </div>
+              </div>
+
+              <div style={styles.codeSection}>
+                <h3 style={styles.codeTitle}>4. Buy Shares</h3>
+                <div style={styles.codeWrapper}>
+                  <pre style={styles.codeBlock}>
+{`// Buy 10 USDC worth of YES shares
+const result = await client.buy(marketAddress, true, '10');
+
+console.log('Transaction:', result.txHash);
+console.log('Shares received:', result.sharesReceived);
+
+// Check your USDC balance
+const balance = await client.getUSDCBalance();
+console.log('USDC Balance:', balance);`}
+                  </pre>
+                  <CopyButton
+                    text={`const result = await client.buy(marketAddress, true, '10');\nconsole.log('Transaction:', result.txHash);`}
+                    label="buy"
+                  />
+                </div>
+              </div>
+
+              <div style={styles.codeSection}>
+                <h3 style={styles.codeTitle}>5. Sell Shares</h3>
+                <div style={styles.codeWrapper}>
+                  <pre style={styles.codeBlock}>
+{`// Check your position first
+const position = await client.getPosition(marketAddress);
+console.log('YES shares:', position.yesShares);
+console.log('NO shares:', position.noShares);
+
+// Sell 50 YES shares (shares use 18 decimals)
+const sellResult = await client.sell(
+  marketAddress,
+  true,  // isYes
+  50000000000000000000n  // 50 shares
+);
+console.log('USDC received:', sellResult.usdcReceived);`}
+                  </pre>
+                  <CopyButton
+                    text={`const sellResult = await client.sell(marketAddress, true, 50000000000000000000n);`}
+                    label="sell"
+                  />
+                </div>
+              </div>
             </div>
+          )}
 
-            {/* ERC-8004 Auth */}
-            <div style={styles.authSection}>
-              <h3 style={styles.subTitle}>ERC-8004 On-Chain Identity</h3>
-              <p style={styles.text}>
-                Register as an on-chain agent with ERC-8004. Build reputation through trading.
+          {activeTab === 'manual' && (
+            <div>
+              <p style={styles.apiIntro}>
+                If you prefer direct API access without the SDK, use these REST endpoints.
               </p>
 
-              <button
-                onClick={handleERC8004Register}
-                disabled={isRegisteringERC8004}
-                style={styles.button}
-              >
-                {isRegisteringERC8004 ? 'Registering...' : 'Register Agent (ERC-8004)'}
-              </button>
+              <div style={styles.endpointSection}>
+                <h3 style={styles.codeTitle}>Get All Markets</h3>
+                <div style={styles.endpoint}>
+                  <span style={styles.methodGet}>GET</span>
+                  <code style={styles.endpointPath}>/rest/v1/markets?select=*&status=eq.active</code>
+                </div>
+                <div style={styles.codeWrapper}>
+                  <pre style={styles.codeBlock}>
+{`curl "https://qkcytrdhdtemyphsswou.supabase.co/rest/v1/markets?select=*&status=eq.active" \\
+  -H "apikey: YOUR_SUPABASE_ANON_KEY" \\
+  -H "Accept: application/json"`}
+                  </pre>
+                </div>
+              </div>
 
-              <pre style={styles.pre}>
-                {`// Contract: 0x8004A169FB4a3325136EB29fA0ceB6D2e539a432
-// Register agent on-chain
-await identityRegistry.registerAgent(name, metadataURI);
+              <div style={styles.endpointSection}>
+                <h3 style={styles.codeTitle}>Get Market by Address</h3>
+                <div style={styles.endpoint}>
+                  <span style={styles.methodGet}>GET</span>
+                  <code style={styles.endpointPath}>/rest/v1/markets?address=eq.0x...</code>
+                </div>
+                <div style={styles.codeWrapper}>
+                  <pre style={styles.codeBlock}>
+{`curl "https://qkcytrdhdtemyphsswou.supabase.co/rest/v1/markets?address=eq.0x6E2f4B22042c7807a07af0801a7076D2C9F7854F" \\
+  -H "apikey: YOUR_SUPABASE_ANON_KEY"`}
+                  </pre>
+                </div>
+              </div>
 
-// Check reputation
-const score = await reputationRegistry.getReputation(tokenId);`}
-              </pre>
+              <div style={styles.endpointSection}>
+                <h3 style={styles.codeTitle}>On-Chain Trading (viem)</h3>
+                <p style={styles.apiNote}>
+                  Trading is done directly on-chain via the LSLMSR_ERC20 contract.
+                </p>
+                <div style={styles.codeWrapper}>
+                  <pre style={styles.codeBlock}>
+{`import { createWalletClient, http, parseUnits } from 'viem';
+import { monadTestnet } from 'viem/chains';
+
+const client = createWalletClient({
+  chain: monadTestnet,
+  transport: http('https://testnet-rpc.monad.xyz'),
+});
+
+// 1. Approve USDC spending
+await client.writeContract({
+  address: USDC_ADDRESS,
+  abi: erc20Abi,
+  functionName: 'approve',
+  args: [marketAddress, parseUnits('10', 6)],
+});
+
+// 2. Buy shares
+await client.writeContract({
+  address: marketAddress,
+  abi: lslmsrAbi,
+  functionName: 'buy',
+  args: [
+    true,                    // isYes
+    parseUnits('10', 6),     // 10 USDC
+    0n                       // minShares (slippage)
+  ],
+});`}
+                  </pre>
+                </div>
+              </div>
+
+              <div style={styles.endpointSection}>
+                <h3 style={styles.codeTitle}>Contract ABI Functions</h3>
+                <table style={styles.table}>
+                  <thead>
+                    <tr>
+                      <th style={styles.th}>Function</th>
+                      <th style={styles.th}>Parameters</th>
+                      <th style={styles.th}>Description</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    <tr>
+                      <td style={styles.td}><code>buy</code></td>
+                      <td style={styles.td}><code>isYes, usdcAmount, minShares</code></td>
+                      <td style={styles.td}>Buy shares with USDC</td>
+                    </tr>
+                    <tr>
+                      <td style={styles.td}><code>sell</code></td>
+                      <td style={styles.td}><code>isYes, shares, minPayout</code></td>
+                      <td style={styles.td}>Sell shares for USDC</td>
+                    </tr>
+                    <tr>
+                      <td style={styles.td}><code>getYesPrice</code></td>
+                      <td style={styles.td}>-</td>
+                      <td style={styles.td}>Current YES price (18 decimals)</td>
+                    </tr>
+                    <tr>
+                      <td style={styles.td}><code>getNoPrice</code></td>
+                      <td style={styles.td}>-</td>
+                      <td style={styles.td}>Current NO price (18 decimals)</td>
+                    </tr>
+                    <tr>
+                      <td style={styles.td}><code>redeem</code></td>
+                      <td style={styles.td}>-</td>
+                      <td style={styles.td}>Redeem winning shares after resolution</td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
             </div>
+          )}
+        </div>
+      </section>
+
+      {/* Prerequisites Section */}
+      <section style={styles.section}>
+        <h2 style={styles.sectionTitle}>Prerequisites</h2>
+        <div style={styles.prerequisitesGrid}>
+          <div style={styles.prerequisiteCard}>
+            <div style={styles.prerequisiteIcon}>MON</div>
+            <h3 style={styles.prerequisiteTitle}>MON (Gas Token)</h3>
+            <p style={styles.prerequisiteText}>
+              Required for transaction gas fees on Monad Testnet. Get free testnet MON from the faucet.
+            </p>
+            <a
+              href="https://faucet.monad.xyz"
+              target="_blank"
+              rel="noopener noreferrer"
+              style={styles.prerequisiteLink}
+            >
+              Get MON from Faucet
+            </a>
           </div>
-        )}
-      </div>
+          <div style={styles.prerequisiteCard}>
+            <div style={styles.prerequisiteIcon}>USDC</div>
+            <h3 style={styles.prerequisiteTitle}>USDC (Trading + API)</h3>
+            <p style={styles.prerequisiteText}>
+              Used as collateral for trading and for x402 API micropayments. Mint testnet USDC or bridge from other testnets.
+            </p>
+            <a
+              href="https://testnet.monadexplorer.com/address/0x534b2f3A21130d7a60830c2Df862319e593943A3"
+              target="_blank"
+              rel="noopener noreferrer"
+              style={styles.prerequisiteLink}
+            >
+              View USDC Contract
+            </a>
+          </div>
+        </div>
+      </section>
 
-      {/* Features */}
-      <div style={styles.features}>
-        <div style={styles.feature}>
-          <h4 style={styles.featureTitle}>USDC Collateral</h4>
-          <p style={styles.featureText}>Trade with stable USDC, not volatile native tokens</p>
-        </div>
-        <div style={styles.feature}>
-          <h4 style={styles.featureTitle}>x402 Payments</h4>
-          <p style={styles.featureText}>Pay-per-request with USDC micropayments</p>
-        </div>
-        <div style={styles.feature}>
-          <h4 style={styles.featureTitle}>Moltbook Auth</h4>
-          <p style={styles.featureText}>Sign in with your Moltbook identity</p>
-        </div>
-        <div style={styles.feature}>
-          <h4 style={styles.featureTitle}>ERC-8004 Reputation</h4>
-          <p style={styles.featureText}>Build on-chain trading reputation</p>
-        </div>
-      </div>
-
-      {/* Contract Addresses */}
-      <div style={styles.contracts}>
-        <h3 style={styles.subTitle}>Contract Addresses (Monad Testnet - Chain ID: 10143)</h3>
-        <table style={styles.table}>
+      {/* x402 Cost Table */}
+      <section style={styles.section}>
+        <h2 style={styles.sectionTitle}>x402 Micropayment Costs</h2>
+        <p style={styles.sectionSubtitle}>
+          Premium API endpoints use x402 USDC micropayments. The SDK handles payments automatically.
+        </p>
+        <table style={styles.costTable}>
+          <thead>
+            <tr>
+              <th style={styles.costTh}>Endpoint</th>
+              <th style={styles.costTh}>Cost (USDC)</th>
+              <th style={styles.costTh}>Description</th>
+            </tr>
+          </thead>
           <tbody>
             <tr>
-              <td style={styles.td}>USDC (Collateral)</td>
-              <td style={styles.tdCode}>0x534b2f3A21130d7a60830c2Df862319e593943A3</td>
+              <td style={styles.costTd}><code>getMarkets()</code></td>
+              <td style={styles.costTdPrice}>0.0001</td>
+              <td style={styles.costTd}>List all active markets</td>
             </tr>
             <tr>
-              <td style={styles.td}>Sample LSLMSR Market</td>
-              <td style={styles.tdCode}>0x6E2f4B22042c7807a07af0801a7076D2C9F7854F</td>
+              <td style={styles.costTd}><code>getPrices()</code></td>
+              <td style={styles.costTdPrice}>0.0001</td>
+              <td style={styles.costTd}>Get current market prices</td>
             </tr>
             <tr>
-              <td style={styles.td}>WMON</td>
-              <td style={styles.tdCode}>0xFb8bf4c1CC7a94c73D209a149eA2AbEa852BC541</td>
+              <td style={styles.costTd}><code>getPosition()</code></td>
+              <td style={styles.costTdPrice}>0.0001</td>
+              <td style={styles.costTd}>Check your share balance</td>
             </tr>
             <tr>
-              <td style={styles.td}>Agent Registry (ERC-8004)</td>
-              <td style={styles.tdCode}>0x8004A169FB4a3325136EB29fA0ceB6D2e539a432</td>
+              <td style={styles.costTd}><code>getPremiumData()</code></td>
+              <td style={styles.costTdPrice}>0.01</td>
+              <td style={styles.costTd}>Detailed analytics + recent trades</td>
             </tr>
             <tr>
-              <td style={styles.td}>Protocol Fee Recipient</td>
-              <td style={styles.tdCode}>0x048c2c9E869594a70c6Dc7CeAC168E724425cdFE</td>
+              <td style={styles.costTd}><code>createMarket()</code></td>
+              <td style={styles.costTdPrice}>0.10</td>
+              <td style={styles.costTd}>List a new market in the registry</td>
             </tr>
           </tbody>
         </table>
-      </div>
+        <div style={styles.costNote}>
+          <strong>Note:</strong> On-chain transactions (buy, sell, redeem) only cost gas in MON - no x402 fee.
+        </div>
+      </section>
 
-      {/* Links */}
-      <div style={styles.footer}>
-        <a href="https://github.com/ZZZSTUDIOS/prediction-market-doppler" style={styles.footerLink}>GitHub</a>
-        <a href="https://testnet.monadexplorer.com" style={styles.footerLink}>Monad Explorer</a>
-        <a href="/" style={styles.footerLink}>Back to App</a>
-      </div>
+      {/* Network Info */}
+      <section style={styles.section}>
+        <h2 style={styles.sectionTitle}>Network Configuration</h2>
+        <div style={styles.networkGrid}>
+          <div style={styles.networkItem}>
+            <span style={styles.networkLabel}>Network</span>
+            <span style={styles.networkValue}>Monad Testnet</span>
+          </div>
+          <div style={styles.networkItem}>
+            <span style={styles.networkLabel}>Chain ID</span>
+            <span style={styles.networkValue}>10143</span>
+          </div>
+          <div style={styles.networkItem}>
+            <span style={styles.networkLabel}>RPC URL</span>
+            <span style={styles.networkValue}>https://testnet-rpc.monad.xyz</span>
+          </div>
+          <div style={styles.networkItem}>
+            <span style={styles.networkLabel}>Explorer</span>
+            <span style={styles.networkValue}>https://testnet.monadexplorer.com</span>
+          </div>
+        </div>
+
+        <h3 style={styles.contractsTitle}>Contract Addresses</h3>
+        <table style={styles.contractTable}>
+          <tbody>
+            <tr>
+              <td style={styles.contractLabel}>USDC (Collateral)</td>
+              <td style={styles.contractAddress}>
+                <code>0x534b2f3A21130d7a60830c2Df862319e593943A3</code>
+                <CopyButton text="0x534b2f3A21130d7a60830c2Df862319e593943A3" label="usdc" />
+              </td>
+            </tr>
+            <tr>
+              <td style={styles.contractLabel}>Sample Market</td>
+              <td style={styles.contractAddress}>
+                <code>0x6E2f4B22042c7807a07af0801a7076D2C9F7854F</code>
+                <CopyButton text="0x6E2f4B22042c7807a07af0801a7076D2C9F7854F" label="market" />
+              </td>
+            </tr>
+            <tr>
+              <td style={styles.contractLabel}>WMON</td>
+              <td style={styles.contractAddress}>
+                <code>0xFb8bf4c1CC7a94c73D209a149eA2AbEa852BC541</code>
+                <CopyButton text="0xFb8bf4c1CC7a94c73D209a149eA2AbEa852BC541" label="wmon" />
+              </td>
+            </tr>
+          </tbody>
+        </table>
+      </section>
+
+      {/* Links Section */}
+      <section style={styles.linksSection}>
+        <h2 style={styles.sectionTitle}>Resources</h2>
+        <div style={styles.linksGrid}>
+          <a
+            href="https://github.com/ZZZSTUDIOS/prediction-market-doppler"
+            target="_blank"
+            rel="noopener noreferrer"
+            style={styles.linkCard}
+          >
+            <div style={styles.linkIcon}>GH</div>
+            <div>
+              <div style={styles.linkTitle}>GitHub Repository</div>
+              <div style={styles.linkDesc}>Source code, examples, and documentation</div>
+            </div>
+          </a>
+          <a
+            href="https://www.npmjs.com/package/@rbs-pm/sdk"
+            target="_blank"
+            rel="noopener noreferrer"
+            style={styles.linkCard}
+          >
+            <div style={styles.linkIcon}>NPM</div>
+            <div>
+              <div style={styles.linkTitle}>NPM Package</div>
+              <div style={styles.linkDesc}>@rbs-pm/sdk - TypeScript SDK</div>
+            </div>
+          </a>
+          <a
+            href="https://faucet.monad.xyz"
+            target="_blank"
+            rel="noopener noreferrer"
+            style={styles.linkCard}
+          >
+            <div style={styles.linkIcon}>$</div>
+            <div>
+              <div style={styles.linkTitle}>Monad Faucet</div>
+              <div style={styles.linkDesc}>Get free testnet MON for gas</div>
+            </div>
+          </a>
+          <a
+            href="https://testnet.monadexplorer.com"
+            target="_blank"
+            rel="noopener noreferrer"
+            style={styles.linkCard}
+          >
+            <div style={styles.linkIcon}>EXP</div>
+            <div>
+              <div style={styles.linkTitle}>Block Explorer</div>
+              <div style={styles.linkDesc}>View transactions and contracts</div>
+            </div>
+          </a>
+        </div>
+      </section>
+
+      {/* Footer */}
+      <footer style={styles.footer}>
+        <p>Built for AI agents. Powered by Monad.</p>
+        <a href="#" style={styles.footerLink}>Back to Markets</a>
+      </footer>
     </div>
   );
 }
 
-// Inline styles for brutalist design
+// Dark theme styles matching the project aesthetic
 const styles: Record<string, React.CSSProperties> = {
   container: {
-    maxWidth: '900px',
+    maxWidth: '1000px',
     margin: '0 auto',
-    padding: '40px 20px',
-    fontFamily: 'monospace',
-    color: '#000',
-    backgroundColor: '#fff',
+    padding: '40px 24px',
+    fontFamily: "'IBM Plex Mono', monospace",
+    color: '#e0e0e0',
+    backgroundColor: '#0a0a0a',
+    minHeight: '100vh',
   },
-  header: {
-    marginBottom: '40px',
-    borderBottom: '4px solid #000',
-    paddingBottom: '20px',
+
+  // Hero Section
+  hero: {
+    position: 'relative',
+    textAlign: 'center',
+    padding: '60px 20px',
+    marginBottom: '60px',
+    borderBottom: '1px solid #333',
   },
-  title: {
-    fontSize: '32px',
-    fontWeight: 'bold',
-    marginBottom: '10px',
+  heroGlow: {
+    position: 'absolute',
+    top: '50%',
+    left: '50%',
+    transform: 'translate(-50%, -50%)',
+    width: '400px',
+    height: '200px',
+    background: 'radial-gradient(ellipse, rgba(0, 255, 0, 0.1) 0%, transparent 70%)',
+    pointerEvents: 'none',
   },
-  subtitle: {
-    fontSize: '16px',
-    color: '#666',
-    marginBottom: '15px',
+  heroTitle: {
+    fontSize: '36px',
+    fontWeight: 700,
+    color: '#00ff00',
+    marginBottom: '16px',
+    letterSpacing: '-0.5px',
+  },
+  heroSubtitle: {
+    fontSize: '18px',
+    color: '#888',
+    marginBottom: '24px',
+    maxWidth: '600px',
+    margin: '0 auto 24px',
+    lineHeight: 1.6,
   },
   badges: {
     display: 'flex',
-    gap: '10px',
+    gap: '12px',
+    justifyContent: 'center',
     flexWrap: 'wrap',
   },
   badge: {
-    padding: '4px 10px',
-    backgroundColor: '#000',
-    color: '#fff',
+    padding: '6px 14px',
+    backgroundColor: '#1a1a1a',
+    border: '1px solid #333',
+    color: '#00ff00',
     fontSize: '12px',
-    fontWeight: 'bold',
+    fontWeight: 600,
+    textTransform: 'uppercase',
+    letterSpacing: '0.5px',
   },
-  authStatus: {
-    display: 'flex',
-    alignItems: 'center',
-    gap: '10px',
-    marginBottom: '20px',
-    padding: '10px',
-    backgroundColor: '#e8ffe8',
-    border: '2px solid #000',
+
+  // Sections
+  section: {
+    marginBottom: '60px',
   },
-  authBadge: {
-    padding: '4px 8px',
-    backgroundColor: '#00cc00',
+  sectionTitle: {
+    fontSize: '24px',
+    fontWeight: 700,
     color: '#fff',
-    fontWeight: 'bold',
-    fontSize: '12px',
+    marginBottom: '16px',
+    paddingBottom: '12px',
+    borderBottom: '2px solid #00ff00',
+    display: 'inline-block',
   },
-  agentName: {
-    fontWeight: 'bold',
+  sectionSubtitle: {
+    color: '#888',
+    marginBottom: '24px',
+    lineHeight: 1.6,
   },
+
+  // Tabs
   tabs: {
     display: 'flex',
     gap: '0',
     marginBottom: '0',
-    borderBottom: '4px solid #000',
-    flexWrap: 'wrap',
+    borderBottom: '1px solid #333',
   },
   tab: {
-    padding: '12px 24px',
-    backgroundColor: '#eee',
-    border: '2px solid #000',
+    padding: '14px 28px',
+    backgroundColor: '#111',
+    border: '1px solid #333',
     borderBottom: 'none',
+    color: '#888',
     cursor: 'pointer',
-    fontFamily: 'monospace',
+    fontFamily: "'IBM Plex Mono', monospace",
     fontSize: '14px',
-    fontWeight: 'bold',
+    fontWeight: 600,
+    transition: 'all 0.2s',
   },
   tabActive: {
-    backgroundColor: '#fff',
-    borderBottom: '2px solid #fff',
-    marginBottom: '-4px',
+    backgroundColor: '#1a1a1a',
+    color: '#00ff00',
+    borderColor: '#00ff00',
+    borderBottom: '1px solid #1a1a1a',
+    marginBottom: '-1px',
   },
-  content: {
+
+  // Tab Content
+  tabContent: {
     padding: '30px',
-    border: '4px solid #000',
+    backgroundColor: '#1a1a1a',
+    border: '1px solid #333',
     borderTop: 'none',
-    marginBottom: '40px',
   },
-  sectionTitle: {
-    fontSize: '24px',
-    fontWeight: 'bold',
-    marginBottom: '20px',
+
+  // Install Block
+  installBlock: {
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    padding: '16px 20px',
+    backgroundColor: '#0d0d0d',
+    border: '2px solid #00ff00',
+    marginBottom: '32px',
   },
-  subTitle: {
-    fontSize: '18px',
-    fontWeight: 'bold',
-    marginTop: '30px',
-    marginBottom: '10px',
+  installCode: {
+    color: '#00ff00',
+    fontSize: '16px',
+    fontWeight: 600,
+  },
+
+  // Code Sections
+  codeSection: {
+    marginBottom: '28px',
+  },
+  codeTitle: {
+    fontSize: '16px',
+    fontWeight: 600,
+    color: '#00ff00',
+    marginBottom: '12px',
+  },
+  codeWrapper: {
+    position: 'relative',
   },
   codeBlock: {
-    padding: '15px',
-    backgroundColor: '#000',
-    color: '#0f0',
-    fontFamily: 'monospace',
-    marginBottom: '20px',
-  },
-  pre: {
-    padding: '15px',
-    backgroundColor: '#f5f5f5',
-    border: '2px solid #000',
+    padding: '20px',
+    backgroundColor: '#0d0d0d',
+    border: '1px solid #333',
     overflow: 'auto',
     fontSize: '13px',
-    lineHeight: '1.5',
+    lineHeight: 1.6,
+    color: '#ccc',
+    margin: 0,
   },
-  text: {
-    marginBottom: '15px',
-    lineHeight: '1.6',
+  copyButton: {
+    position: 'absolute',
+    top: '10px',
+    right: '10px',
+    padding: '6px 12px',
+    backgroundColor: '#333',
+    border: 'none',
+    color: '#888',
+    fontSize: '11px',
+    fontFamily: "'IBM Plex Mono', monospace",
+    cursor: 'pointer',
+    transition: 'all 0.2s',
   },
-  linkBox: {
-    display: 'flex',
-    gap: '20px',
-    marginTop: '30px',
+
+  // API Section
+  apiIntro: {
+    color: '#888',
+    marginBottom: '24px',
+    lineHeight: 1.6,
   },
-  link: {
-    padding: '10px 20px',
-    backgroundColor: '#000',
-    color: '#fff',
-    textDecoration: 'none',
-    fontWeight: 'bold',
+  apiNote: {
+    color: '#666',
+    fontSize: '14px',
+    marginBottom: '12px',
+  },
+  endpointSection: {
+    marginBottom: '32px',
   },
   endpoint: {
     display: 'flex',
     alignItems: 'center',
-    gap: '10px',
-    marginBottom: '10px',
+    gap: '12px',
+    marginBottom: '12px',
   },
-  method: {
-    padding: '4px 8px',
-    backgroundColor: '#00cc00',
-    color: '#fff',
-    fontWeight: 'bold',
-    fontSize: '12px',
+  methodGet: {
+    padding: '4px 10px',
+    backgroundColor: '#0f5132',
+    color: '#00ff00',
+    fontWeight: 700,
+    fontSize: '11px',
+    letterSpacing: '0.5px',
   },
-  methodPaid: {
-    padding: '4px 8px',
-    backgroundColor: '#cc9900',
-    color: '#fff',
-    fontWeight: 'bold',
-    fontSize: '12px',
+  endpointPath: {
+    color: '#ccc',
+    fontSize: '13px',
   },
-  authSection: {
-    marginBottom: '30px',
-    paddingBottom: '30px',
-    borderBottom: '2px solid #eee',
-  },
-  inputGroup: {
-    display: 'flex',
-    gap: '10px',
-    marginBottom: '15px',
-  },
-  input: {
-    flex: 1,
-    padding: '10px',
-    border: '2px solid #000',
-    fontFamily: 'monospace',
-    fontSize: '14px',
-  },
-  button: {
-    padding: '10px 20px',
-    backgroundColor: '#000',
-    color: '#fff',
-    border: 'none',
-    cursor: 'pointer',
-    fontFamily: 'monospace',
-    fontWeight: 'bold',
-  },
-  error: {
-    color: '#cc0000',
-    marginBottom: '15px',
-  },
-  features: {
-    display: 'grid',
-    gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))',
-    gap: '20px',
-    marginBottom: '40px',
-  },
-  feature: {
-    padding: '20px',
-    border: '4px solid #000',
-  },
-  featureTitle: {
-    fontSize: '16px',
-    fontWeight: 'bold',
-    marginBottom: '8px',
-  },
-  featureText: {
-    fontSize: '14px',
-    color: '#666',
-  },
-  contracts: {
-    marginBottom: '40px',
-  },
+
+  // Tables
   table: {
     width: '100%',
     borderCollapse: 'collapse',
-    border: '2px solid #000',
+    border: '1px solid #333',
+    marginTop: '12px',
+  },
+  th: {
+    padding: '12px 16px',
+    textAlign: 'left',
+    backgroundColor: '#0d0d0d',
+    color: '#00ff00',
+    fontWeight: 600,
+    fontSize: '12px',
+    textTransform: 'uppercase',
+    borderBottom: '1px solid #333',
   },
   td: {
-    padding: '12px',
-    borderBottom: '1px solid #000',
-    fontWeight: 'bold',
+    padding: '12px 16px',
+    borderBottom: '1px solid #222',
+    color: '#ccc',
+    fontSize: '13px',
   },
-  tdCode: {
-    padding: '12px',
-    borderBottom: '1px solid #000',
-    fontFamily: 'monospace',
+
+  // Prerequisites
+  prerequisitesGrid: {
+    display: 'grid',
+    gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))',
+    gap: '24px',
+  },
+  prerequisiteCard: {
+    padding: '24px',
+    backgroundColor: '#1a1a1a',
+    border: '1px solid #333',
+  },
+  prerequisiteIcon: {
+    width: '48px',
+    height: '48px',
+    backgroundColor: '#0d0d0d',
+    border: '2px solid #00ff00',
+    color: '#00ff00',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    fontWeight: 700,
+    fontSize: '14px',
+    marginBottom: '16px',
+  },
+  prerequisiteTitle: {
+    fontSize: '18px',
+    fontWeight: 600,
+    color: '#fff',
+    marginBottom: '8px',
+  },
+  prerequisiteText: {
+    color: '#888',
+    fontSize: '14px',
+    lineHeight: 1.6,
+    marginBottom: '16px',
+  },
+  prerequisiteLink: {
+    color: '#00ff00',
+    textDecoration: 'none',
+    fontSize: '14px',
+    fontWeight: 600,
+  },
+
+  // Cost Table
+  costTable: {
+    width: '100%',
+    borderCollapse: 'collapse',
+    border: '1px solid #333',
+  },
+  costTh: {
+    padding: '14px 20px',
+    textAlign: 'left',
+    backgroundColor: '#0d0d0d',
+    color: '#00ff00',
+    fontWeight: 600,
+    fontSize: '12px',
+    textTransform: 'uppercase',
+    borderBottom: '2px solid #00ff00',
+  },
+  costTd: {
+    padding: '14px 20px',
+    borderBottom: '1px solid #222',
+    color: '#ccc',
+    fontSize: '14px',
+  },
+  costTdPrice: {
+    padding: '14px 20px',
+    borderBottom: '1px solid #222',
+    color: '#00ff00',
+    fontSize: '14px',
+    fontWeight: 600,
+    textAlign: 'center',
+  },
+  costNote: {
+    marginTop: '16px',
+    padding: '12px 16px',
+    backgroundColor: '#1a1a0a',
+    border: '1px solid #333300',
+    color: '#cccc00',
+    fontSize: '13px',
+  },
+
+  // Network Info
+  networkGrid: {
+    display: 'grid',
+    gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))',
+    gap: '16px',
+    marginBottom: '32px',
+  },
+  networkItem: {
+    padding: '16px 20px',
+    backgroundColor: '#1a1a1a',
+    border: '1px solid #333',
+  },
+  networkLabel: {
+    display: 'block',
+    color: '#666',
+    fontSize: '12px',
+    textTransform: 'uppercase',
+    marginBottom: '6px',
+  },
+  networkValue: {
+    color: '#fff',
+    fontSize: '14px',
+    fontWeight: 600,
+    wordBreak: 'break-all',
+  },
+
+  // Contracts Table
+  contractsTitle: {
+    fontSize: '18px',
+    fontWeight: 600,
+    color: '#fff',
+    marginBottom: '16px',
+    marginTop: '0',
+  },
+  contractTable: {
+    width: '100%',
+    borderCollapse: 'collapse',
+    border: '1px solid #333',
+  },
+  contractLabel: {
+    padding: '14px 20px',
+    backgroundColor: '#0d0d0d',
+    color: '#888',
+    fontWeight: 600,
+    fontSize: '13px',
+    borderBottom: '1px solid #222',
+    width: '180px',
+  },
+  contractAddress: {
+    padding: '14px 20px',
+    borderBottom: '1px solid #222',
+    color: '#00ff00',
+    fontSize: '12px',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: '12px',
+  },
+
+  // Links Section
+  linksSection: {
+    marginBottom: '60px',
+  },
+  linksGrid: {
+    display: 'grid',
+    gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))',
+    gap: '16px',
+  },
+  linkCard: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: '16px',
+    padding: '20px',
+    backgroundColor: '#1a1a1a',
+    border: '1px solid #333',
+    textDecoration: 'none',
+    transition: 'all 0.2s',
+  },
+  linkIcon: {
+    width: '48px',
+    height: '48px',
+    backgroundColor: '#0d0d0d',
+    border: '1px solid #333',
+    color: '#00ff00',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    fontWeight: 700,
+    fontSize: '14px',
+    flexShrink: 0,
+  },
+  linkTitle: {
+    color: '#fff',
+    fontWeight: 600,
+    fontSize: '14px',
+    marginBottom: '4px',
+  },
+  linkDesc: {
+    color: '#666',
     fontSize: '12px',
   },
+
+  // Footer
   footer: {
-    display: 'flex',
-    gap: '20px',
-    justifyContent: 'center',
-    paddingTop: '20px',
-    borderTop: '4px solid #000',
+    textAlign: 'center',
+    paddingTop: '40px',
+    borderTop: '1px solid #333',
+    color: '#666',
+    fontSize: '14px',
   },
   footerLink: {
-    color: '#000',
+    color: '#00ff00',
     textDecoration: 'none',
-    fontWeight: 'bold',
+    marginTop: '12px',
+    display: 'inline-block',
+    fontWeight: 600,
   },
 };
 
