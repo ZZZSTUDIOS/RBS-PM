@@ -888,14 +888,17 @@ export default function LMSRAdmin() {
         creatorFee,
       });
 
-      // Refetch trades from database to update portfolio
-      refetchDbTrades();
-      refetchPortfolio();
-      refetchMarketInfo();
-      refetchBalance();
-
       // Sync prices to database for other users/markets list
       syncMarketPrices(tradeParams.marketAddress).catch(() => {});
+
+      // Small delay to ensure chain state is updated before refetching
+      await new Promise(resolve => setTimeout(resolve, 2000));
+
+      // Refetch all data - await the market info refetch to ensure UI updates
+      await refetchMarketInfo();
+      refetchDbTrades();
+      refetchPortfolio();
+      refetchBalance();
     }
   };
 

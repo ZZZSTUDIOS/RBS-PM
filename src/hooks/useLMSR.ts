@@ -1689,6 +1689,7 @@ export function useUnifiedMarketData(marketAddress: Address | undefined) {
           address: marketAddress,
           abi: LSLMSR_ABI,
           functionName: 'alpha',
+          blockTag: 'latest', // Force fresh read
         });
 
         // It's LS-LMSR
@@ -1697,6 +1698,7 @@ export function useUnifiedMarketData(marketAddress: Address | undefined) {
           address: marketAddress,
           abi: LSLMSR_ABI,
           functionName: 'getMarketInfo',
+          blockTag: 'latest', // Force fresh read
         }) as [string, bigint, Address, bigint, bigint, bigint, bigint, bigint, bigint, bigint, bigint, bigint, boolean, boolean];
 
         // Check if it's an ERC20 collateral market (has collateralDecimals function)
@@ -1707,6 +1709,7 @@ export function useUnifiedMarketData(marketAddress: Address | undefined) {
             address: marketAddress,
             abi: [{ name: 'collateralDecimals', type: 'function', inputs: [], outputs: [{ type: 'uint8' }], stateMutability: 'view' }],
             functionName: 'collateralDecimals',
+            blockTag: 'latest',
           }) as number;
           collateralDecimals = decimals;
           // If it has collateralDecimals, it's ERC20 - likely USDC
@@ -1736,6 +1739,7 @@ export function useUnifiedMarketData(marketAddress: Address | undefined) {
           address: marketAddress,
           abi: LMSR_ABI,
           functionName: 'getMarketInfo',
+          blockTag: 'latest', // Force fresh read
         }) as [string, bigint, Address, bigint, bigint, bigint, bigint, bigint, boolean, boolean];
 
         setMarketInfo({
