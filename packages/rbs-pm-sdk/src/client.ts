@@ -494,6 +494,9 @@ export class RBSPMClient {
 
   /**
    * Buy shares with USDC
+   *
+   * IMPORTANT: This method routes through x402-agent-trade endpoint to ensure
+   * all trades are tracked. Costs 0.0001 USDC for the API call + trade amount.
    */
   async buy(
     marketAddress: `0x${string}`,
@@ -505,37 +508,41 @@ export class RBSPMClient {
       throw new Error('Wallet not configured. Provide privateKey in constructor.');
     }
 
-    const amountInUnits = parseUnits(usdcAmount, USDC_DECIMALS);
-
-    // Ensure USDC approval
-    await this.ensureUSDCAllowance(marketAddress, amountInUnits);
-
-    // Execute buy
-    const hash = await this.walletClient.writeContract({
-      account: this.account,
-      chain: monadTestnet,
-      address: marketAddress,
-      abi: LSLMSR_ABI,
-      functionName: 'buy',
-      args: [isYes, amountInUnits, minShares],
+    // MUST go through x402 endpoint for tracking (costs 0.0001 USDC)
+    const instructions = await this.getTradeInstructions({
+      marketAddress,
+      direction: 'buy',
+      outcome: isYes ? 'yes' : 'no',
+      amount: usdcAmount,
+      minOutput: minShares.toString(),
     });
 
-    const receipt = await this.publicClient.waitForTransactionReceipt({ hash });
-
-    // Parse SharesPurchased event
-    let shares = 0n;
-    for (const log of receipt.logs) {
-      try {
-        // Would need proper event parsing
-        shares = amountInUnits; // Approximate
-      } catch {
-        continue;
-      }
+    // Execute approval if needed
+    if (instructions.approval) {
+      const approvalHash = await this.walletClient.sendTransaction({
+        account: this.account,
+        chain: monadTestnet,
+        to: instructions.approval.to as `0x${string}`,
+        data: instructions.approval.data as `0x${string}`,
+      });
+      await this.publicClient.waitForTransactionReceipt({ hash: approvalHash });
     }
+
+    // Execute trade using calldata from x402 endpoint
+    const hash = await this.walletClient.sendTransaction({
+      account: this.account,
+      chain: monadTestnet,
+      to: instructions.trade.to as `0x${string}`,
+      data: instructions.trade.data as `0x${string}`,
+    });
+
+    await this.publicClient.waitForTransactionReceipt({ hash });
+
+    const amountInUnits = parseUnits(usdcAmount, USDC_DECIMALS);
 
     return {
       txHash: hash,
-      shares,
+      shares: amountInUnits, // Approximate, would need event parsing
       cost: amountInUnits,
       isYes,
       isBuy: true,
@@ -544,6 +551,9 @@ export class RBSPMClient {
 
   /**
    * Sell shares for USDC
+   *
+   * IMPORTANT: This method routes through x402-agent-trade endpoint to ensure
+   * all trades are tracked. Costs 0.0001 USDC for the API call.
    */
   async sell(
     marketAddress: `0x${string}`,
@@ -555,7 +565,19 @@ export class RBSPMClient {
       throw new Error('Wallet not configured. Provide privateKey in constructor.');
     }
 
-    // Get the token address and approve
+    // Convert shares to decimal string (shares have 18 decimals)
+    const sharesDecimal = formatUnits(shares, 18);
+
+    // MUST go through x402 endpoint for tracking (costs 0.0001 USDC)
+    const instructions = await this.getTradeInstructions({
+      marketAddress,
+      direction: 'sell',
+      outcome: isYes ? 'yes' : 'no',
+      amount: sharesDecimal,
+      minOutput: minPayout.toString(),
+    });
+
+    // For sells, we need to approve the share token first
     const tokenAddress = await this.publicClient.readContract({
       address: marketAddress,
       abi: LSLMSR_ABI,
@@ -581,14 +603,12 @@ export class RBSPMClient {
       await this.publicClient.waitForTransactionReceipt({ hash: approveHash });
     }
 
-    // Execute sell
-    const hash = await this.walletClient.writeContract({
+    // Execute trade using calldata from x402 endpoint
+    const hash = await this.walletClient.sendTransaction({
       account: this.account,
       chain: monadTestnet,
-      address: marketAddress,
-      abi: LSLMSR_ABI,
-      functionName: 'sell',
-      args: [isYes, shares, minPayout],
+      to: instructions.trade.to as `0x${string}`,
+      data: instructions.trade.data as `0x${string}`,
     });
 
     await this.publicClient.waitForTransactionReceipt({ hash });
@@ -604,19 +624,46 @@ export class RBSPMClient {
 
   /**
    * Redeem winning shares after resolution
+   *
+   * IMPORTANT: Routes through x402-redeem endpoint for tracking (0.0001 USDC)
    */
   async redeem(marketAddress: `0x${string}`): Promise<`0x${string}`> {
-    if (!this.walletClient) {
+    if (!this.walletClient || !this.account) {
       throw new Error('Wallet not configured. Provide privateKey in constructor.');
     }
 
-    const hash = await this.walletClient.writeContract({
-      account: this.account!,
+    // MUST go through x402 endpoint for tracking
+    const paymentFetch = this.getPaymentFetch();
+
+    const response = await paymentFetch(`${this.apiUrl}/functions/v1/x402-redeem`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        marketAddress,
+        userAddress: this.account.address,
+      }),
+    });
+
+    if (response.status === 402) {
+      throw new Error('Payment required for redeem instructions (0.0001 USDC)');
+    }
+
+    const data = await response.json() as {
+      success: boolean;
+      error?: string;
+      transaction?: { to: string; data: string };
+    };
+
+    if (!data.success) {
+      throw new Error(data.error || 'Failed to get redeem instructions');
+    }
+
+    // Execute the redeem transaction
+    const hash = await this.walletClient.sendTransaction({
+      account: this.account,
       chain: monadTestnet,
-      address: marketAddress,
-      abi: LSLMSR_ABI,
-      functionName: 'redeem',
-      args: [],
+      to: data.transaction!.to as `0x${string}`,
+      data: data.transaction!.data as `0x${string}`,
     });
 
     await this.publicClient.waitForTransactionReceipt({ hash });
@@ -991,8 +1038,7 @@ export class RBSPMClient {
   /**
    * Initialize a deployed market with initial liquidity
    *
-   * After deploying a market contract, this must be called before trading can begin.
-   * The caller must have approved USDC for the market contract.
+   * IMPORTANT: Routes through x402-initialize endpoint for tracking (0.0001 USDC)
    *
    * @param marketAddress The deployed market contract address
    * @param usdcAmount Initial liquidity in USDC (e.g., "10" for 10 USDC)
@@ -1002,19 +1048,52 @@ export class RBSPMClient {
       throw new Error('Wallet not configured. Provide privateKey in constructor.');
     }
 
-    const amountInUnits = parseUnits(usdcAmount, USDC_DECIMALS);
+    // MUST go through x402 endpoint for tracking
+    const paymentFetch = this.getPaymentFetch();
 
-    // Ensure USDC approval
-    await this.ensureUSDCAllowance(marketAddress, amountInUnits);
+    const response = await paymentFetch(`${this.apiUrl}/functions/v1/x402-initialize`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        marketAddress,
+        initialLiquidity: usdcAmount,
+        callerAddress: this.account.address,
+      }),
+    });
 
-    // Initialize market
-    const hash = await this.walletClient.writeContract({
+    if (response.status === 402) {
+      throw new Error('Payment required for initialize instructions (0.0001 USDC)');
+    }
+
+    const data = await response.json() as {
+      success: boolean;
+      error?: string;
+      transactions?: Array<{ to: string; data: string; type: string }>;
+    };
+
+    if (!data.success) {
+      throw new Error(data.error || 'Failed to get initialize instructions');
+    }
+
+    // Execute approval first
+    const approveTx = data.transactions!.find(tx => tx.type === 'approve');
+    if (approveTx) {
+      const approveHash = await this.walletClient.sendTransaction({
+        account: this.account,
+        chain: monadTestnet,
+        to: approveTx.to as `0x${string}`,
+        data: approveTx.data as `0x${string}`,
+      });
+      await this.publicClient.waitForTransactionReceipt({ hash: approveHash });
+    }
+
+    // Execute initialize
+    const initTx = data.transactions!.find(tx => tx.type === 'initialize');
+    const hash = await this.walletClient.sendTransaction({
       account: this.account,
       chain: monadTestnet,
-      address: marketAddress,
-      abi: LSLMSR_ABI,
-      functionName: 'initialize',
-      args: [amountInUnits],
+      to: initTx!.to as `0x${string}`,
+      data: initTx!.data as `0x${string}`,
     });
 
     await this.publicClient.waitForTransactionReceipt({ hash });

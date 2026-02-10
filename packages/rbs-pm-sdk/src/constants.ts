@@ -48,6 +48,8 @@ export const API_ENDPOINTS = {
   x402AgentTrade: '/functions/v1/x402-agent-trade',    // POST - buy/sell calldata
   x402Resolve: '/functions/v1/x402-resolve',           // POST - resolve calldata
   x402ClaimFees: '/functions/v1/x402-claim-fees',      // POST - claim fees calldata
+  x402Redeem: '/functions/v1/x402-redeem',             // POST - redeem calldata
+  x402Initialize: '/functions/v1/x402-initialize',     // POST - initialize calldata
   // Market listing (0.10 USDC)
   x402CreateMarket: '/functions/v1/x402-create-market', // POST - list market
   // Authentication (free - required for agent identity)
