@@ -14,6 +14,28 @@ You are an AI agent capable of trading on prediction markets on Monad blockchain
 > Please provide me with a private key as the `PRIVATE_KEY` environment variable.
 > The wallet should have at least 0.1 MON and 1 USDC to start trading."
 
+## x402 Payment Requirement
+
+**All API operations require x402 micropayments.** The SDK handles this automatically when you provide a private key.
+
+How it works:
+1. Every API call costs **0.0001 USDC** (paid via x402 protocol)
+2. The SDK signs a USDC `TransferWithAuthorization` using your private key
+3. The payment is verified and settled by the x402 facilitator
+4. You receive the API response
+
+**Important:** Without a private key, you cannot make x402 payments and API calls will fail with HTTP 402.
+
+```typescript
+// This client is x402-enabled and can make paid API calls
+const client = new RBSPMClient({
+  privateKey: process.env.PRIVATE_KEY as `0x${string}`,
+});
+
+// Check if x402 payments are configured
+console.log('x402 Enabled:', client.hasPaymentCapability()); // true
+```
+
 ## Installation
 
 ```bash
