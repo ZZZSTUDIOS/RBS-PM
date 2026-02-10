@@ -4,7 +4,7 @@
 import { useState, useCallback } from 'react';
 import { useAccount, usePublicClient, useWalletClient } from 'wagmi';
 import { parseUnits, formatUnits, type Address } from 'viem';
-import { ADDRESSES, ERC20_ABI } from '../config/wagmi';
+import { ADDRESSES, ERC20_ABI, monadTestnet } from '../config/wagmi';
 
 export interface LSLMSR_ERC20_MarketConfig {
   question: string;
@@ -240,6 +240,8 @@ export function useLSLMSR_ERC20() {
       const amountInUnits = parseUnits(amount, USDC_DECIMALS);
 
       const hash = await walletClient.writeContract({
+        account: address,
+        chain: monadTestnet,
         address: ADDRESSES.USDC,
         abi: ERC20_ABI,
         functionName: 'approve',
@@ -305,6 +307,8 @@ export function useLSLMSR_ERC20() {
 
         // Execute buy
         const hash = await walletClient.writeContract({
+          account: address,
+          chain: monadTestnet,
           address: marketAddress,
           abi: LSLMSR_ERC20_ABI,
           functionName: 'buy',
@@ -348,6 +352,8 @@ export function useLSLMSR_ERC20() {
 
         if (tokenAllowance < shares) {
           const approveHash = await walletClient.writeContract({
+            account: address,
+            chain: monadTestnet,
             address: tokenAddress,
             abi: ERC20_ABI,
             functionName: 'approve',
@@ -358,6 +364,8 @@ export function useLSLMSR_ERC20() {
 
         // Execute sell
         const hash = await walletClient.writeContract({
+          account: address,
+          chain: monadTestnet,
           address: marketAddress,
           abi: LSLMSR_ERC20_ABI,
           functionName: 'sell',
@@ -376,11 +384,13 @@ export function useLSLMSR_ERC20() {
   // Redeem winning shares
   const redeem = useCallback(
     async (marketAddress: Address) => {
-      if (!walletClient) throw new Error('Wallet not connected');
+      if (!walletClient || !address) throw new Error('Wallet not connected');
 
       setIsLoading(true);
       try {
         const hash = await walletClient.writeContract({
+          account: address,
+          chain: monadTestnet,
           address: marketAddress,
           abi: LSLMSR_ERC20_ABI,
           functionName: 'redeem',
@@ -393,7 +403,7 @@ export function useLSLMSR_ERC20() {
         setIsLoading(false);
       }
     },
-    [walletClient, publicClient]
+    [walletClient, publicClient, address]
   );
 
   // Get market info
