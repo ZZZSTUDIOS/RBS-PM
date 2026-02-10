@@ -10,7 +10,7 @@ import {
   useSwitchChain,
   usePublicClient,
 } from 'wagmi';
-import { parseUnits, formatEther, parseEther, type Address } from 'viem';
+import { parseUnits, formatUnits, formatEther, parseEther, type Address } from 'viem';
 import {
   useTransactionLog,
   useLSLMSRMarketCreate,
@@ -24,7 +24,7 @@ import {
   type LSLMSRMarketConfig,
 } from '../hooks/useLMSR';
 import { useLSLMSR_ERC20 } from '../hooks/useLMSR_ERC20';
-import { monadTestnet } from '../config/wagmi';
+import { monadTestnet, ADDRESSES } from '../config/wagmi';
 import { useMarkets } from '../hooks/useMarkets';
 import { useUserSync } from '../hooks/useUserSync';
 import { usePositions } from '../hooks/usePositions';
@@ -357,6 +357,9 @@ export default function LMSRAdmin() {
   const [userNoBalance, setUserNoBalance] = useState<string>('0');
   const [estimatedPayout, setEstimatedPayout] = useState<string>('0');
 
+  // USDC balance for trading
+  const [usdcBalance, setUsdcBalance] = useState<string>('0');
+
   // Resolve tab token balances (stored for future UI display)
   const [_resolveYesBalance, setResolveYesBalance] = useState<string>('0');
   const [_resolveNoBalance, setResolveNoBalance] = useState<string>('0');
@@ -421,6 +424,32 @@ export default function LMSRAdmin() {
       addLog(`Wrong network. Please switch to Monad Testnet`, 'error');
     }
   }, [isConnected, chainId, addLog]);
+
+  // Fetch USDC balance
+  useEffect(() => {
+    const fetchUSDCBalance = async () => {
+      if (!publicClient || !address) {
+        setUsdcBalance('0');
+        return;
+      }
+      try {
+        const bal = await publicClient.readContract({
+          address: ADDRESSES.USDC,
+          abi: ERC20_ABI,
+          functionName: 'balanceOf',
+          args: [address],
+        }) as bigint;
+        setUsdcBalance(formatUnits(bal, 6)); // USDC has 6 decimals
+      } catch (err) {
+        console.error('Error fetching USDC balance:', err);
+        setUsdcBalance('0');
+      }
+    };
+
+    fetchUSDCBalance();
+    const interval = setInterval(fetchUSDCBalance, 5000); // Refresh every 5 seconds
+    return () => clearInterval(interval);
+  }, [publicClient, address]);
 
   // Load market info when trade address changes
   useEffect(() => {
@@ -900,7 +929,7 @@ export default function LMSRAdmin() {
           </div>
           {isConnected && address && (
             <div style={styles.walletBadge}>
-              {address.slice(0, 6)}...{address.slice(-4)} | {balance ? parseFloat(formatEther(balance.value)).toFixed(4) : '0'} MON
+              {address.slice(0, 6)}...{address.slice(-4)} | {parseFloat(usdcBalance).toFixed(2)} USDC
             </div>
           )}
         </div>
@@ -971,7 +1000,8 @@ export default function LMSRAdmin() {
                   <div style={styles.card}>
                     <InfoRow label="STATUS" value="● CONNECTED" valueColor="#00ff00" />
                     <InfoRow label="ADDRESS" value={address || ''} mono />
-                    <InfoRow label="BALANCE" value={`${balance ? parseFloat(formatEther(balance.value)).toFixed(4) : '0'} USDC`} />
+                    <InfoRow label="USDC BALANCE" value={`${parseFloat(usdcBalance).toFixed(4)} USDC`} />
+                    <InfoRow label="GAS BALANCE" value={`${balance ? parseFloat(formatEther(balance.value)).toFixed(4) : '0'} MON`} />
                     <InfoRow label="CHAIN ID" value={chainId?.toString() || ''} />
                     <div style={{ marginTop: '16px' }}>
                       <button
