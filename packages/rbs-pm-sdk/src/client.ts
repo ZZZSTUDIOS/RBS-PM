@@ -538,6 +538,14 @@ export class RBSPMClient {
 
     await this.publicClient.waitForTransactionReceipt({ hash });
 
+    // Sync prices to database after trade completes (via x402-prices)
+    // This ensures the frontend shows accurate prices
+    try {
+      await this.getPrices(marketAddress);
+    } catch (syncErr) {
+      console.log('Price sync skipped:', syncErr);
+    }
+
     const amountInUnits = parseUnits(usdcAmount, USDC_DECIMALS);
 
     return {
@@ -612,6 +620,13 @@ export class RBSPMClient {
     });
 
     await this.publicClient.waitForTransactionReceipt({ hash });
+
+    // Sync prices to database after trade completes (via x402-prices)
+    try {
+      await this.getPrices(marketAddress);
+    } catch (syncErr) {
+      console.log('Price sync skipped:', syncErr);
+    }
 
     return {
       txHash: hash,

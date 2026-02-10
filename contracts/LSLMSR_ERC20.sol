@@ -225,16 +225,33 @@ contract LSLMSR_ERC20 is Ownable, ReentrancyGuard, Pausable {
 
     function getYesPrice() public view returns (uint256) {
         uint256 b = liquidityParameter();
-        uint256 expYes = _exp((yesShares * 1e18) / b);
-        uint256 expNo = _exp((noShares * 1e18) / b);
-        return (expYes * 1e18) / (expYes + expNo);
+        // Use identity: exp(a)/(exp(a)+exp(b)) = 1/(1+exp(b-a))
+        // This keeps exp argument bounded to the difference, not absolute values
+        if (yesShares >= noShares) {
+            uint256 diff = ((yesShares - noShares) * 1e18) / b;
+            uint256 expDiff = _exp(diff);
+            // yesPrice = expDiff / (expDiff + 1) = expDiff * 1e18 / (expDiff + 1e18)
+            return (expDiff * 1e18) / (expDiff + 1e18);
+        } else {
+            uint256 diff = ((noShares - yesShares) * 1e18) / b;
+            uint256 expDiff = _exp(diff);
+            // yesPrice = 1 / (1 + expDiff) = 1e18 / (1e18 + expDiff)
+            return (1e18 * 1e18) / (1e18 + expDiff);
+        }
     }
 
     function getNoPrice() public view returns (uint256) {
         uint256 b = liquidityParameter();
-        uint256 expYes = _exp((yesShares * 1e18) / b);
-        uint256 expNo = _exp((noShares * 1e18) / b);
-        return (expNo * 1e18) / (expYes + expNo);
+        // Use identity: exp(b)/(exp(a)+exp(b)) = 1/(1+exp(a-b))
+        if (noShares >= yesShares) {
+            uint256 diff = ((noShares - yesShares) * 1e18) / b;
+            uint256 expDiff = _exp(diff);
+            return (expDiff * 1e18) / (expDiff + 1e18);
+        } else {
+            uint256 diff = ((yesShares - noShares) * 1e18) / b;
+            uint256 expDiff = _exp(diff);
+            return (1e18 * 1e18) / (1e18 + expDiff);
+        }
     }
 
     function getPriceSum() public view returns (uint256) {

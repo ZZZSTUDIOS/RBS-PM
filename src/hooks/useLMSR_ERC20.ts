@@ -6,6 +6,22 @@ import { useAccount, usePublicClient, useWalletClient } from 'wagmi';
 import { parseUnits, formatUnits, type Address } from 'viem';
 import { ADDRESSES, ERC20_ABI, monadTestnet } from '../config/wagmi';
 
+// Supabase Edge Function URL for price sync
+const SYNC_PRICES_URL = 'https://qkcytrdhdtemyphsswou.supabase.co/functions/v1/sync-market-prices';
+
+// Sync prices to database after trades (fire and forget)
+async function syncPricesToDatabase(marketAddress: string): Promise<void> {
+  try {
+    await fetch(SYNC_PRICES_URL, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ marketAddress }),
+    });
+  } catch (err) {
+    console.log('Price sync skipped:', err);
+  }
+}
+
 export interface LSLMSR_ERC20_MarketConfig {
   question: string;
   resolutionDate: string;
@@ -316,6 +332,10 @@ export function useLSLMSR_ERC20() {
         });
 
         const receipt = await publicClient?.waitForTransactionReceipt({ hash });
+
+        // Sync prices to database after trade (for frontend accuracy)
+        syncPricesToDatabase(marketAddress);
+
         return { hash, receipt };
       } finally {
         setIsLoading(false);
@@ -373,6 +393,10 @@ export function useLSLMSR_ERC20() {
         });
 
         const receipt = await publicClient?.waitForTransactionReceipt({ hash });
+
+        // Sync prices to database after trade (for frontend accuracy)
+        syncPricesToDatabase(marketAddress);
+
         return { hash, receipt };
       } finally {
         setIsLoading(false);
