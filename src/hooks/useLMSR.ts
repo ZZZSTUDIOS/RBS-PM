@@ -1956,14 +1956,18 @@ export function useUnifiedEstimateShares() {
           grossPayment: grossPayment.toString(),
         });
 
-        // Deduct 1% trading fee
+        // Deduct 0.5% trading fee
         const paymentAfterFee = grossPayment - (grossPayment * TRADING_FEE_BPS) / FEE_DENOMINATOR;
-        console.log('Payment after fee:', paymentAfterFee.toString());
 
-        // Calculate shares using JS implementation
+        // Scale payment to 18-decimal share scale (matches Solidity SHARE_SCALE)
+        const shareScale = BigInt(10 ** (18 - collateralDecimals));
+        const paymentInShareScale = paymentAfterFee * shareScale;
+        console.log('Payment in share scale:', paymentInShareScale.toString());
+
+        // Calculate shares using JS implementation (all values now in 18-decimal)
         const shares = calculateSharesForPayment(
           isYes,
-          paymentAfterFee,
+          paymentInShareScale,
           yesShares,
           noShares,
           alpha,
