@@ -1358,6 +1358,59 @@ export default function LMSRAdmin() {
                 )}
               </div>
 
+              {/* RECENT TRADES for current market - shown above trade form for visibility */}
+              {tradeParams.marketAddress && (() => {
+                const recentTrades = tradesByMarket[tradeParams.marketAddress.toLowerCase()] || [];
+                if (recentTrades.length === 0) return null;
+                return (
+                  <div style={{ ...styles.card, marginTop: '16px' }}>
+                    <div style={{ fontWeight: 'bold', fontSize: theme.fontSizes.xxs, letterSpacing: '1.5px', color: theme.colors.textDim, marginBottom: '10px' }}>
+                      RECENT TRADES
+                    </div>
+                    <div style={{ display: 'grid', gap: '6px' }}>
+                      {recentTrades.map(t => (
+                        <div key={t.id} style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: theme.fontSizes.xxs }}>
+                          <span style={{
+                            padding: '1px 6px',
+                            border: `1px solid ${t.trade_type === 'BUY' ? theme.colors.primary : theme.colors.warning}`,
+                            color: t.trade_type === 'BUY' ? theme.colors.primary : theme.colors.warning,
+                            fontWeight: 'bold',
+                            minWidth: '32px',
+                            textAlign: 'center',
+                          }}>
+                            {t.trade_type}
+                          </span>
+                          <span style={{
+                            padding: '1px 6px',
+                            border: `1px solid ${t.outcome === 'YES' ? theme.colors.primary : theme.colors.warning}`,
+                            color: t.outcome === 'YES' ? theme.colors.primary : theme.colors.warning,
+                            fontWeight: 'bold',
+                            minWidth: '28px',
+                            textAlign: 'center',
+                          }}>
+                            {t.outcome}
+                          </span>
+                          <span style={{ color: theme.colors.textWhite, fontWeight: 'bold' }}>
+                            {parseFloat(t.amount).toFixed(2)} USDC
+                          </span>
+                          <span style={{ color: theme.colors.textDim, marginLeft: 'auto' }}>
+                            {timeAgo(t.created_at)}
+                          </span>
+                          <a
+                            href={`${monadTestnet.blockExplorers.default.url}/tx/${t.tx_hash}`}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            style={{ color: theme.colors.textDim, textDecoration: 'none' }}
+                          >
+                            →
+                          </a>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                );
+              })()}
+
               {/* Show resolved state or trading interface */}
               {marketInfo?.resolved ? (
                 <div style={{ ...styles.card, marginTop: '24px', borderColor: theme.colors.highlight }}>
@@ -1718,63 +1771,6 @@ export default function LMSRAdmin() {
               </div>
               )}
 
-              {/* RECENT TRADES for current market */}
-              {tradeParams.marketAddress && (() => {
-                const recentTrades = tradesByMarket[tradeParams.marketAddress.toLowerCase()] || [];
-                return (
-                  <div style={{ ...styles.card, marginTop: '16px' }}>
-                    <div style={{ fontWeight: 'bold', fontSize: theme.fontSizes.xxs, letterSpacing: '1.5px', color: theme.colors.textDim, marginBottom: '10px' }}>
-                      RECENT TRADES
-                    </div>
-                    {recentTrades.length === 0 ? (
-                      <div style={{ color: theme.colors.textDisabled, fontSize: theme.fontSizes.xxs, fontStyle: 'italic' }}>
-                        No trades yet for this market
-                      </div>
-                    ) : (
-                      <div style={{ display: 'grid', gap: '6px' }}>
-                        {recentTrades.map(t => (
-                          <div key={t.id} style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: theme.fontSizes.xxs }}>
-                            <span style={{
-                              padding: '1px 6px',
-                              border: `1px solid ${t.trade_type === 'BUY' ? theme.colors.primary : theme.colors.warning}`,
-                              color: t.trade_type === 'BUY' ? theme.colors.primary : theme.colors.warning,
-                              fontWeight: 'bold',
-                              minWidth: '32px',
-                              textAlign: 'center',
-                            }}>
-                              {t.trade_type}
-                            </span>
-                            <span style={{
-                              padding: '1px 6px',
-                              border: `1px solid ${t.outcome === 'YES' ? theme.colors.primary : theme.colors.warning}`,
-                              color: t.outcome === 'YES' ? theme.colors.primary : theme.colors.warning,
-                              fontWeight: 'bold',
-                              minWidth: '28px',
-                              textAlign: 'center',
-                            }}>
-                              {t.outcome}
-                            </span>
-                            <span style={{ color: theme.colors.textWhite, fontWeight: 'bold' }}>
-                              {parseFloat(t.amount).toFixed(2)} USDC
-                            </span>
-                            <span style={{ color: theme.colors.textDim, marginLeft: 'auto' }}>
-                              {timeAgo(t.created_at)}
-                            </span>
-                            <a
-                              href={`${monadTestnet.blockExplorers.default.url}/tx/${t.tx_hash}`}
-                              target="_blank"
-                              rel="noopener noreferrer"
-                              style={{ color: theme.colors.textDim, textDecoration: 'none' }}
-                            >
-                              →
-                            </a>
-                          </div>
-                        ))}
-                      </div>
-                    )}
-                  </div>
-                );
-              })()}
             </div>
           )}
 

@@ -56,6 +56,7 @@ export const API_ENDPOINTS = {
   // Market creation (0.0001 USDC)
   x402CreateMarket: '/functions/v1/x402-create-market', // POST - list market in discovery
   x402DeployMarket: '/functions/v1/x402-deploy-market', // POST - deploy new market via factory
+  x402ConfirmTrade: '/functions/v1/x402-confirm-trade', // POST - confirm trade (write to DB)
   // Authentication (free - required for agent identity)
   authMoltbook: '/functions/v1/auth-moltbook',
 } as const;

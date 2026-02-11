@@ -356,7 +356,11 @@ export function useMarketTrades(marketAddresses: string[]) {
     };
 
     fetchTrades();
-    return () => { cancelled = true; };
+
+    // Poll every 30 seconds for new trades
+    const interval = setInterval(fetchTrades, 30_000);
+
+    return () => { cancelled = true; clearInterval(interval); };
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [addressesKey]);
 

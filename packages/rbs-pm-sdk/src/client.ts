@@ -776,12 +776,11 @@ export class RBSPMClient {
 
     await this.publicClient.waitForTransactionReceipt({ hash });
 
-    // Sync prices to database after trade completes (via x402-prices)
-    // This ensures the frontend shows accurate prices
+    // Confirm trade in database (best-effort, don't fail the trade)
     try {
-      await this.getPrices(marketAddress);
-    } catch (syncErr) {
-      console.log('Price sync skipped:', syncErr);
+      await this.confirmTrade(hash, marketAddress);
+    } catch (confirmErr) {
+      console.log('Trade confirmation skipped:', confirmErr);
     }
 
     const amountInUnits = parseUnits(usdcAmount, USDC_DECIMALS);
@@ -869,11 +868,11 @@ export class RBSPMClient {
 
     await this.publicClient.waitForTransactionReceipt({ hash });
 
-    // Sync prices to database after trade completes (via x402-prices)
+    // Confirm trade in database (best-effort, don't fail the trade)
     try {
-      await this.getPrices(marketAddress);
+      await this.confirmTrade(hash, marketAddress);
     } catch {
-      // Price sync is best-effort, don't fail the trade
+      // Trade confirmation is best-effort, don't fail the trade
     }
 
     return {
@@ -1459,6 +1458,32 @@ export class RBSPMClient {
 
     await this.publicClient.waitForTransactionReceipt({ hash });
     return hash;
+  }
+
+  // ==================== Trade Confirmation ====================
+
+  /**
+   * Confirm a trade by recording it in the database (x402 protected - 0.0001 USDC)
+   * Called automatically after buy/sell to sync trades with the frontend.
+   */
+  private async confirmTrade(txHash: `0x${string}`, marketAddress: `0x${string}`): Promise<void> {
+    const paymentFetch = this.getPaymentFetch();
+
+    const response = await paymentFetch(`${this.apiUrl}${API_ENDPOINTS.x402ConfirmTrade}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ txHash, marketAddress }),
+    });
+
+    if (!response.ok) {
+      const data = await response.json() as { error?: string };
+      throw new Error(data.error || `Confirm trade failed: HTTP ${response.status}`);
+    }
+
+    const data = await response.json() as { success: boolean; trade?: Record<string, unknown> };
+    if (data.success) {
+      console.log(`Trade confirmed in DB: ${data.trade?.tradeType} ${data.trade?.outcome} ${data.trade?.shares} shares`);
+    }
   }
 
   // ==================== Utility ====================
