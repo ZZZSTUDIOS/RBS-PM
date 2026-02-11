@@ -1244,7 +1244,12 @@ export default function LMSRAdmin() {
                 )}
 
                 {/* Token Pricing Display */}
-                {marketInfo && (
+                {marketInfo && (() => {
+                  // Use DB probability (from indexer) for consistent pricing across UI
+                  const dbPrices = selectedMarket ? marketPrices[selectedMarket.toLowerCase()] : null;
+                  const yesPct = dbPrices ? (dbPrices.yesPrice * 100) : (Number(marketInfo.yesPrice) / (Number(marketInfo.yesPrice) + Number(marketInfo.noPrice)) * 100);
+                  const noPct = dbPrices ? (dbPrices.noPrice * 100) : (Number(marketInfo.noPrice) / (Number(marketInfo.yesPrice) + Number(marketInfo.noPrice)) * 100);
+                  return (
                   <div style={{ marginTop: '16px' }}>
                     <div style={{ marginBottom: '12px', color: theme.colors.textMuted, fontSize: theme.fontSizes.small }}>
                       {marketInfo.question}
@@ -1261,10 +1266,10 @@ export default function LMSRAdmin() {
                       }}>
                         <div style={{ color: theme.colors.textDim, fontSize: theme.fontSizes.xs, marginBottom: '8px' }}>{yesSymbol} TOKEN</div>
                         <div style={{ color: theme.colors.primary, fontSize: theme.fontSizes.displayLg, fontWeight: 'bold' }}>
-                          {(Number(marketInfo.yesPrice) / (Number(marketInfo.yesPrice) + Number(marketInfo.noPrice)) * 100).toFixed(1)}%
+                          {yesPct.toFixed(1)}%
                         </div>
                         <div style={{ color: theme.colors.primary, fontSize: theme.fontSizes.small, marginTop: '4px' }}>
-                          {(Number(marketInfo.yesPrice) / 1e18).toFixed(4)} USDC
+                          {(dbPrices?.yesPrice ?? Number(marketInfo.yesPrice) / 1e18).toFixed(4)} USDC
                         </div>
                         <div style={{ color: theme.colors.textDim, fontSize: theme.fontSizes.xxs, marginTop: '8px' }}>
                           {parseFloat(formatEther(marketInfo.yesShares)).toFixed(2)} shares
@@ -1280,10 +1285,10 @@ export default function LMSRAdmin() {
                       }}>
                         <div style={{ color: theme.colors.textDim, fontSize: theme.fontSizes.xs, marginBottom: '8px' }}>{noSymbol} TOKEN</div>
                         <div style={{ color: theme.colors.warning, fontSize: theme.fontSizes.displayLg, fontWeight: 'bold' }}>
-                          {(Number(marketInfo.noPrice) / (Number(marketInfo.yesPrice) + Number(marketInfo.noPrice)) * 100).toFixed(1)}%
+                          {noPct.toFixed(1)}%
                         </div>
                         <div style={{ color: theme.colors.warning, fontSize: theme.fontSizes.small, marginTop: '4px' }}>
-                          {(Number(marketInfo.noPrice) / 1e18).toFixed(4)} USDC
+                          {(dbPrices?.noPrice ?? Number(marketInfo.noPrice) / 1e18).toFixed(4)} USDC
                         </div>
                         <div style={{ color: theme.colors.textDim, fontSize: theme.fontSizes.xxs, marginTop: '8px' }}>
                           {parseFloat(formatEther(marketInfo.noShares)).toFixed(2)} shares
@@ -1295,7 +1300,7 @@ export default function LMSRAdmin() {
                     <div style={{ marginBottom: '16px' }}>
                       <div style={{ display: 'flex', height: '24px', border: `1px solid ${theme.colors.border}`, overflow: 'hidden' }}>
                         <div style={{
-                          width: `${(Number(marketInfo.yesPrice) / (Number(marketInfo.yesPrice) + Number(marketInfo.noPrice)) * 100)}%`,
+                          width: `${yesPct}%`,
                           backgroundColor: theme.colors.primary,
                           display: 'flex',
                           alignItems: 'center',
@@ -1332,7 +1337,8 @@ export default function LMSRAdmin() {
                       />
                     </div>
                   </div>
-                )}
+                  );
+                })()}
               </div>
 
               {/* RECENT TRADES for current market - shown above trade form for visibility */}
