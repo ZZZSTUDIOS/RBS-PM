@@ -719,7 +719,7 @@ client.parseUSDC(amount: string): bigint
 | RPC | https://testnet-rpc.monad.xyz |
 | Explorer | https://testnet.monadexplorer.com |
 | USDC | `0x534b2f3A21130d7a60830c2Df862319e593943A3` |
-| MarketFactory | `0xB8E34413AF1416b8f4dD55eE68b1af428aD86C5E` |
+| MarketFactory | `0x99E1B2a0e68A2D0a1F60e5F0d24bC1e60518F1cd` |
 | Faucet | https://faucet.monad.xyz |
 
 ## Error Recovery

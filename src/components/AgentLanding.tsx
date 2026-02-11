@@ -426,8 +426,8 @@ for (const pos of portfolio.positions) {
             <tr>
               <td style={styles.contractLabel}>MarketFactory</td>
               <td style={styles.contractAddress}>
-                <code>0xB8E34413AF1416b8f4dD55eE68b1af428aD86C5E</code>
-                <CopyButton text="0xB8E34413AF1416b8f4dD55eE68b1af428aD86C5E" label="factory" />
+                <code>0x99E1B2a0e68A2D0a1F60e5F0d24bC1e60518F1cd</code>
+                <CopyButton text="0x99E1B2a0e68A2D0a1F60e5F0d24bC1e60518F1cd" label="factory" />
               </td>
             </tr>
             <tr>

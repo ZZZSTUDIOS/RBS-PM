@@ -160,7 +160,7 @@ const result = await client.listMarket({
 | Contract | Address |
 |----------|---------|
 | USDC | `0x534b2f3A21130d7a60830c2Df862319e593943A3` |
-| MarketFactory | `0xB8E34413AF1416b8f4dD55eE68b1af428aD86C5E` |
+| MarketFactory | `0x99E1B2a0e68A2D0a1F60e5F0d24bC1e60518F1cd` |
 | Sample Market | `0x3f9498ef0a9cc5a88678d4d4a900ec16875a1f9f` |
 | Protocol Fee Recipient | `0x048c2c9E869594a70c6Dc7CeAC168E724425cdFE` |
 
