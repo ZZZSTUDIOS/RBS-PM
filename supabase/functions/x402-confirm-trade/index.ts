@@ -315,6 +315,55 @@ serve(async (req: Request) => {
       console.log("Agent intent update skipped:", intentErr);
     }
 
+    // Update market prices in Supabase (fetch fresh on-chain data)
+    try {
+      const marketInfoResp = await fetch(RPC_URL, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          jsonrpc: "2.0",
+          id: 1,
+          method: "eth_call",
+          params: [
+            {
+              to: body.marketAddress,
+              // getMarketInfo() selector
+              data: "0x23341a05",
+            },
+            "latest",
+          ],
+        }),
+      });
+      const marketInfoResult = await marketInfoResp.json();
+      if (marketInfoResult.result && marketInfoResult.result !== "0x") {
+        const d = marketInfoResult.result.slice(2);
+        // Offsets: yesPrice at index 3 (slot 3*64=192), noPrice at 4 (256),
+        // yesShares at 7 (448), noShares at 8 (512), totalCollateral at 9 (576),
+        // resolved at 12 (768), yesWins at 13 (832)
+        const yesPrice = Number(BigInt("0x" + d.slice(192, 256))) / 1e18;
+        const noPrice = Number(BigInt("0x" + d.slice(256, 320))) / 1e18;
+        const resolved = BigInt("0x" + d.slice(768, 832)) !== 0n;
+        const yesWins = BigInt("0x" + d.slice(832, 896)) !== 0n;
+
+        await supabase
+          .from("markets")
+          .update({
+            yes_price: yesPrice,
+            no_price: noPrice,
+            yes_shares: hexToDecimalString("0x" + d.slice(448, 512), 18),
+            no_shares: hexToDecimalString("0x" + d.slice(512, 576), 18),
+            total_collateral: hexToDecimalString("0x" + d.slice(576, 640), 6),
+            resolved,
+            yes_wins: yesWins,
+            status: resolved ? "RESOLVED" : "ACTIVE",
+            updated_at: new Date().toISOString(),
+          })
+          .eq("id", market.id);
+      }
+    } catch (priceErr) {
+      console.log("Market price sync skipped:", priceErr);
+    }
+
     return new Response(
       JSON.stringify({
         success: true,

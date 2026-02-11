@@ -1,5 +1,5 @@
 // Markets Hook - Supabase integration
-import { useState, useCallback, useEffect } from 'react';
+import { useState, useCallback, useEffect, useRef } from 'react';
 import { supabase } from '../lib/supabase';
 import type { Address } from 'viem';
 
@@ -64,10 +64,14 @@ export function useMarkets(options: UseMarketsOptions = {}) {
   const [markets, setMarkets] = useState<MarketWithMeta[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const hasLoadedRef = useRef(false);
 
   // Fetch markets
   const fetchMarkets = useCallback(async () => {
-    setIsLoading(true);
+    // Only show loading on initial fetch, not on polling refetches
+    if (!hasLoadedRef.current) {
+      setIsLoading(true);
+    }
     setError(null);
 
     try {
@@ -107,6 +111,7 @@ export function useMarkets(options: UseMarketsOptions = {}) {
       }));
 
       setMarkets(marketsWithMeta);
+      hasLoadedRef.current = true;
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to fetch markets');
     } finally {
@@ -114,9 +119,11 @@ export function useMarkets(options: UseMarketsOptions = {}) {
     }
   }, [status, category, creator, orderBy, orderDirection, limit]);
 
-  // Initial fetch
+  // Initial fetch + polling every 15 seconds
   useEffect(() => {
     fetchMarkets();
+    const interval = setInterval(fetchMarkets, 15_000);
+    return () => clearInterval(interval);
   }, [fetchMarkets]);
 
   // Get single market by address

@@ -360,8 +360,8 @@ export default function LMSRAdmin() {
     };
 
     fetchPrices();
-    // Refresh prices every 30 seconds
-    const interval = setInterval(fetchPrices, 30000);
+    // Refresh prices every 15 seconds
+    const interval = setInterval(fetchPrices, 15000);
     return () => clearInterval(interval);
   }, [publicClient, trades, markets]);
 
