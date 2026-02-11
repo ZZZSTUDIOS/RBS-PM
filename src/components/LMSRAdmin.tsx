@@ -19,7 +19,6 @@ import {
   useClaimCreatorFees,
   useMarketFees,
   useUnifiedMarketData,
-  useUnifiedEstimateShares,
   LSLMSR_ABI,
   type LSLMSRMarketConfig,
 } from '../hooks/useLMSR';
@@ -349,6 +348,7 @@ export default function LMSRAdmin() {
   const {
     buyShares,
     sellShares,
+    estimateShares: estimateSharesOnChain,
     isLoading: isUSDCLoading,
   } = useLSLMSR_ERC20();
   const isBuying = isUSDCLoading;
@@ -358,7 +358,6 @@ export default function LMSRAdmin() {
   const { claimFees, isLoading: isClaimingCreatorFees } = useClaimCreatorFees();
   // 0.5% trading fee goes 100% to market creator (no protocol fee)
   const { marketInfo, marketType: detectedMarketType, refetch: refetchMarketInfo } = useUnifiedMarketData(selectedMarket);
-  const { estimateShares } = useUnifiedEstimateShares();
 
   // Estimated shares state
   const [estimatedShares, setEstimatedShares] = useState<string>('0');
@@ -479,6 +478,7 @@ export default function LMSRAdmin() {
   }, [tradeParams.marketAddress]);
 
   // Estimate shares when amount, outcome, or market changes
+  // Uses contract's estimateSharesForPayment (accounts for 0.5% fee, same math as buy)
   useEffect(() => {
     const updateEstimate = async () => {
       if (
@@ -494,15 +494,12 @@ export default function LMSRAdmin() {
 
       setIsEstimating(true);
       try {
-        // Pass collateral decimals (default to 18 for native token)
-        const decimals = marketInfo?.collateralDecimals ?? 18;
-        const shares = await estimateShares(
+        const sharesBigInt = await estimateSharesOnChain(
           tradeParams.marketAddress as Address,
           tradeParams.isYes,
           tradeParams.amount,
-          decimals
         );
-        setEstimatedShares(shares);
+        setEstimatedShares(formatUnits(sharesBigInt, 18));
       } catch (err) {
         console.error('Failed to estimate shares:', err);
         setEstimatedShares('0');
@@ -514,7 +511,7 @@ export default function LMSRAdmin() {
     // Debounce the estimate call
     const timeoutId = setTimeout(updateEstimate, 300);
     return () => clearTimeout(timeoutId);
-  }, [tradeParams.marketAddress, tradeParams.amount, tradeParams.isYes, tradeParams.direction, estimateShares, marketInfo?.collateralDecimals]);
+  }, [tradeParams.marketAddress, tradeParams.amount, tradeParams.isYes, tradeParams.direction, estimateSharesOnChain]);
 
   // Fetch user's token balances and symbols when market changes
   useEffect(() => {
