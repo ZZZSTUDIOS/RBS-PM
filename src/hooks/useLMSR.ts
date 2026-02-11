@@ -1892,21 +1892,12 @@ function calculateSharesForPayment(
   if (payment === 0n) return 0n;
 
   let low = 0n;
-  // Upper bound: assume minimum price of 0.01 MON/share (100x payment in shares)
-  // This ensures we can find shares even at very low prices
+  // Upper bound: 100x payment handles outcomes with very low prices (e.g., 1% probability)
   let high = payment * 100n;
-
-  // Debug: log initial cost for 1 share
-  const costFor1 = getCost(isYes, SCALE, yesShares, noShares, alpha, minLiquidity);
-  console.log('Cost for 1 share:', costFor1.toString());
 
   for (let i = 0; i < 64; i++) {
     const mid = (low + high) / 2n;
     const cost = getCost(isYes, mid, yesShares, noShares, alpha, minLiquidity);
-
-    if (i < 5) {
-      console.log(`Binary search iteration ${i}: mid=${mid.toString()}, cost=${cost.toString()}, payment=${payment.toString()}`);
-    }
 
     if (cost <= payment) {
       low = mid;
@@ -1917,7 +1908,6 @@ function calculateSharesForPayment(
     if (high - low <= 1n) break;
   }
 
-  console.log('Binary search result:', low.toString());
   return low;
 }
 
@@ -1939,65 +1929,50 @@ export function useUnifiedEstimateShares() {
       // Parse with correct collateral decimals
       const grossPayment = parseUnits(paymentAmount, collateralDecimals);
 
-      // Always use JS fallback — deployed contracts have a binary search upper bound
-      // bug (high = payment * 2) that underestimates shares when price < 0.5.
-      // The JS implementation uses payment * 100 which is correct.
-      {
+      // Use JS estimation — deployed contracts have a binary search upper bound
+      // bug (high = payment * 2) that caps shares at ~2x payment regardless of price.
+      // JS implementation uses payment * 100 which handles low-probability outcomes.
+      const [yesShares, noShares, alpha, minLiquidity] = await Promise.all([
+        publicClient.readContract({
+          address: marketAddress,
+          abi: LSLMSR_ABI,
+          functionName: 'yesShares',
+        }) as Promise<bigint>,
+        publicClient.readContract({
+          address: marketAddress,
+          abi: LSLMSR_ABI,
+          functionName: 'noShares',
+        }) as Promise<bigint>,
+        publicClient.readContract({
+          address: marketAddress,
+          abi: LSLMSR_ABI,
+          functionName: 'alpha',
+        }) as Promise<bigint>,
+        publicClient.readContract({
+          address: marketAddress,
+          abi: LSLMSR_ABI,
+          functionName: 'minLiquidity',
+        }) as Promise<bigint>,
+      ]);
 
-        // Fetch market parameters
-        console.log('Fetching market parameters for JS estimation...');
-        const [yesShares, noShares, alpha, minLiquidity] = await Promise.all([
-          publicClient.readContract({
-            address: marketAddress,
-            abi: LSLMSR_ABI,
-            functionName: 'yesShares',
-          }) as Promise<bigint>,
-          publicClient.readContract({
-            address: marketAddress,
-            abi: LSLMSR_ABI,
-            functionName: 'noShares',
-          }) as Promise<bigint>,
-          publicClient.readContract({
-            address: marketAddress,
-            abi: LSLMSR_ABI,
-            functionName: 'alpha',
-          }) as Promise<bigint>,
-          publicClient.readContract({
-            address: marketAddress,
-            abi: LSLMSR_ABI,
-            functionName: 'minLiquidity',
-          }) as Promise<bigint>,
-        ]);
+      // Deduct 0.5% trading fee
+      const paymentAfterFee = grossPayment - (grossPayment * TRADING_FEE_BPS) / FEE_DENOMINATOR;
 
-        console.log('Market params:', {
-          yesShares: yesShares.toString(),
-          noShares: noShares.toString(),
-          alpha: alpha.toString(),
-          minLiquidity: minLiquidity.toString(),
-          grossPayment: grossPayment.toString(),
-        });
+      // Scale payment to 18-decimal share scale (matches Solidity SHARE_SCALE)
+      const shareScale = BigInt(10 ** (18 - collateralDecimals));
+      const paymentInShareScale = paymentAfterFee * shareScale;
 
-        // Deduct 0.5% trading fee
-        const paymentAfterFee = grossPayment - (grossPayment * TRADING_FEE_BPS) / FEE_DENOMINATOR;
+      // Calculate shares using JS LS-LMSR cost function with binary search
+      const shares = calculateSharesForPayment(
+        isYes,
+        paymentInShareScale,
+        yesShares,
+        noShares,
+        alpha,
+        minLiquidity
+      );
 
-        // Scale payment to 18-decimal share scale (matches Solidity SHARE_SCALE)
-        const shareScale = BigInt(10 ** (18 - collateralDecimals));
-        const paymentInShareScale = paymentAfterFee * shareScale;
-        console.log('Payment in share scale:', paymentInShareScale.toString());
-
-        // Calculate shares using JS implementation (all values now in 18-decimal)
-        const shares = calculateSharesForPayment(
-          isYes,
-          paymentInShareScale,
-          yesShares,
-          noShares,
-          alpha,
-          minLiquidity
-        );
-
-        console.log('Calculated shares:', shares.toString());
-        return formatEther(shares);
-      }
+      return formatEther(shares);
     } catch (err) {
       console.error('Error estimating shares:', err);
       return '0';
