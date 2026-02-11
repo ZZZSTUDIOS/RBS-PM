@@ -304,11 +304,18 @@ async function updateMarketPrices(
   if (!marketInfoResult || marketInfoResult === "0x") return;
 
   const d = marketInfoResult.slice(2);
-  // Offsets: yesPrice at slot 3 (192), noPrice at 4 (256),
-  // yesShares at 7 (448), noShares at 8 (512), totalCollateral at 9 (576),
-  // resolved at 12 (768), yesWins at 13 (832)
-  const yesPrice = Number(BigInt("0x" + d.slice(192, 256))) / 1e18;
-  const noPrice = Number(BigInt("0x" + d.slice(256, 320))) / 1e18;
+  // getMarketInfo ABI return slots (each 64 hex chars):
+  // 0: string offset, 1: resolutionTime, 2: oracle
+  // 3: yesPrice (LS-LMSR price, includes spread)
+  // 4: noPrice, 5: yesProbability (softmax), 6: noProbability
+  // 7: yesShares, 8: noShares, 9: totalCollateral
+  // 10: liquidityParam, 11: priceSum, 12: resolved, 13: yesWins
+  // Use probability (slots 5/6) for display — it's the actual % chance
+  const yesProbability = Number(BigInt("0x" + d.slice(320, 384))) / 1e18;
+  const noProbability = Number(BigInt("0x" + d.slice(384, 448))) / 1e18;
+  // Fallback to price if probability is exactly 0 (shouldn't happen)
+  const yesPrice = yesProbability > 0 ? yesProbability : Number(BigInt("0x" + d.slice(192, 256))) / 1e18;
+  const noPrice = noProbability > 0 ? noProbability : Number(BigInt("0x" + d.slice(256, 320))) / 1e18;
   const resolved = BigInt("0x" + d.slice(768, 832)) !== 0n;
   const yesWins = BigInt("0x" + d.slice(832, 896)) !== 0n;
 
@@ -588,6 +595,16 @@ serve(async (req: Request) => {
           } catch (err) {
             errors.push(`Error updating prices for ${market.address}: ${err}`);
           }
+        }
+      }
+
+      // Refresh ALL market prices every run to keep DB in sync
+      for (const m of marketsList) {
+        if (affectedMarketIds.has(m.id)) continue; // already updated above
+        try {
+          await updateMarketPrices(supabase, m.id, m.address);
+        } catch (err) {
+          errors.push(`Price refresh error for ${m.address}: ${err}`);
         }
       }
 
