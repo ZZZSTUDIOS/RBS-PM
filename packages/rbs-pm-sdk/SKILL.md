@@ -139,12 +139,12 @@ const markets = await client.getMarkets();
 
 // Find highest volume market
 const topMarket = markets.sort((a, b) =>
-  (b.total_volume || 0) - (a.total_volume || 0)
+  (b.totalVolume || 0) - (a.totalVolume || 0)
 )[0];
 
 console.log(`Top: ${topMarket.question}`);
-console.log(`Volume: $${topMarket.total_volume} USDC`);
-console.log(`YES: ${(topMarket.yes_price * 100).toFixed(1)}%`);
+console.log(`Volume: $${topMarket.totalVolume} USDC`);
+console.log(`YES: ${(topMarket.yesPrice * 100).toFixed(1)}%`);
 ```
 
 ### 2. Get Real-Time Prices (0.0001 USDC)
