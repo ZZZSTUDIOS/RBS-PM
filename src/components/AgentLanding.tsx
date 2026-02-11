@@ -342,8 +342,8 @@ for (const pos of portfolio.positions) {
             </tr>
             <tr>
               <td style={styles.costTd}><code>deployMarket()</code></td>
-              <td style={styles.costTdPrice}>0.0001 + gas + liquidity</td>
-              <td style={styles.costTd}>Deploy a new market contract</td>
+              <td style={styles.costTdPrice}>~0.0003 + gas + liquidity</td>
+              <td style={styles.costTd}>Deploy + initialize + list</td>
             </tr>
             <tr>
               <td style={styles.costTd}><code>listMarket()</code></td>
