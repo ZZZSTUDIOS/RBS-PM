@@ -438,6 +438,7 @@ interface HeartbeatStatus {
   balances: { mon: string; usdc: string };
   portfolio: { totalPositions: number; totalValue: string };
   newMarkets: Array<{ address: string; question: string; yesPrice: number }>;
+  marketsToResolve: Array<{ address: string; question: string }>;
   canTrade: boolean;
   errors: string[];
 }
@@ -472,6 +473,16 @@ async function heartbeat(): Promise<HeartbeatStatus> {
       return { address: m.address, question: m.question, yesPrice: m.yesPrice };
     });
 
+  // Check for markets you need to resolve (you are oracle + past resolution time)
+  const marketsToResolve: Array<{ address: string; question: string }> = [];
+  for (const market of allMarkets) {
+    const status = await client.canResolve(market.address);
+    if (status.canResolve) {
+      marketsToResolve.push({ address: market.address, question: market.question });
+      errors.push(`RESOLVE NEEDED: "${market.question}"`);
+    }
+  }
+
   return {
     healthy: errors.length === 0,
     wallet,
@@ -481,6 +492,7 @@ async function heartbeat(): Promise<HeartbeatStatus> {
       totalValue: portfolio.summary.totalValue,
     },
     newMarkets,
+    marketsToResolve,
     canTrade: hasGas && hasUsdc,
     errors,
   };
@@ -492,6 +504,15 @@ setInterval(async () => {
   heartbeatCount++;
   const status = await heartbeat();
   console.log(`Heartbeat #${heartbeatCount}:`, status);
+
+  // Resolve any markets that need it — research the outcome first!
+  for (const market of status.marketsToResolve) {
+    console.log(`Market needs resolution: "${market.question}"`);
+    // IMPORTANT: Research the actual outcome before resolving.
+    // Use web search, news, data sources to determine if YES or NO won.
+    // const yesWins = await researchOutcome(market.question);
+    // await client.resolve(market.address, yesWins);
+  }
 
   if (heartbeatCount % 10 === 0 && status.canTrade) {
     await createInterestingMarket();
