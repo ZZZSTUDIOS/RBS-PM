@@ -4,6 +4,7 @@ import { useState, useEffect } from 'react';
 import { Providers } from './components/Providers';
 import LMSRAdmin from './components/LMSRAdmin';
 import AgentLanding from './components/AgentLanding';
+import { theme } from './theme';
 
 type Route = 'admin' | 'agents';
 
@@ -65,8 +66,8 @@ const navStyles = {
   container: {
     display: 'flex',
     gap: '0',
-    borderBottom: '2px solid #00ff00',
-    backgroundColor: '#0a0a0a',
+    borderBottom: `2px solid ${theme.colors.primary}`,
+    backgroundColor: theme.colors.pageBg,
     position: 'sticky' as const,
     top: 0,
     zIndex: 100,
@@ -74,16 +75,16 @@ const navStyles = {
   link: {
     padding: '15px 30px',
     textDecoration: 'none',
-    color: '#888',
-    fontFamily: "'IBM Plex Mono', monospace",
+    color: theme.colors.textMutedAlt,
+    fontFamily: theme.fonts.mono,
     fontWeight: 'bold' as const,
-    fontSize: '14px',
-    borderRight: '1px solid #333',
+    fontSize: theme.fontSizes.nav,
+    borderRight: `1px solid ${theme.colors.border}`,
     transition: 'all 0.2s',
   },
   active: {
-    backgroundColor: '#1a1a1a',
-    color: '#00ff00',
+    backgroundColor: theme.colors.cardBgLight,
+    color: theme.colors.primary,
   },
 };
 

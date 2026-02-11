@@ -30,6 +30,7 @@ import { useMarkets } from '../hooks/useMarkets';
 import { useUserSync } from '../hooks/useUserSync';
 import { usePositions } from '../hooks/usePositions';
 import { syncMarketPrices } from '../lib/supabase';
+import { theme } from '../theme';
 
 // Simple ERC20 ABI for balance and symbol checks
 const ERC20_ABI = [
@@ -966,7 +967,7 @@ export default function LMSRAdmin() {
         <div style={styles.headerRight}>
           <div style={styles.networkBadge}>
             {isWrongChain ? (
-              <span style={{ color: '#ff6600' }}>⚠ WRONG NETWORK</span>
+              <span style={{ color: theme.colors.warning }}>⚠ WRONG NETWORK</span>
             ) : (
               `MONAD TESTNET [${monadTestnet.id}]`
             )}
@@ -987,8 +988,8 @@ export default function LMSRAdmin() {
             onClick={() => setActiveTab(tab.id)}
             style={{
               ...styles.navButton,
-              backgroundColor: activeTab === tab.id ? '#00ff00' : 'transparent',
-              color: activeTab === tab.id ? '#000' : '#00ff00',
+              backgroundColor: activeTab === tab.id ? theme.colors.primary : 'transparent',
+              color: activeTab === tab.id ? theme.colors.black : theme.colors.primary,
             }}
           >
             {tab.label}
@@ -1006,7 +1007,7 @@ export default function LMSRAdmin() {
 
               {!isConnected ? (
                 <div style={styles.card}>
-                  <div style={{ marginBottom: '16px', color: '#666' }}>
+                  <div style={{ marginBottom: '16px', color: theme.colors.textDim }}>
                     Select a wallet to connect:
                   </div>
                   <div style={{ display: 'grid', gap: '12px' }}>
@@ -1028,11 +1029,11 @@ export default function LMSRAdmin() {
               ) : (
                 <div>
                   {isWrongChain && (
-                    <div style={{ ...styles.card, borderColor: '#ff6600', marginBottom: '24px' }}>
-                      <div style={{ color: '#ff6600', fontWeight: 'bold', marginBottom: '12px' }}>
+                    <div style={{ ...styles.card, borderColor: theme.colors.warning, marginBottom: '24px' }}>
+                      <div style={{ color: theme.colors.warning, fontWeight: 'bold', marginBottom: '12px' }}>
                         ⚠ WRONG NETWORK
                       </div>
-                      <p style={{ color: '#999', marginBottom: '16px' }}>
+                      <p style={{ color: theme.colors.textMuted, marginBottom: '16px' }}>
                         Please switch to Monad Testnet to continue.
                       </p>
                       <button onClick={handleSwitchChain} style={styles.button}>
@@ -1042,7 +1043,7 @@ export default function LMSRAdmin() {
                   )}
 
                   <div style={styles.card}>
-                    <InfoRow label="STATUS" value="● CONNECTED" valueColor="#00ff00" />
+                    <InfoRow label="STATUS" value="● CONNECTED" valueColor={theme.colors.primary} />
                     <InfoRow label="ADDRESS" value={address || ''} mono />
                     <InfoRow label="USDC BALANCE" value={`${parseFloat(usdcBalance).toFixed(4)} USDC`} />
                     <InfoRow label="GAS BALANCE" value={`${balance ? parseFloat(formatEther(balance.value)).toFixed(4) : '0'} MON`} />
@@ -1053,7 +1054,7 @@ export default function LMSRAdmin() {
                           disconnect();
                           addLog('Disconnected', 'info');
                         }}
-                        style={{ ...styles.button, borderColor: '#ff0000', color: '#ff0000' }}
+                        style={{ ...styles.button, borderColor: theme.colors.error, color: theme.colors.error }}
                       >
                         [ DISCONNECT ]
                       </button>
@@ -1065,7 +1066,7 @@ export default function LMSRAdmin() {
               <div style={{ marginTop: '32px' }}>
                 <SectionHeader>ABOUT LMSR</SectionHeader>
                 <div style={{ ...styles.card, marginTop: '16px' }}>
-                  <p style={{ color: '#999', lineHeight: '1.6' }}>
+                  <p style={{ color: theme.colors.textMuted, lineHeight: '1.6' }}>
                     LMSR (Logarithmic Market Scoring Rule) is an automated market maker algorithm
                     designed for prediction markets. It provides guaranteed liquidity and allows
                     traders to buy/sell outcome shares (YES/NO) with prices that reflect the
@@ -1084,7 +1085,7 @@ export default function LMSRAdmin() {
           {activeTab === 'market' && (
             <div>
               <SectionHeader>CREATE LS-LMSR PREDICTION MARKET</SectionHeader>
-              <p style={{ color: '#666', marginBottom: '24px' }}>
+              <p style={{ color: theme.colors.textDim, marginBottom: '24px' }}>
                 Deploy a new LS-LMSR prediction market with dynamic liquidity and auto-generated YES/NO outcome tokens
               </p>
 
@@ -1114,8 +1115,8 @@ export default function LMSRAdmin() {
               <div style={{ ...styles.card, marginTop: '24px' }}>
                 <div style={{ fontWeight: 'bold', marginBottom: '16px' }}>TOKEN CONFIG</div>
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
-                  <div style={{ padding: '12px', backgroundColor: '#001a00', border: '1px solid #00ff00' }}>
-                    <div style={{ color: '#00ff00', marginBottom: '12px', fontWeight: 'bold' }}>YES TOKEN</div>
+                  <div style={{ padding: '12px', backgroundColor: theme.colors.primaryDark, border: `1px solid ${theme.colors.primary}` }}>
+                    <div style={{ color: theme.colors.primary, marginBottom: '12px', fontWeight: 'bold' }}>YES TOKEN</div>
                     <InputField
                       label="NAME"
                       value={marketConfig.yesName}
@@ -1127,8 +1128,8 @@ export default function LMSRAdmin() {
                       onChange={v => setMarketConfig(p => ({ ...p, yesSymbol: v }))}
                     />
                   </div>
-                  <div style={{ padding: '12px', backgroundColor: '#1a0a00', border: '1px solid #ff6600' }}>
-                    <div style={{ color: '#ff6600', marginBottom: '12px', fontWeight: 'bold' }}>NO TOKEN</div>
+                  <div style={{ padding: '12px', backgroundColor: theme.colors.warningDark, border: `1px solid ${theme.colors.warning}` }}>
+                    <div style={{ color: theme.colors.warning, marginBottom: '12px', fontWeight: 'bold' }}>NO TOKEN</div>
                     <InputField
                       label="NAME"
                       value={marketConfig.noName}
@@ -1181,16 +1182,16 @@ export default function LMSRAdmin() {
                     onChange={v => setMarketConfig(p => ({ ...p, initialLiquidity: v }))}
                   />
                 </div>
-                <div style={{ marginTop: '12px', padding: '12px', backgroundColor: '#1a1a00', border: '1px solid #ff6600' }}>
-                  <div style={{ color: '#ff6600', fontWeight: 'bold', marginBottom: '8px', fontSize: '11px' }}>⚠ LIQUIDITY BUFFER</div>
-                  <div style={{ color: '#999', fontSize: '11px' }}>
-                    Buffer ensures winners can redeem at <strong style={{ color: '#fff' }}>1 USDC per share</strong>.<br/>
+                <div style={{ marginTop: '12px', padding: '12px', backgroundColor: theme.colors.highlightDark, border: `1px solid ${theme.colors.warning}` }}>
+                  <div style={{ color: theme.colors.warning, fontWeight: 'bold', marginBottom: '8px', fontSize: theme.fontSizes.xs }}>⚠ LIQUIDITY BUFFER</div>
+                  <div style={{ color: theme.colors.textMuted, fontSize: theme.fontSizes.xs }}>
+                    Buffer ensures winners can redeem at <strong style={{ color: theme.colors.textWhite }}>1 USDC per share</strong>.<br/>
                     <strong>Recommended:</strong> 2-5% of expected total trading volume.<br/>
-                    <span style={{ color: '#666' }}>Example: Expecting 500 USDC in trades → deposit 10-25 USDC buffer</span><br/>
-                    <span style={{ color: '#666' }}>Minimum: 1 USDC. Excess can be withdrawn after resolution.</span>
+                    <span style={{ color: theme.colors.textDim }}>Example: Expecting 500 USDC in trades → deposit 10-25 USDC buffer</span><br/>
+                    <span style={{ color: theme.colors.textDim }}>Minimum: 1 USDC. Excess can be withdrawn after resolution.</span>
                   </div>
                 </div>
-                <div style={{ marginTop: '12px', color: '#666', fontSize: '11px' }}>
+                <div style={{ marginTop: '12px', color: theme.colors.textDim, fontSize: theme.fontSizes.xs }}>
                   Market creators earn 0.5% of all trades. Fees can be claimed after resolution. α controls max spread.
                 </div>
               </div>
@@ -1229,15 +1230,15 @@ export default function LMSRAdmin() {
                   <div style={{
                     marginTop: '12px',
                     padding: '8px 12px',
-                    backgroundColor: detectedMarketType === 'LSLMSR' ? '#001a1a' : '#1a1a00',
-                    border: `1px solid ${detectedMarketType === 'LSLMSR' ? '#00ffff' : '#ffff00'}`,
-                    fontSize: '11px',
+                    backgroundColor: detectedMarketType === 'LSLMSR' ? theme.colors.infoDark : theme.colors.highlightDark,
+                    border: `1px solid ${detectedMarketType === 'LSLMSR' ? theme.colors.info : theme.colors.highlight}`,
+                    fontSize: theme.fontSizes.xs,
                     display: 'flex',
                     alignItems: 'center',
                     gap: '8px'
                   }}>
-                    <span style={{ color: '#666' }}>TYPE:</span>
-                    <span style={{ color: detectedMarketType === 'LSLMSR' ? '#00ffff' : '#ffff00', fontWeight: 'bold' }}>
+                    <span style={{ color: theme.colors.textDim }}>TYPE:</span>
+                    <span style={{ color: detectedMarketType === 'LSLMSR' ? theme.colors.info : theme.colors.highlight, fontWeight: 'bold' }}>
                       {detectedMarketType === 'LSLMSR' ? 'LS-LMSR (Dynamic Liquidity)' : 'LMSR (Fixed Liquidity)'}
                     </span>
                   </div>
@@ -1246,7 +1247,7 @@ export default function LMSRAdmin() {
                 {/* Token Pricing Display */}
                 {marketInfo && (
                   <div style={{ marginTop: '16px' }}>
-                    <div style={{ marginBottom: '12px', color: '#999', fontSize: '12px' }}>
+                    <div style={{ marginBottom: '12px', color: theme.colors.textMuted, fontSize: theme.fontSizes.small }}>
                       {marketInfo.question}
                     </div>
 
@@ -1255,18 +1256,18 @@ export default function LMSRAdmin() {
                       {/* YES Token Price */}
                       <div style={{
                         padding: '16px',
-                        backgroundColor: '#001a00',
-                        border: '2px solid #00ff00',
+                        backgroundColor: theme.colors.primaryDark,
+                        border: `2px solid ${theme.colors.primary}`,
                         textAlign: 'center',
                       }}>
-                        <div style={{ color: '#666', fontSize: '11px', marginBottom: '8px' }}>{yesSymbol} TOKEN</div>
-                        <div style={{ color: '#00ff00', fontSize: '32px', fontWeight: 'bold' }}>
+                        <div style={{ color: theme.colors.textDim, fontSize: theme.fontSizes.xs, marginBottom: '8px' }}>{yesSymbol} TOKEN</div>
+                        <div style={{ color: theme.colors.primary, fontSize: theme.fontSizes.displayLg, fontWeight: 'bold' }}>
                           {(Number(marketInfo.yesPrice) / 1e18 * 100).toFixed(1)}%
                         </div>
-                        <div style={{ color: '#00ff00', fontSize: '12px', marginTop: '4px' }}>
+                        <div style={{ color: theme.colors.primary, fontSize: theme.fontSizes.small, marginTop: '4px' }}>
                           {(Number(marketInfo.yesPrice) / 1e18).toFixed(4)} USDC
                         </div>
-                        <div style={{ color: '#666', fontSize: '10px', marginTop: '8px' }}>
+                        <div style={{ color: theme.colors.textDim, fontSize: theme.fontSizes.xxs, marginTop: '8px' }}>
                           {formatEther(marketInfo.yesShares)} shares
                         </div>
                       </div>
@@ -1274,18 +1275,18 @@ export default function LMSRAdmin() {
                       {/* NO Token Price */}
                       <div style={{
                         padding: '16px',
-                        backgroundColor: '#1a0a00',
-                        border: '2px solid #ff6600',
+                        backgroundColor: theme.colors.warningDark,
+                        border: `2px solid ${theme.colors.warning}`,
                         textAlign: 'center',
                       }}>
-                        <div style={{ color: '#666', fontSize: '11px', marginBottom: '8px' }}>{noSymbol} TOKEN</div>
-                        <div style={{ color: '#ff6600', fontSize: '32px', fontWeight: 'bold' }}>
+                        <div style={{ color: theme.colors.textDim, fontSize: theme.fontSizes.xs, marginBottom: '8px' }}>{noSymbol} TOKEN</div>
+                        <div style={{ color: theme.colors.warning, fontSize: theme.fontSizes.displayLg, fontWeight: 'bold' }}>
                           {(Number(marketInfo.noPrice) / 1e18 * 100).toFixed(1)}%
                         </div>
-                        <div style={{ color: '#ff6600', fontSize: '12px', marginTop: '4px' }}>
+                        <div style={{ color: theme.colors.warning, fontSize: theme.fontSizes.small, marginTop: '4px' }}>
                           {(Number(marketInfo.noPrice) / 1e18).toFixed(4)} USDC
                         </div>
-                        <div style={{ color: '#666', fontSize: '10px', marginTop: '8px' }}>
+                        <div style={{ color: theme.colors.textDim, fontSize: theme.fontSizes.xxs, marginTop: '8px' }}>
                           {formatEther(marketInfo.noShares)} shares
                         </div>
                       </div>
@@ -1293,15 +1294,15 @@ export default function LMSRAdmin() {
 
                     {/* Price Bar Visualization */}
                     <div style={{ marginBottom: '16px' }}>
-                      <div style={{ display: 'flex', height: '24px', border: '1px solid #333', overflow: 'hidden' }}>
+                      <div style={{ display: 'flex', height: '24px', border: `1px solid ${theme.colors.border}`, overflow: 'hidden' }}>
                         <div style={{
                           width: `${(Number(marketInfo.yesPrice) / 1e18 * 100)}%`,
-                          backgroundColor: '#00ff00',
+                          backgroundColor: theme.colors.primary,
                           display: 'flex',
                           alignItems: 'center',
                           justifyContent: 'center',
-                          color: '#000',
-                          fontSize: '10px',
+                          color: theme.colors.black,
+                          fontSize: theme.fontSizes.xxs,
                           fontWeight: 'bold',
                           transition: 'width 0.3s',
                         }}>
@@ -1309,12 +1310,12 @@ export default function LMSRAdmin() {
                         </div>
                         <div style={{
                           flex: 1,
-                          backgroundColor: '#ff6600',
+                          backgroundColor: theme.colors.warning,
                           display: 'flex',
                           alignItems: 'center',
                           justifyContent: 'center',
-                          color: '#000',
-                          fontSize: '10px',
+                          color: theme.colors.black,
+                          fontSize: theme.fontSizes.xxs,
                           fontWeight: 'bold',
                         }}>
                           {noSymbol}
@@ -1323,12 +1324,12 @@ export default function LMSRAdmin() {
                     </div>
 
                     {/* Market Stats */}
-                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px', padding: '12px', backgroundColor: '#0a0a0a', border: '1px solid #333' }}>
+                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px', padding: '12px', backgroundColor: theme.colors.pageBg, border: `1px solid ${theme.colors.border}` }}>
                       <InfoRow label="COLLATERAL POOL" value={`${formatUnits(marketInfo.totalCollateral, marketInfo.collateralDecimals || 18)} ${marketInfo.collateralSymbol || 'MON'}`} />
                       <InfoRow
                         label="STATUS"
                         value={marketInfo.resolved ? `${marketInfo.yesWins ? yesSymbol : noSymbol} WINS` : 'ACTIVE'}
-                        valueColor={marketInfo.resolved ? '#ffff00' : '#00ff00'}
+                        valueColor={marketInfo.resolved ? theme.colors.highlight : theme.colors.primary}
                       />
                     </div>
                   </div>
@@ -1337,20 +1338,20 @@ export default function LMSRAdmin() {
 
               {/* Show resolved state or trading interface */}
               {marketInfo?.resolved ? (
-                <div style={{ ...styles.card, marginTop: '24px', borderColor: '#ffff00' }}>
+                <div style={{ ...styles.card, marginTop: '24px', borderColor: theme.colors.highlight }}>
                   <div style={{
                     textAlign: 'center',
                     padding: '24px',
                   }}>
-                    <div style={{ color: '#ffff00', fontSize: '24px', fontWeight: 'bold', marginBottom: '8px' }}>
+                    <div style={{ color: theme.colors.highlight, fontSize: theme.fontSizes.sectionTitle, fontWeight: 'bold', marginBottom: '8px' }}>
                       MARKET RESOLVED
                     </div>
-                    <div style={{ color: '#fff', fontSize: '18px', marginBottom: '16px' }}>
-                      Winner: <span style={{ color: marketInfo.yesWins ? '#00ff00' : '#ff6600', fontWeight: 'bold' }}>
+                    <div style={{ color: theme.colors.textWhite, fontSize: theme.fontSizes.title, marginBottom: '16px' }}>
+                      Winner: <span style={{ color: marketInfo.yesWins ? theme.colors.primary : theme.colors.warning, fontWeight: 'bold' }}>
                         {marketInfo.yesWins ? yesSymbol : noSymbol}
                       </span>
                     </div>
-                    <div style={{ color: '#666', fontSize: '12px', marginBottom: '24px' }}>
+                    <div style={{ color: theme.colors.textDim, fontSize: theme.fontSizes.small, marginBottom: '24px' }}>
                       Trading is closed. Holders of {marketInfo.yesWins ? yesSymbol : noSymbol} tokens can redeem for their share of the collateral pool.
                     </div>
 
@@ -1358,15 +1359,15 @@ export default function LMSRAdmin() {
                     {((marketInfo.yesWins && parseFloat(userYesBalance) > 0) || (!marketInfo.yesWins && parseFloat(userNoBalance) > 0)) && (
                       <div style={{
                         padding: '16px',
-                        backgroundColor: '#001a00',
-                        border: '2px solid #00ff00',
+                        backgroundColor: theme.colors.primaryDark,
+                        border: `2px solid ${theme.colors.primary}`,
                         marginBottom: '16px',
                       }}>
-                        <div style={{ color: '#666', fontSize: '11px', marginBottom: '4px' }}>YOUR WINNING TOKENS</div>
-                        <div style={{ color: '#00ff00', fontSize: '28px', fontWeight: 'bold' }}>
+                        <div style={{ color: theme.colors.textDim, fontSize: theme.fontSizes.xs, marginBottom: '4px' }}>YOUR WINNING TOKENS</div>
+                        <div style={{ color: theme.colors.primary, fontSize: theme.fontSizes.displayMd, fontWeight: 'bold' }}>
                           {marketInfo.yesWins ? parseFloat(userYesBalance).toFixed(4) : parseFloat(userNoBalance).toFixed(4)}
                         </div>
-                        <div style={{ color: '#00ff00', fontSize: '12px' }}>
+                        <div style={{ color: theme.colors.primary, fontSize: theme.fontSizes.small }}>
                           {marketInfo.yesWins ? yesSymbol : noSymbol} shares
                         </div>
                       </div>
@@ -1379,9 +1380,9 @@ export default function LMSRAdmin() {
                           ...styles.button,
                           width: '100%',
                           padding: '16px',
-                          backgroundColor: '#0a1a0a',
-                          borderColor: '#444',
-                          color: '#444',
+                          backgroundColor: theme.colors.primaryBgMuted,
+                          borderColor: theme.colors.textDisabled,
+                          color: theme.colors.textDisabled,
                           cursor: 'not-allowed',
                         }}
                       >
@@ -1413,9 +1414,9 @@ export default function LMSRAdmin() {
                           ...styles.button,
                           width: '100%',
                           padding: '16px',
-                          backgroundColor: '#001a00',
-                          borderColor: '#00ff00',
-                          color: '#00ff00',
+                          backgroundColor: theme.colors.primaryDark,
+                          borderColor: theme.colors.primary,
+                          color: theme.colors.primary,
                           opacity: isRedeeming ? 0.5 : 1,
                         }}
                       >
@@ -1427,7 +1428,7 @@ export default function LMSRAdmin() {
               ) : (
               <div style={{ ...styles.card, marginTop: '24px' }}>
                 <div style={{ marginBottom: '16px' }}>
-                  <label style={{ display: 'block', color: '#666', fontSize: '11px', marginBottom: '8px', letterSpacing: '1px' }}>
+                  <label style={{ display: 'block', color: theme.colors.textDim, fontSize: theme.fontSizes.xs, marginBottom: '8px', letterSpacing: '1px' }}>
                     DIRECTION
                   </label>
                   <div style={{ display: 'flex', gap: '8px' }}>
@@ -1436,8 +1437,8 @@ export default function LMSRAdmin() {
                       style={{
                         ...styles.button,
                         flex: 1,
-                        backgroundColor: tradeParams.direction === 'buy' ? '#00ff00' : 'transparent',
-                        color: tradeParams.direction === 'buy' ? '#000' : '#00ff00',
+                        backgroundColor: tradeParams.direction === 'buy' ? theme.colors.primary : 'transparent',
+                        color: tradeParams.direction === 'buy' ? theme.colors.black : theme.colors.primary,
                       }}
                     >
                       BUY
@@ -1447,9 +1448,9 @@ export default function LMSRAdmin() {
                       style={{
                         ...styles.button,
                         flex: 1,
-                        backgroundColor: tradeParams.direction === 'sell' ? '#ff6600' : 'transparent',
-                        color: tradeParams.direction === 'sell' ? '#000' : '#ff6600',
-                        borderColor: '#ff6600',
+                        backgroundColor: tradeParams.direction === 'sell' ? theme.colors.warning : 'transparent',
+                        color: tradeParams.direction === 'sell' ? theme.colors.black : theme.colors.warning,
+                        borderColor: theme.colors.warning,
                       }}
                     >
                       SELL
@@ -1458,7 +1459,7 @@ export default function LMSRAdmin() {
                 </div>
 
                 <div style={{ marginBottom: '16px' }}>
-                  <label style={{ display: 'block', color: '#666', fontSize: '11px', marginBottom: '8px', letterSpacing: '1px' }}>
+                  <label style={{ display: 'block', color: theme.colors.textDim, fontSize: theme.fontSizes.xs, marginBottom: '8px', letterSpacing: '1px' }}>
                     OUTCOME
                   </label>
                   <div style={{ display: 'flex', gap: '8px' }}>
@@ -1467,8 +1468,8 @@ export default function LMSRAdmin() {
                       style={{
                         ...styles.button,
                         flex: 1,
-                        backgroundColor: tradeParams.isYes ? '#00ff00' : 'transparent',
-                        color: tradeParams.isYes ? '#000' : '#00ff00',
+                        backgroundColor: tradeParams.isYes ? theme.colors.primary : 'transparent',
+                        color: tradeParams.isYes ? theme.colors.black : theme.colors.primary,
                       }}
                     >
                       {yesSymbol}
@@ -1478,9 +1479,9 @@ export default function LMSRAdmin() {
                       style={{
                         ...styles.button,
                         flex: 1,
-                        backgroundColor: !tradeParams.isYes ? '#ff6600' : 'transparent',
-                        color: !tradeParams.isYes ? '#000' : '#ff6600',
-                        borderColor: '#ff6600',
+                        backgroundColor: !tradeParams.isYes ? theme.colors.warning : 'transparent',
+                        color: !tradeParams.isYes ? theme.colors.black : theme.colors.warning,
+                        borderColor: theme.colors.warning,
                       }}
                     >
                       {noSymbol}
@@ -1496,25 +1497,25 @@ export default function LMSRAdmin() {
                   />
                   {tradeParams.direction === 'buy' ? (
                     <div style={{ marginBottom: '12px' }}>
-                      <label style={{ display: 'block', color: '#666', fontSize: '11px', marginBottom: '8px', letterSpacing: '1px' }}>
+                      <label style={{ display: 'block', color: theme.colors.textDim, fontSize: theme.fontSizes.xs, marginBottom: '8px', letterSpacing: '1px' }}>
                         PRICE IMPACT
                       </label>
                       <div style={{
                         padding: '12px',
-                        backgroundColor: '#0a0a0a',
-                        border: '1px solid #333',
+                        backgroundColor: theme.colors.pageBg,
+                        border: `1px solid ${theme.colors.border}`,
                         textAlign: 'center',
                       }}>
                         {(() => {
                           if (!marketInfo || !tradeParams.amount || parseFloat(tradeParams.amount) <= 0 || parseFloat(estimatedShares) <= 0 || isEstimating) {
-                            return <span style={{ color: '#666', fontSize: '14px' }}>--</span>;
+                            return <span style={{ color: theme.colors.textDim, fontSize: theme.fontSizes.nav }}>--</span>;
                           }
                           const spotPrice = Number(tradeParams.isYes ? marketInfo.yesPrice : marketInfo.noPrice) / 1e18;
                           const avgPrice = parseFloat(tradeParams.amount) / parseFloat(estimatedShares);
                           const impact = ((avgPrice - spotPrice) / spotPrice) * 100;
-                          const impactColor = impact < 1 ? '#00ff00' : impact < 5 ? '#ffff00' : '#ff6600';
+                          const impactColor = impact < 1 ? theme.colors.primary : impact < 5 ? theme.colors.highlight : theme.colors.warning;
                           return (
-                            <span style={{ color: impactColor, fontSize: '18px', fontWeight: 'bold' }}>
+                            <span style={{ color: impactColor, fontSize: theme.fontSizes.title, fontWeight: 'bold' }}>
                               {impact.toFixed(2)}%
                             </span>
                           );
@@ -1523,25 +1524,25 @@ export default function LMSRAdmin() {
                     </div>
                   ) : (
                     <div style={{ marginBottom: '12px' }}>
-                      <label style={{ display: 'block', color: '#666', fontSize: '11px', marginBottom: '8px', letterSpacing: '1px' }}>
+                      <label style={{ display: 'block', color: theme.colors.textDim, fontSize: theme.fontSizes.xs, marginBottom: '8px', letterSpacing: '1px' }}>
                         PRICE IMPACT
                       </label>
                       <div style={{
                         padding: '12px',
-                        backgroundColor: '#0a0a0a',
-                        border: '1px solid #333',
+                        backgroundColor: theme.colors.pageBg,
+                        border: `1px solid ${theme.colors.border}`,
                         textAlign: 'center',
                       }}>
                         {(() => {
                           if (!marketInfo || !tradeParams.amount || parseFloat(tradeParams.amount) <= 0 || parseFloat(estimatedPayout) <= 0) {
-                            return <span style={{ color: '#666', fontSize: '14px' }}>--</span>;
+                            return <span style={{ color: theme.colors.textDim, fontSize: theme.fontSizes.nav }}>--</span>;
                           }
                           const spotPrice = Number(tradeParams.isYes ? marketInfo.yesPrice : marketInfo.noPrice) / 1e18;
                           const avgPrice = parseFloat(estimatedPayout) / parseFloat(tradeParams.amount);
                           const impact = ((spotPrice - avgPrice) / spotPrice) * 100;
-                          const impactColor = impact < 1 ? '#00ff00' : impact < 5 ? '#ffff00' : '#ff6600';
+                          const impactColor = impact < 1 ? theme.colors.primary : impact < 5 ? theme.colors.highlight : theme.colors.warning;
                           return (
-                            <span style={{ color: impactColor, fontSize: '18px', fontWeight: 'bold' }}>
+                            <span style={{ color: impactColor, fontSize: theme.fontSizes.title, fontWeight: 'bold' }}>
                               {impact.toFixed(2)}%
                             </span>
                           );
@@ -1556,27 +1557,27 @@ export default function LMSRAdmin() {
                   <div style={{
                     marginTop: '16px',
                     padding: '16px',
-                    backgroundColor: tradeParams.isYes ? '#001a00' : '#1a0a00',
-                    border: `1px solid ${tradeParams.isYes ? '#00ff00' : '#ff6600'}`,
+                    backgroundColor: tradeParams.isYes ? theme.colors.primaryDark : theme.colors.warningDark,
+                    border: `1px solid ${tradeParams.isYes ? theme.colors.primary : theme.colors.warning}`,
                     textAlign: 'center',
                   }}>
-                    <div style={{ color: '#666', fontSize: '11px', marginBottom: '4px' }}>
+                    <div style={{ color: theme.colors.textDim, fontSize: theme.fontSizes.xs, marginBottom: '4px' }}>
                       {isEstimating ? 'CALCULATING...' : 'ESTIMATED SHARES'}
                     </div>
                     <div style={{
-                      color: tradeParams.isYes ? '#00ff00' : '#ff6600',
-                      fontSize: '28px',
+                      color: tradeParams.isYes ? theme.colors.primary : theme.colors.warning,
+                      fontSize: theme.fontSizes.displayMd,
                       fontWeight: 'bold',
                     }}>
                       {isEstimating ? '...' : `~${parseFloat(estimatedShares).toFixed(4)}`}
                     </div>
-                    <div style={{ color: '#666', fontSize: '11px', marginTop: '4px' }}>
+                    <div style={{ color: theme.colors.textDim, fontSize: theme.fontSizes.xs, marginTop: '4px' }}>
                       {tradeParams.isYes ? yesSymbol : noSymbol} shares
                       {parseFloat(estimatedShares) > 0 && !isEstimating && (
                         <> (avg {(parseFloat(tradeParams.amount) / parseFloat(estimatedShares)).toFixed(4)} {marketInfo?.collateralSymbol || 'USDC'}/share)</>
                       )}
                     </div>
-                    <div style={{ color: '#444', fontSize: '10px', marginTop: '8px' }}>
+                    <div style={{ color: theme.colors.textDisabled, fontSize: theme.fontSizes.xxs, marginTop: '8px' }}>
                       Current price: {(Number(tradeParams.isYes ? marketInfo.yesPrice : marketInfo.noPrice) / 1e18 * 100).toFixed(1)}%
                     </div>
                   </div>
@@ -1594,8 +1595,8 @@ export default function LMSRAdmin() {
                     }}>
                       <div style={{
                         padding: '12px',
-                        backgroundColor: '#001a00',
-                        border: `2px solid ${tradeParams.isYes ? '#00ff00' : '#333'}`,
+                        backgroundColor: theme.colors.primaryDark,
+                        border: `2px solid ${tradeParams.isYes ? theme.colors.primary : theme.colors.border}`,
                         textAlign: 'center',
                         cursor: 'pointer',
                         opacity: tradeParams.isYes ? 1 : 0.6,
@@ -1606,18 +1607,18 @@ export default function LMSRAdmin() {
                         }
                       }}
                       >
-                        <div style={{ color: '#666', fontSize: '10px', marginBottom: '4px' }}>YOUR {yesSymbol} SHARES</div>
-                        <div style={{ color: '#00ff00', fontSize: '20px', fontWeight: 'bold' }}>
+                        <div style={{ color: theme.colors.textDim, fontSize: theme.fontSizes.xxs, marginBottom: '4px' }}>YOUR {yesSymbol} SHARES</div>
+                        <div style={{ color: theme.colors.primary, fontSize: theme.fontSizes.displaySm, fontWeight: 'bold' }}>
                           {parseFloat(userYesBalance).toFixed(4)}
                         </div>
                         {parseFloat(userYesBalance) > 0 && (
-                          <div style={{ color: '#00ff00', fontSize: '9px', marginTop: '4px' }}>Click to sell all</div>
+                          <div style={{ color: theme.colors.primary, fontSize: theme.fontSizes.tiny, marginTop: '4px' }}>Click to sell all</div>
                         )}
                       </div>
                       <div style={{
                         padding: '12px',
-                        backgroundColor: '#1a0a00',
-                        border: `2px solid ${!tradeParams.isYes ? '#ff6600' : '#333'}`,
+                        backgroundColor: theme.colors.warningDark,
+                        border: `2px solid ${!tradeParams.isYes ? theme.colors.warning : theme.colors.border}`,
                         textAlign: 'center',
                         cursor: 'pointer',
                         opacity: !tradeParams.isYes ? 1 : 0.6,
@@ -1628,12 +1629,12 @@ export default function LMSRAdmin() {
                         }
                       }}
                       >
-                        <div style={{ color: '#666', fontSize: '10px', marginBottom: '4px' }}>YOUR {noSymbol} SHARES</div>
-                        <div style={{ color: '#ff6600', fontSize: '20px', fontWeight: 'bold' }}>
+                        <div style={{ color: theme.colors.textDim, fontSize: theme.fontSizes.xxs, marginBottom: '4px' }}>YOUR {noSymbol} SHARES</div>
+                        <div style={{ color: theme.colors.warning, fontSize: theme.fontSizes.displaySm, fontWeight: 'bold' }}>
                           {parseFloat(userNoBalance).toFixed(4)}
                         </div>
                         {parseFloat(userNoBalance) > 0 && (
-                          <div style={{ color: '#ff6600', fontSize: '9px', marginTop: '4px' }}>Click to sell all</div>
+                          <div style={{ color: theme.colors.warning, fontSize: theme.fontSizes.tiny, marginTop: '4px' }}>Click to sell all</div>
                         )}
                       </div>
                     </div>
@@ -1642,19 +1643,19 @@ export default function LMSRAdmin() {
                     {tradeParams.amount && parseFloat(tradeParams.amount) > 0 && (
                       <div style={{
                         padding: '16px',
-                        backgroundColor: '#0a0a0a',
-                        border: '1px solid #ffff00',
+                        backgroundColor: theme.colors.pageBg,
+                        border: `1px solid ${theme.colors.highlight}`,
                         textAlign: 'center',
                       }}>
-                        <div style={{ color: '#666', fontSize: '11px', marginBottom: '4px' }}>ESTIMATED PAYOUT</div>
-                        <div style={{ color: '#ffff00', fontSize: '28px', fontWeight: 'bold' }}>
+                        <div style={{ color: theme.colors.textDim, fontSize: theme.fontSizes.xs, marginBottom: '4px' }}>ESTIMATED PAYOUT</div>
+                        <div style={{ color: theme.colors.highlight, fontSize: theme.fontSizes.displayMd, fontWeight: 'bold' }}>
                           {parseFloat(estimatedPayout).toFixed(4)} USDC
                         </div>
-                        <div style={{ color: '#666', fontSize: '11px', marginTop: '4px' }}>
+                        <div style={{ color: theme.colors.textDim, fontSize: theme.fontSizes.xs, marginTop: '4px' }}>
                           for {tradeParams.amount} {tradeParams.isYes ? yesSymbol : noSymbol} shares
                         </div>
                         {parseFloat(estimatedPayout) > 0 && parseFloat(tradeParams.amount) > 0 && (
-                          <div style={{ color: '#444', fontSize: '10px', marginTop: '8px' }}>
+                          <div style={{ color: theme.colors.textDisabled, fontSize: theme.fontSizes.xxs, marginTop: '8px' }}>
                             Avg price: {(parseFloat(estimatedPayout) / parseFloat(tradeParams.amount)).toFixed(4)} USDC/share
                             {marketInfo && (
                               <> | Spot: {(Number(tradeParams.isYes ? marketInfo.yesPrice : marketInfo.noPrice) / 1e18).toFixed(4)} USDC</>
@@ -1682,9 +1683,9 @@ export default function LMSRAdmin() {
                         width: '100%',
                         marginTop: '24px',
                         padding: '16px',
-                        backgroundColor: tradeParams.direction === 'buy' ? '#001a00' : '#1a0a00',
-                        borderColor: tradeParams.direction === 'buy' ? '#00ff00' : '#ff6600',
-                        color: tradeParams.direction === 'buy' ? '#00ff00' : '#ff6600',
+                        backgroundColor: tradeParams.direction === 'buy' ? theme.colors.primaryDark : theme.colors.warningDark,
+                        borderColor: tradeParams.direction === 'buy' ? theme.colors.primary : theme.colors.warning,
+                        color: tradeParams.direction === 'buy' ? theme.colors.primary : theme.colors.warning,
                         opacity: isDisabled ? 0.5 : 1,
                       }}
                     >
@@ -1701,7 +1702,7 @@ export default function LMSRAdmin() {
           {activeTab === 'portfolio' && (
             <div>
               <SectionHeader>PORTFOLIO</SectionHeader>
-              <p style={{ color: '#666', marginBottom: '24px' }}>
+              <p style={{ color: theme.colors.textDim, marginBottom: '24px' }}>
                 Your positions and P&L across all markets
               </p>
 
@@ -1710,40 +1711,40 @@ export default function LMSRAdmin() {
                 <div style={{
                   ...styles.card,
                   textAlign: 'center',
-                  borderColor: totalPnL >= 0 ? '#00ff00' : '#ff0000',
+                  borderColor: totalPnL >= 0 ? theme.colors.primary : theme.colors.error,
                   borderWidth: '2px',
                 }}>
-                  <div style={{ color: '#666', fontSize: '11px', marginBottom: '4px' }}>TOTAL P&L</div>
+                  <div style={{ color: theme.colors.textDim, fontSize: theme.fontSizes.xs, marginBottom: '4px' }}>TOTAL P&L</div>
                   <div style={{
-                    color: totalPnL >= 0 ? '#00ff00' : '#ff0000',
-                    fontSize: '28px',
+                    color: totalPnL >= 0 ? theme.colors.primary : theme.colors.error,
+                    fontSize: theme.fontSizes.displayMd,
                     fontWeight: 'bold',
                   }}>
                     {totalPnL >= 0 ? '+' : ''}{totalPnL.toFixed(4)}
                   </div>
-                  <div style={{ color: '#666', fontSize: '10px' }}>USDC</div>
+                  <div style={{ color: theme.colors.textDim, fontSize: theme.fontSizes.xxs }}>USDC</div>
                 </div>
                 <div style={{ ...styles.card, textAlign: 'center' }}>
-                  <div style={{ color: '#666', fontSize: '11px', marginBottom: '4px' }}>REALIZED P&L</div>
+                  <div style={{ color: theme.colors.textDim, fontSize: theme.fontSizes.xs, marginBottom: '4px' }}>REALIZED P&L</div>
                   <div style={{
-                    color: totalRealizedPnL >= 0 ? '#00ff00' : '#ff0000',
-                    fontSize: '24px',
+                    color: totalRealizedPnL >= 0 ? theme.colors.primary : theme.colors.error,
+                    fontSize: theme.fontSizes.sectionTitle,
                     fontWeight: 'bold',
                   }}>
                     {totalRealizedPnL >= 0 ? '+' : ''}{totalRealizedPnL.toFixed(4)}
                   </div>
-                  <div style={{ color: '#666', fontSize: '10px' }}>From sells & redemptions</div>
+                  <div style={{ color: theme.colors.textDim, fontSize: theme.fontSizes.xxs }}>From sells & redemptions</div>
                 </div>
                 <div style={{ ...styles.card, textAlign: 'center' }}>
-                  <div style={{ color: '#666', fontSize: '11px', marginBottom: '4px' }}>OPEN POSITIONS</div>
+                  <div style={{ color: theme.colors.textDim, fontSize: theme.fontSizes.xs, marginBottom: '4px' }}>OPEN POSITIONS</div>
                   <div style={{
-                    color: totalUnrealizedPnL >= 0 ? '#00ff00' : '#ff0000',
-                    fontSize: '24px',
+                    color: totalUnrealizedPnL >= 0 ? theme.colors.primary : theme.colors.error,
+                    fontSize: theme.fontSizes.sectionTitle,
                     fontWeight: 'bold',
                   }}>
                     {totalUnrealizedPnL >= 0 ? '+' : ''}{totalUnrealizedPnL.toFixed(4)}
                   </div>
-                  <div style={{ color: '#666', fontSize: '10px' }}>Mark-to-market</div>
+                  <div style={{ color: theme.colors.textDim, fontSize: theme.fontSizes.xxs }}>Mark-to-market</div>
                 </div>
               </div>
 
@@ -1766,25 +1767,25 @@ export default function LMSRAdmin() {
                           style={{
                             ...styles.card,
                             borderLeftWidth: '4px',
-                            borderLeftColor: unrealizedPnL >= 0 ? '#00ff00' : '#ff0000',
+                            borderLeftColor: unrealizedPnL >= 0 ? theme.colors.primary : theme.colors.error,
                           }}
                         >
                           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '12px' }}>
                             <div>
-                              <div style={{ color: '#fff', fontWeight: 'bold', marginBottom: '4px' }}>
+                              <div style={{ color: theme.colors.textWhite, fontWeight: 'bold', marginBottom: '4px' }}>
                                 {pos.marketQuestion || 'Unknown Market'}
                               </div>
-                              <div style={{ color: '#666', fontSize: '11px' }}>
+                              <div style={{ color: theme.colors.textDim, fontSize: theme.fontSizes.xs }}>
                                 {pos.marketAddress.slice(0, 10)}...{pos.marketAddress.slice(-8)}
                               </div>
                               {pos.resolved && (
                                 <div style={{
                                   marginTop: '4px',
                                   padding: '2px 8px',
-                                  backgroundColor: '#1a1a00',
-                                  border: '1px solid #ffff00',
-                                  color: '#ffff00',
-                                  fontSize: '10px',
+                                  backgroundColor: theme.colors.highlightDark,
+                                  border: `1px solid ${theme.colors.highlight}`,
+                                  color: theme.colors.highlight,
+                                  fontSize: theme.fontSizes.xxs,
                                   display: 'inline-block',
                                 }}>
                                   RESOLVED: {pos.yesWins ? 'YES' : 'NO'} WINS
@@ -1793,48 +1794,48 @@ export default function LMSRAdmin() {
                             </div>
                             <div style={{ textAlign: 'right' }}>
                               <div style={{
-                                color: unrealizedPnL >= 0 ? '#00ff00' : '#ff0000',
-                                fontSize: '20px',
+                                color: unrealizedPnL >= 0 ? theme.colors.primary : theme.colors.error,
+                                fontSize: theme.fontSizes.displaySm,
                                 fontWeight: 'bold',
                               }}>
                                 {unrealizedPnL >= 0 ? '+' : ''}{unrealizedPnL.toFixed(4)}
                               </div>
-                              <div style={{ color: '#666', fontSize: '10px' }}>Unrealized P&L</div>
+                              <div style={{ color: theme.colors.textDim, fontSize: theme.fontSizes.xxs }}>Unrealized P&L</div>
                             </div>
                           </div>
 
                           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '8px' }}>
                             {pos.yesShares > 0.0001 && (
-                              <div style={{ padding: '8px', backgroundColor: '#001a00', border: '1px solid #00ff00' }}>
-                                <div style={{ color: '#666', fontSize: '10px' }}>YES SHARES</div>
-                                <div style={{ color: '#00ff00', fontWeight: 'bold' }}>{pos.yesShares.toFixed(4)}</div>
-                                <div style={{ color: '#666', fontSize: '10px' }}>Cost: {pos.yesCostBasis.toFixed(4)}</div>
+                              <div style={{ padding: '8px', backgroundColor: theme.colors.primaryDark, border: `1px solid ${theme.colors.primary}` }}>
+                                <div style={{ color: theme.colors.textDim, fontSize: theme.fontSizes.xxs }}>YES SHARES</div>
+                                <div style={{ color: theme.colors.primary, fontWeight: 'bold' }}>{pos.yesShares.toFixed(4)}</div>
+                                <div style={{ color: theme.colors.textDim, fontSize: theme.fontSizes.xxs }}>Cost: {pos.yesCostBasis.toFixed(4)}</div>
                               </div>
                             )}
                             {pos.noShares > 0.0001 && (
-                              <div style={{ padding: '8px', backgroundColor: '#1a0a00', border: '1px solid #ff6600' }}>
-                                <div style={{ color: '#666', fontSize: '10px' }}>NO SHARES</div>
-                                <div style={{ color: '#ff6600', fontWeight: 'bold' }}>{pos.noShares.toFixed(4)}</div>
-                                <div style={{ color: '#666', fontSize: '10px' }}>Cost: {pos.noCostBasis.toFixed(4)}</div>
+                              <div style={{ padding: '8px', backgroundColor: theme.colors.warningDark, border: `1px solid ${theme.colors.warning}` }}>
+                                <div style={{ color: theme.colors.textDim, fontSize: theme.fontSizes.xxs }}>NO SHARES</div>
+                                <div style={{ color: theme.colors.warning, fontWeight: 'bold' }}>{pos.noShares.toFixed(4)}</div>
+                                <div style={{ color: theme.colors.textDim, fontSize: theme.fontSizes.xxs }}>Cost: {pos.noCostBasis.toFixed(4)}</div>
                               </div>
                             )}
-                            <div style={{ padding: '8px', backgroundColor: '#0a0a0a', border: '1px solid #333' }}>
-                              <div style={{ color: '#666', fontSize: '10px' }}>COST BASIS</div>
-                              <div style={{ color: '#fff', fontWeight: 'bold' }}>{totalCost.toFixed(4)}</div>
-                              <div style={{ color: '#666', fontSize: '10px' }}>USDC</div>
+                            <div style={{ padding: '8px', backgroundColor: theme.colors.pageBg, border: `1px solid ${theme.colors.border}` }}>
+                              <div style={{ color: theme.colors.textDim, fontSize: theme.fontSizes.xxs }}>COST BASIS</div>
+                              <div style={{ color: theme.colors.textWhite, fontWeight: 'bold' }}>{totalCost.toFixed(4)}</div>
+                              <div style={{ color: theme.colors.textDim, fontSize: theme.fontSizes.xxs }}>USDC</div>
                             </div>
-                            <div style={{ padding: '8px', backgroundColor: '#0a0a0a', border: '1px solid #333' }}>
-                              <div style={{ color: '#666', fontSize: '10px' }}>MARKET VALUE</div>
-                              <div style={{ color: '#fff', fontWeight: 'bold' }}>{totalValue.toFixed(4)}</div>
-                              <div style={{ color: '#666', fontSize: '10px' }}>USDC</div>
+                            <div style={{ padding: '8px', backgroundColor: theme.colors.pageBg, border: `1px solid ${theme.colors.border}` }}>
+                              <div style={{ color: theme.colors.textDim, fontSize: theme.fontSizes.xxs }}>MARKET VALUE</div>
+                              <div style={{ color: theme.colors.textWhite, fontWeight: 'bold' }}>{totalValue.toFixed(4)}</div>
+                              <div style={{ color: theme.colors.textDim, fontSize: theme.fontSizes.xxs }}>USDC</div>
                             </div>
                           </div>
 
                           {Math.abs(pos.realizedPnL) > 0.0001 && (
-                            <div style={{ marginTop: '8px', padding: '8px', backgroundColor: '#0a0a0a', border: '1px solid #333' }}>
-                              <span style={{ color: '#666', fontSize: '10px' }}>Realized P&L: </span>
+                            <div style={{ marginTop: '8px', padding: '8px', backgroundColor: theme.colors.pageBg, border: `1px solid ${theme.colors.border}` }}>
+                              <span style={{ color: theme.colors.textDim, fontSize: theme.fontSizes.xxs }}>Realized P&L: </span>
                               <span style={{
-                                color: pos.realizedPnL >= 0 ? '#00ff00' : '#ff0000',
+                                color: pos.realizedPnL >= 0 ? theme.colors.primary : theme.colors.error,
                                 fontWeight: 'bold',
                               }}>
                                 {pos.realizedPnL >= 0 ? '+' : ''}{pos.realizedPnL.toFixed(4)} USDC
@@ -1849,7 +1850,7 @@ export default function LMSRAdmin() {
                                   setTradeParams(prev => ({ ...prev, marketAddress: pos.marketAddress }));
                                   setActiveTab('trade');
                                 }}
-                                style={{ ...styles.button, flex: 1, padding: '8px', fontSize: '10px', borderColor: '#666', color: '#666' }}
+                                style={{ ...styles.button, flex: 1, padding: '8px', fontSize: theme.fontSizes.xxs, borderColor: theme.colors.textDim, color: theme.colors.textDim }}
                               >
                                 VIEW
                               </button>
@@ -1859,7 +1860,7 @@ export default function LMSRAdmin() {
                                   setTradeParams(prev => ({ ...prev, marketAddress: pos.marketAddress }));
                                   setActiveTab('trade');
                                 }}
-                                style={{ ...styles.button, flex: 1, padding: '8px', fontSize: '10px' }}
+                                style={{ ...styles.button, flex: 1, padding: '8px', fontSize: theme.fontSizes.xxs }}
                               >
                                 TRADE
                               </button>
@@ -1876,9 +1877,9 @@ export default function LMSRAdmin() {
                                       ...styles.button,
                                       flex: 1,
                                       padding: '8px',
-                                      fontSize: '10px',
-                                      borderColor: '#444',
-                                      color: '#444',
+                                      fontSize: theme.fontSizes.xxs,
+                                      borderColor: theme.colors.textDisabled,
+                                      color: theme.colors.textDisabled,
                                       cursor: 'not-allowed',
                                     }}
                                   >
@@ -1893,7 +1894,7 @@ export default function LMSRAdmin() {
                                     setResolution(prev => ({ ...prev, marketAddress: pos.marketAddress }));
                                     setActiveTab('resolve');
                                   }}
-                                  style={{ ...styles.button, flex: 1, padding: '8px', fontSize: '10px', borderColor: '#ffff00', color: '#ffff00' }}
+                                  style={{ ...styles.button, flex: 1, padding: '8px', fontSize: theme.fontSizes.xxs, borderColor: theme.colors.highlight, color: theme.colors.highlight }}
                                 >
                                   REDEEM
                                 </button>
@@ -1910,33 +1911,33 @@ export default function LMSRAdmin() {
               {/* Trade Stats */}
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '16px', marginBottom: '24px' }}>
                 <div style={{ ...styles.card, textAlign: 'center' }}>
-                  <div style={{ color: '#666', fontSize: '11px', marginBottom: '4px' }}>TOTAL TRADES</div>
-                  <div style={{ color: '#00ff00', fontSize: '24px', fontWeight: 'bold' }}>{trades.length}</div>
+                  <div style={{ color: theme.colors.textDim, fontSize: theme.fontSizes.xs, marginBottom: '4px' }}>TOTAL TRADES</div>
+                  <div style={{ color: theme.colors.primary, fontSize: theme.fontSizes.sectionTitle, fontWeight: 'bold' }}>{trades.length}</div>
                 </div>
                 <div style={{ ...styles.card, textAlign: 'center' }}>
-                  <div style={{ color: '#666', fontSize: '11px', marginBottom: '4px' }}>BUYS</div>
-                  <div style={{ color: '#00ff00', fontSize: '24px', fontWeight: 'bold' }}>
+                  <div style={{ color: theme.colors.textDim, fontSize: theme.fontSizes.xs, marginBottom: '4px' }}>BUYS</div>
+                  <div style={{ color: theme.colors.primary, fontSize: theme.fontSizes.sectionTitle, fontWeight: 'bold' }}>
                     {trades.filter(t => t.type === 'buy').length}
                   </div>
                 </div>
                 <div style={{ ...styles.card, textAlign: 'center' }}>
-                  <div style={{ color: '#666', fontSize: '11px', marginBottom: '4px' }}>SELLS</div>
-                  <div style={{ color: '#ff6600', fontSize: '24px', fontWeight: 'bold' }}>
+                  <div style={{ color: theme.colors.textDim, fontSize: theme.fontSizes.xs, marginBottom: '4px' }}>SELLS</div>
+                  <div style={{ color: theme.colors.warning, fontSize: theme.fontSizes.sectionTitle, fontWeight: 'bold' }}>
                     {trades.filter(t => t.type === 'sell').length}
                   </div>
                 </div>
                 <div style={{ ...styles.card, textAlign: 'center' }}>
-                  <div style={{ color: '#666', fontSize: '11px', marginBottom: '4px' }}>VOLUME</div>
-                  <div style={{ color: '#fff', fontSize: '24px', fontWeight: 'bold' }}>
+                  <div style={{ color: theme.colors.textDim, fontSize: theme.fontSizes.xs, marginBottom: '4px' }}>VOLUME</div>
+                  <div style={{ color: theme.colors.textWhite, fontSize: theme.fontSizes.sectionTitle, fontWeight: 'bold' }}>
                     {trades.reduce((sum, t) => sum + parseFloat(t.amount || '0'), 0).toFixed(2)}
                   </div>
-                  <div style={{ color: '#666', fontSize: '10px' }}>USDC</div>
+                  <div style={{ color: theme.colors.textDim, fontSize: theme.fontSizes.xxs }}>USDC</div>
                 </div>
               </div>
 
               {/* Trade History */}
               {trades.length === 0 ? (
-                <div style={{ ...styles.card, textAlign: 'center', padding: '48px', color: '#666' }}>
+                <div style={{ ...styles.card, textAlign: 'center', padding: '48px', color: theme.colors.textDim }}>
                   No trades yet. Start trading in the TRADE tab.
                 </div>
               ) : (
@@ -1946,7 +1947,7 @@ export default function LMSRAdmin() {
                     <button
                       onClick={() => refetchDbTrades()}
                       disabled={isLoadingPortfolio}
-                      style={{ ...styles.button, padding: '6px 12px', fontSize: '10px', borderColor: '#00ffff', color: '#00ffff' }}
+                      style={{ ...styles.button, padding: '6px 12px', fontSize: theme.fontSizes.xxs, borderColor: theme.colors.info, color: theme.colors.info }}
                     >
                       {isLoadingPortfolio ? 'LOADING...' : 'REFRESH'}
                     </button>
@@ -1959,7 +1960,7 @@ export default function LMSRAdmin() {
                           ...styles.card,
                           padding: '16px',
                           borderLeftWidth: '4px',
-                          borderLeftColor: trade.type === 'buy' ? '#00ff00' : '#ff6600',
+                          borderLeftColor: trade.type === 'buy' ? theme.colors.primary : theme.colors.warning,
                         }}
                       >
                         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
@@ -1967,49 +1968,49 @@ export default function LMSRAdmin() {
                             <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '8px' }}>
                               <span style={{
                                 padding: '2px 8px',
-                                backgroundColor: trade.type === 'buy' ? '#001a00' : '#1a0a00',
-                                border: `1px solid ${trade.type === 'buy' ? '#00ff00' : '#ff6600'}`,
-                                color: trade.type === 'buy' ? '#00ff00' : '#ff6600',
-                                fontSize: '10px',
+                                backgroundColor: trade.type === 'buy' ? theme.colors.primaryDark : theme.colors.warningDark,
+                                border: `1px solid ${trade.type === 'buy' ? theme.colors.primary : theme.colors.warning}`,
+                                color: trade.type === 'buy' ? theme.colors.primary : theme.colors.warning,
+                                fontSize: theme.fontSizes.xxs,
                                 fontWeight: 'bold',
                               }}>
                                 {trade.type.toUpperCase()}
                               </span>
                               <span style={{
                                 padding: '2px 8px',
-                                backgroundColor: trade.outcome === 'YES' ? '#001a00' : '#1a0a00',
-                                border: `1px solid ${trade.outcome === 'YES' ? '#00ff00' : '#ff6600'}`,
-                                color: trade.outcome === 'YES' ? '#00ff00' : '#ff6600',
-                                fontSize: '10px',
+                                backgroundColor: trade.outcome === 'YES' ? theme.colors.primaryDark : theme.colors.warningDark,
+                                border: `1px solid ${trade.outcome === 'YES' ? theme.colors.primary : theme.colors.warning}`,
+                                color: trade.outcome === 'YES' ? theme.colors.primary : theme.colors.warning,
+                                fontSize: theme.fontSizes.xxs,
                                 fontWeight: 'bold',
                               }}>
                                 {trade.outcome}
                               </span>
                               <span style={{
                                 padding: '2px 8px',
-                                backgroundColor: '#111',
-                                border: '1px solid #666',
-                                color: '#fff',
-                                fontSize: '10px',
+                                backgroundColor: theme.colors.cardBg,
+                                border: `1px solid ${theme.colors.textDim}`,
+                                color: theme.colors.textWhite,
+                                fontSize: theme.fontSizes.xxs,
                                 fontWeight: 'bold',
                               }}>
                                 {parseFloat(trade.shares || '0').toFixed(4)} SHARES
                               </span>
                             </div>
-                            <div style={{ color: '#fff', fontSize: '14px', fontWeight: 'bold', marginBottom: '8px' }}>
+                            <div style={{ color: theme.colors.textWhite, fontSize: theme.fontSizes.nav, fontWeight: 'bold', marginBottom: '8px' }}>
                               {trade.type === 'buy' ? 'Spent' : 'Received'}: {trade.amount} USDC
                             </div>
                             {trade.marketQuestion && (
-                              <div style={{ color: '#999', fontSize: '12px', marginBottom: '4px' }}>
+                              <div style={{ color: theme.colors.textMuted, fontSize: theme.fontSizes.small, marginBottom: '4px' }}>
                                 {trade.marketQuestion}
                               </div>
                             )}
-                            <div style={{ color: '#666', fontSize: '11px' }}>
+                            <div style={{ color: theme.colors.textDim, fontSize: theme.fontSizes.xs }}>
                               Market: {trade.marketAddress.slice(0, 10)}...{trade.marketAddress.slice(-8)}
                             </div>
                           </div>
                           <div style={{ textAlign: 'right' }}>
-                            <div style={{ color: '#666', fontSize: '11px' }}>
+                            <div style={{ color: theme.colors.textDim, fontSize: theme.fontSizes.xs }}>
                               {new Date(trade.timestamp).toLocaleDateString()}{' '}
                               {new Date(trade.timestamp).toLocaleTimeString()}
                             </div>
@@ -2021,10 +2022,10 @@ export default function LMSRAdmin() {
                                 display: 'inline-block',
                                 marginTop: '8px',
                                 padding: '4px 12px',
-                                backgroundColor: '#001a00',
-                                border: '1px solid #00ff00',
-                                color: '#00ff00',
-                                fontSize: '10px',
+                                backgroundColor: theme.colors.primaryDark,
+                                border: `1px solid ${theme.colors.primary}`,
+                                color: theme.colors.primary,
+                                fontSize: theme.fontSizes.xxs,
                                 textDecoration: 'none',
                               }}
                             >
@@ -2044,7 +2045,7 @@ export default function LMSRAdmin() {
           {activeTab === 'resolve' && (
             <div>
               <SectionHeader>RESOLVE MARKET</SectionHeader>
-              <p style={{ color: '#666', marginBottom: '24px' }}>Oracle-only function to set the final outcome</p>
+              <p style={{ color: theme.colors.textDim, marginBottom: '24px' }}>Oracle-only function to set the final outcome</p>
 
               <div style={styles.card}>
                 <InputField
@@ -2054,7 +2055,7 @@ export default function LMSRAdmin() {
                   onChange={v => setResolution(p => ({ ...p, marketAddress: v }))}
                 />
                 <div style={{ marginTop: '16px' }}>
-                  <label style={{ display: 'block', color: '#666', fontSize: '11px', marginBottom: '8px', letterSpacing: '1px' }}>
+                  <label style={{ display: 'block', color: theme.colors.textDim, fontSize: theme.fontSizes.xs, marginBottom: '8px', letterSpacing: '1px' }}>
                     OUTCOME
                   </label>
                   <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '8px' }}>
@@ -2065,12 +2066,12 @@ export default function LMSRAdmin() {
                         style={{
                           ...styles.button,
                           backgroundColor: resolution.outcome === outcome
-                            ? outcome === 'YES' ? '#00ff00' : '#ff6600'
+                            ? outcome === 'YES' ? theme.colors.primary : theme.colors.warning
                             : 'transparent',
                           color: resolution.outcome === outcome
-                            ? '#000'
-                            : outcome === 'YES' ? '#00ff00' : '#ff6600',
-                          borderColor: outcome === 'YES' ? '#00ff00' : '#ff6600',
+                            ? theme.colors.black
+                            : outcome === 'YES' ? theme.colors.primary : theme.colors.warning,
+                          borderColor: outcome === 'YES' ? theme.colors.primary : theme.colors.warning,
                         }}
                       >
                         {outcome} WINS
@@ -2091,9 +2092,9 @@ export default function LMSRAdmin() {
                         disabled
                         style={{
                           ...styles.button,
-                          backgroundColor: '#1a1a00',
-                          borderColor: '#444',
-                          color: '#444',
+                          backgroundColor: theme.colors.highlightDark,
+                          borderColor: theme.colors.textDisabled,
+                          color: theme.colors.textDisabled,
                           padding: '16px',
                           cursor: 'not-allowed',
                         }}
@@ -2114,9 +2115,9 @@ export default function LMSRAdmin() {
                         disabled
                         style={{
                           ...styles.button,
-                          backgroundColor: '#1a1a00',
-                          borderColor: '#444',
-                          color: '#444',
+                          backgroundColor: theme.colors.highlightDark,
+                          borderColor: theme.colors.textDisabled,
+                          color: theme.colors.textDisabled,
                           padding: '16px',
                           cursor: 'not-allowed',
                         }}
@@ -2137,9 +2138,9 @@ export default function LMSRAdmin() {
                       disabled={isResolving || !resolution.marketAddress || !isConnected || isWrongChain || !isOracle || !canResolveTime}
                       style={{
                         ...styles.button,
-                        backgroundColor: '#1a0000',
-                        borderColor: '#ff0000',
-                        color: '#ff0000',
+                        backgroundColor: theme.colors.errorBgDark,
+                        borderColor: theme.colors.error,
+                        color: theme.colors.error,
                         padding: '16px',
                         opacity: isResolving || !resolution.marketAddress || !isConnected || isWrongChain || !canResolveTime ? 0.5 : 1,
                       }}
@@ -2153,15 +2154,15 @@ export default function LMSRAdmin() {
                 {feeInfo && feeInfo.isMarketCreator && (
                   <div style={{
                     padding: '12px',
-                    backgroundColor: '#0a0a0a',
-                    border: '1px solid #333',
+                    backgroundColor: theme.colors.pageBg,
+                    border: `1px solid ${theme.colors.border}`,
                     marginBottom: '16px',
                   }}>
-                    <div style={{ color: '#666', fontSize: '10px', marginBottom: '4px' }}>YOUR CREATOR FEES</div>
-                    <div style={{ color: feeInfo.canClaimCreatorFees ? '#00ff00' : '#666', fontWeight: 'bold', fontSize: '18px' }}>
+                    <div style={{ color: theme.colors.textDim, fontSize: theme.fontSizes.xxs, marginBottom: '4px' }}>YOUR CREATOR FEES</div>
+                    <div style={{ color: feeInfo.canClaimCreatorFees ? theme.colors.primary : theme.colors.textDim, fontWeight: 'bold', fontSize: theme.fontSizes.title }}>
                       {parseFloat(feeInfo.creatorFees).toFixed(6)} USDC
                     </div>
-                    <div style={{ color: '#444', fontSize: '9px', marginTop: '4px' }}>
+                    <div style={{ color: theme.colors.textDisabled, fontSize: theme.fontSizes.tiny, marginTop: '4px' }}>
                       Earned from trading fees on your market
                     </div>
                   </div>
@@ -2181,9 +2182,9 @@ export default function LMSRAdmin() {
                         disabled
                         style={{
                           ...styles.button,
-                          backgroundColor: '#0a0a0a',
-                          borderColor: '#444',
-                          color: '#444',
+                          backgroundColor: theme.colors.pageBg,
+                          borderColor: theme.colors.textDisabled,
+                          color: theme.colors.textDisabled,
                           padding: '16px',
                           cursor: 'not-allowed',
                         }}
@@ -2199,9 +2200,9 @@ export default function LMSRAdmin() {
                       disabled={isClaimingCreatorFees || !feeInfo.canClaimCreatorFees || !isConnected || isWrongChain}
                       style={{
                         ...styles.button,
-                        backgroundColor: feeInfo.canClaimCreatorFees ? '#001a00' : '#0a0a0a',
-                        borderColor: feeInfo.canClaimCreatorFees ? '#00ff00' : '#444',
-                        color: feeInfo.canClaimCreatorFees ? '#00ff00' : '#444',
+                        backgroundColor: feeInfo.canClaimCreatorFees ? theme.colors.primaryDark : theme.colors.pageBg,
+                        borderColor: feeInfo.canClaimCreatorFees ? theme.colors.primary : theme.colors.textDisabled,
+                        color: feeInfo.canClaimCreatorFees ? theme.colors.primary : theme.colors.textDisabled,
                         padding: '16px',
                         opacity: isClaimingCreatorFees || !feeInfo.canClaimCreatorFees ? 0.5 : 1,
                       }}
@@ -2213,9 +2214,9 @@ export default function LMSRAdmin() {
               </div>
 
               {feeInfo?.isMarketCreator && (
-                <div style={{ ...styles.card, marginTop: '24px', borderColor: '#ff6600' }}>
-                  <div style={{ color: '#ff6600', fontWeight: 'bold', marginBottom: '8px' }}>ℹ CREATOR FEE INFO</div>
-                  <div style={{ color: '#999', fontSize: '12px' }}>
+                <div style={{ ...styles.card, marginTop: '24px', borderColor: theme.colors.warning }}>
+                  <div style={{ color: theme.colors.warning, fontWeight: 'bold', marginBottom: '8px' }}>ℹ CREATOR FEE INFO</div>
+                  <div style={{ color: theme.colors.textMuted, fontSize: theme.fontSizes.small }}>
                     As the market creator, you earn 0.5% of all trades on this market.<br />
                     Creator fees can be claimed after the market resolves or after the resolution time passes.
                   </div>
@@ -2236,11 +2237,11 @@ export default function LMSRAdmin() {
                     style={{
                       flex: 1,
                       padding: '12px 14px',
-                      backgroundColor: '#0a0a0a',
-                      border: '1px solid #333',
-                      color: '#fff',
-                      fontFamily: "'IBM Plex Mono', monospace",
-                      fontSize: '12px',
+                      backgroundColor: theme.colors.pageBg,
+                      border: `1px solid ${theme.colors.border}`,
+                      color: theme.colors.textWhite,
+                      fontFamily: theme.fonts.mono,
+                      fontSize: theme.fontSizes.small,
                       outline: 'none',
                     }}
                   />
@@ -2250,21 +2251,21 @@ export default function LMSRAdmin() {
                       style={{
                         ...styles.button,
                         padding: '10px 12px',
-                        borderColor: '#444',
-                        color: '#aaa',
+                        borderColor: theme.colors.textDisabled,
+                        color: theme.colors.textSubtle,
                       }}
                     >
                       CLEAR
                     </button>
                   )}
                 </div>
-                <div style={{ marginTop: '10px', color: '#666', fontSize: '11px' }}>
+                <div style={{ marginTop: '10px', color: theme.colors.textDim, fontSize: theme.fontSizes.xs }}>
                   Showing {displayMarkets.length} / {markets.length} markets
                 </div>
               </div>
 
               {markets.length === 0 ? (
-                <div style={{ ...styles.card, textAlign: 'center', padding: '48px', color: '#666' }}>
+                <div style={{ ...styles.card, textAlign: 'center', padding: '48px', color: theme.colors.textDim }}>
                   No markets deployed yet. Create one in the CREATE tab.
                 </div>
               ) : (
@@ -2282,20 +2283,20 @@ export default function LMSRAdmin() {
                             return (
                               <div key={market.id} style={{
                                 ...styles.card,
-                                borderColor: '#00ff00',
+                                borderColor: theme.colors.primary,
                               }}>
                                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
                                   <div>
-                                    <div style={{ fontWeight: 'bold', fontSize: '14px' }}>{market.question}</div>
-                                    <div style={{ color: '#666', marginTop: '8px', fontSize: '11px' }}>
+                                    <div style={{ fontWeight: 'bold', fontSize: theme.fontSizes.nav }}>{market.question}</div>
+                                    <div style={{ color: theme.colors.textDim, marginTop: '8px', fontSize: theme.fontSizes.xs }}>
                                       Resolution Date: {market.resolution}
                                     </div>
                                     {prices && (
                                       <div style={{ marginTop: '8px', display: 'flex', gap: '16px' }}>
-                                        <span style={{ color: '#00ff00', fontSize: '12px' }}>
+                                        <span style={{ color: theme.colors.primary, fontSize: theme.fontSizes.small }}>
                                           YES: {(prices.yesPrice * 100).toFixed(1)}%
                                         </span>
-                                        <span style={{ color: '#ff6600', fontSize: '12px' }}>
+                                        <span style={{ color: theme.colors.warning, fontSize: theme.fontSizes.small }}>
                                           NO: {(prices.noPrice * 100).toFixed(1)}%
                                         </span>
                                       </div>
@@ -2304,26 +2305,26 @@ export default function LMSRAdmin() {
                                   <div
                                     style={{
                                       padding: '4px 12px',
-                                      backgroundColor: '#001a00',
-                                      border: '1px solid #00ff00',
-                                      color: '#00ff00',
-                                      fontSize: '11px',
+                                      backgroundColor: theme.colors.primaryDark,
+                                      border: `1px solid ${theme.colors.primary}`,
+                                      color: theme.colors.primary,
+                                      fontSize: theme.fontSizes.xs,
                                     }}
                                   >
                                     ACTIVE
                                   </div>
                                 </div>
-                                <div style={{ marginTop: '12px', fontSize: '11px' }}>
-                                  <div style={{ color: '#666' }}>
-                                    Contract: <span style={{ color: '#fff' }}>{market.address}</span>
+                                <div style={{ marginTop: '12px', fontSize: theme.fontSizes.xs }}>
+                                  <div style={{ color: theme.colors.textDim }}>
+                                    Contract: <span style={{ color: theme.colors.textWhite }}>{market.address}</span>
                                   </div>
                                 </div>
                                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px', marginTop: '12px' }}>
-                                  <div style={{ color: '#666', fontSize: '11px' }}>
-                                    YES: <span style={{ color: '#00ff00' }}>{market.yesToken.slice(0, 10)}...</span>
+                                  <div style={{ color: theme.colors.textDim, fontSize: theme.fontSizes.xs }}>
+                                    YES: <span style={{ color: theme.colors.primary }}>{market.yesToken.slice(0, 10)}...</span>
                                   </div>
-                                  <div style={{ color: '#666', fontSize: '11px' }}>
-                                    NO: <span style={{ color: '#ff6600' }}>{market.noToken.slice(0, 10)}...</span>
+                                  <div style={{ color: theme.colors.textDim, fontSize: theme.fontSizes.xs }}>
+                                    NO: <span style={{ color: theme.colors.warning }}>{market.noToken.slice(0, 10)}...</span>
                                   </div>
                                 </div>
                                 <div style={{ marginTop: '16px', display: 'flex', gap: '8px' }}>
@@ -2332,7 +2333,7 @@ export default function LMSRAdmin() {
                                       setTradeParams(prev => ({ ...prev, marketAddress: market.address }));
                                       setActiveTab('trade');
                                     }}
-                                    style={{ ...styles.button, flex: 1, padding: '8px', borderColor: '#00ff00', color: '#00ff00' }}
+                                    style={{ ...styles.button, flex: 1, padding: '8px', borderColor: theme.colors.primary, color: theme.colors.primary }}
                                   >
                                     TRADE
                                   </button>
@@ -2342,7 +2343,7 @@ export default function LMSRAdmin() {
                                         setResolution(prev => ({ ...prev, marketAddress: market.address }));
                                         setActiveTab('resolve');
                                       }}
-                                      style={{ ...styles.button, flex: 1, padding: '8px', borderColor: '#ff6600', color: '#ff6600' }}
+                                      style={{ ...styles.button, flex: 1, padding: '8px', borderColor: theme.colors.warning, color: theme.colors.warning }}
                                     >
                                       RESOLVE
                                     </button>
@@ -2370,39 +2371,39 @@ export default function LMSRAdmin() {
                             return (
                               <div key={market.id} style={{
                                 ...styles.card,
-                                borderColor: '#ffff00',
+                                borderColor: theme.colors.highlight,
                                 opacity: 0.8,
                               }}>
                                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
                                   <div>
-                                    <div style={{ fontWeight: 'bold', fontSize: '14px' }}>{market.question}</div>
-                                    <div style={{ color: '#666', marginTop: '8px', fontSize: '11px' }}>
+                                    <div style={{ fontWeight: 'bold', fontSize: theme.fontSizes.nav }}>{market.question}</div>
+                                    <div style={{ color: theme.colors.textDim, marginTop: '8px', fontSize: theme.fontSizes.xs }}>
                                       Resolution Date: {market.resolution}
                                     </div>
                                   </div>
                                   <div
                                     style={{
                                       padding: '4px 12px',
-                                      backgroundColor: '#1a1a00',
-                                      border: '1px solid #ffff00',
-                                      color: '#ffff00',
-                                      fontSize: '11px',
+                                      backgroundColor: theme.colors.highlightDark,
+                                      border: `1px solid ${theme.colors.highlight}`,
+                                      color: theme.colors.highlight,
+                                      fontSize: theme.fontSizes.xs,
                                     }}
                                   >
                                     {winner} WINS
                                   </div>
                                 </div>
-                                <div style={{ marginTop: '12px', fontSize: '11px' }}>
-                                  <div style={{ color: '#666' }}>
-                                    Contract: <span style={{ color: '#fff' }}>{market.address}</span>
+                                <div style={{ marginTop: '12px', fontSize: theme.fontSizes.xs }}>
+                                  <div style={{ color: theme.colors.textDim }}>
+                                    Contract: <span style={{ color: theme.colors.textWhite }}>{market.address}</span>
                                   </div>
                                 </div>
                                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px', marginTop: '12px' }}>
-                                  <div style={{ color: '#666', fontSize: '11px' }}>
-                                    YES: <span style={{ color: '#00ff00' }}>{market.yesToken.slice(0, 10)}...</span>
+                                  <div style={{ color: theme.colors.textDim, fontSize: theme.fontSizes.xs }}>
+                                    YES: <span style={{ color: theme.colors.primary }}>{market.yesToken.slice(0, 10)}...</span>
                                   </div>
-                                  <div style={{ color: '#666', fontSize: '11px' }}>
-                                    NO: <span style={{ color: '#ff6600' }}>{market.noToken.slice(0, 10)}...</span>
+                                  <div style={{ color: theme.colors.textDim, fontSize: theme.fontSizes.xs }}>
+                                    NO: <span style={{ color: theme.colors.warning }}>{market.noToken.slice(0, 10)}...</span>
                                   </div>
                                 </div>
                                 <div style={{ marginTop: '16px', display: 'flex', gap: '8px' }}>
@@ -2411,7 +2412,7 @@ export default function LMSRAdmin() {
                                       setTradeParams(prev => ({ ...prev, marketAddress: market.address }));
                                       setActiveTab('trade');
                                     }}
-                                    style={{ ...styles.button, flex: 1, padding: '8px', borderColor: '#ffff00', color: '#ffff00' }}
+                                    style={{ ...styles.button, flex: 1, padding: '8px', borderColor: theme.colors.highlight, color: theme.colors.highlight }}
                                   >
                                     VIEW / REDEEM
                                   </button>
@@ -2434,7 +2435,7 @@ export default function LMSRAdmin() {
           <div style={styles.sidebarHeader}>TRANSACTION LOG</div>
           <div style={styles.logsContainer}>
             {logs.length === 0 ? (
-              <div style={{ color: '#333', padding: '16px', textAlign: 'center', fontSize: '11px' }}>
+              <div style={{ color: theme.colors.border, padding: '16px', textAlign: 'center', fontSize: theme.fontSizes.xs }}>
                 Waiting for actions...
               </div>
             ) : (
@@ -2444,18 +2445,18 @@ export default function LMSRAdmin() {
                   style={{
                     ...styles.logEntry,
                     borderLeftColor:
-                      log.type === 'success' ? '#00ff00' :
-                      log.type === 'error' ? '#ff0000' :
-                      log.type === 'pending' ? '#ffff00' : '#666',
+                      log.type === 'success' ? theme.colors.primary :
+                      log.type === 'error' ? theme.colors.error :
+                      log.type === 'pending' ? theme.colors.highlight : theme.colors.textDim,
                   }}
                 >
-                  <div style={{ color: '#666' }}>{log.timestamp}</div>
+                  <div style={{ color: theme.colors.textDim }}>{log.timestamp}</div>
                   <div
                     style={{
                       color:
-                        log.type === 'success' ? '#00ff00' :
-                        log.type === 'error' ? '#ff0000' :
-                        log.type === 'pending' ? '#ffff00' : '#fff',
+                        log.type === 'success' ? theme.colors.primary :
+                        log.type === 'error' ? theme.colors.error :
+                        log.type === 'pending' ? theme.colors.highlight : theme.colors.textWhite,
                       marginTop: '4px',
                       wordBreak: 'break-all',
                     }}
@@ -2467,7 +2468,7 @@ export default function LMSRAdmin() {
                       href={`${monadTestnet.blockExplorers.default.url}/tx/${log.txHash}`}
                       target="_blank"
                       rel="noopener noreferrer"
-                      style={{ color: '#00ff00', fontSize: '10px', marginTop: '4px', display: 'block' }}
+                      style={{ color: theme.colors.primary, fontSize: theme.fontSizes.xxs, marginTop: '4px', display: 'block' }}
                     >
                       View TX →
                     </a>
@@ -2492,22 +2493,22 @@ export default function LMSRAdmin() {
           left: 0,
           right: 0,
           bottom: 0,
-          backgroundColor: 'rgba(0, 0, 0, 0.9)',
+          backgroundColor: theme.colors.modalOverlay,
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'center',
           zIndex: 1000,
         }}>
           <div style={{
-            backgroundColor: '#0a0a0a',
-            border: '2px solid #00ff00',
+            backgroundColor: theme.colors.pageBg,
+            border: `2px solid ${theme.colors.primary}`,
             padding: '32px',
             maxWidth: '500px',
             width: '90%',
           }}>
             <div style={{
-              color: '#00ff00',
-              fontSize: '24px',
+              color: theme.colors.primary,
+              fontSize: theme.fontSizes.sectionTitle,
               fontWeight: 'bold',
               marginBottom: '8px',
               textAlign: 'center',
@@ -2515,8 +2516,8 @@ export default function LMSRAdmin() {
               {createdMarket.listed ? 'MARKET LISTED!' : 'MARKET CREATED'}
             </div>
             <div style={{
-              color: '#666',
-              fontSize: '12px',
+              color: theme.colors.textDim,
+              fontSize: theme.fontSizes.small,
               textAlign: 'center',
               marginBottom: '24px',
             }}>
@@ -2526,25 +2527,25 @@ export default function LMSRAdmin() {
             </div>
 
             <div style={{
-              backgroundColor: '#000',
-              border: '1px solid #333',
+              backgroundColor: theme.colors.black,
+              border: `1px solid ${theme.colors.border}`,
               padding: '16px',
               marginBottom: '16px',
             }}>
-              <div style={{ color: '#666', fontSize: '11px', marginBottom: '4px' }}>QUESTION</div>
-              <div style={{ color: '#fff', fontSize: '14px' }}>{createdMarket.question}</div>
+              <div style={{ color: theme.colors.textDim, fontSize: theme.fontSizes.xs, marginBottom: '4px' }}>QUESTION</div>
+              <div style={{ color: theme.colors.textWhite, fontSize: theme.fontSizes.nav }}>{createdMarket.question}</div>
             </div>
 
             <div style={{
-              backgroundColor: '#000',
-              border: '1px solid #333',
+              backgroundColor: theme.colors.black,
+              border: `1px solid ${theme.colors.border}`,
               padding: '16px',
               marginBottom: '16px',
             }}>
-              <div style={{ color: '#666', fontSize: '11px', marginBottom: '4px' }}>CONTRACT ADDRESS</div>
+              <div style={{ color: theme.colors.textDim, fontSize: theme.fontSizes.xs, marginBottom: '4px' }}>CONTRACT ADDRESS</div>
               <div style={{
-                color: '#00ff00',
-                fontSize: '12px',
+                color: theme.colors.primary,
+                fontSize: theme.fontSizes.small,
                 wordBreak: 'break-all',
                 fontFamily: 'monospace',
               }}>
@@ -2589,8 +2590,8 @@ export default function LMSRAdmin() {
                 rel="noopener noreferrer"
                 style={{
                   display: 'block',
-                  color: '#666',
-                  fontSize: '11px',
+                  color: theme.colors.textDim,
+                  fontSize: theme.fontSizes.xs,
                   textAlign: 'center',
                   marginBottom: '16px',
                 }}
@@ -2602,19 +2603,19 @@ export default function LMSRAdmin() {
             {/* x402 Listing Section */}
             {!createdMarket.listed ? (
               <div style={{
-                backgroundColor: '#1a1a00',
-                border: '2px solid #ffff00',
+                backgroundColor: theme.colors.highlightDark,
+                border: `2px solid ${theme.colors.highlight}`,
                 padding: '16px',
                 marginBottom: '16px',
               }}>
-                <div style={{ color: '#ffff00', fontSize: '14px', fontWeight: 'bold', marginBottom: '8px' }}>
+                <div style={{ color: theme.colors.highlight, fontSize: theme.fontSizes.nav, fontWeight: 'bold', marginBottom: '8px' }}>
                   LIST FOR DISCOVERY
                 </div>
-                <div style={{ color: '#999', fontSize: '12px', marginBottom: '12px' }}>
+                <div style={{ color: theme.colors.textMuted, fontSize: theme.fontSizes.small, marginBottom: '12px' }}>
                   Pay 0.10 USDC to list your market so other traders and AI agents can find it.
                 </div>
                 {createdMarket.listingError && (
-                  <div style={{ color: '#ff6600', fontSize: '11px', marginBottom: '8px' }}>
+                  <div style={{ color: theme.colors.warning, fontSize: theme.fontSizes.xs, marginBottom: '8px' }}>
                     {createdMarket.listingError}
                   </div>
                 )}
@@ -2645,8 +2646,8 @@ export default function LMSRAdmin() {
                     ...styles.button,
                     width: '100%',
                     padding: '14px',
-                    backgroundColor: isListing ? '#333' : '#ffff00',
-                    color: '#000',
+                    backgroundColor: isListing ? theme.colors.border : theme.colors.highlight,
+                    color: theme.colors.black,
                     fontWeight: 'bold',
                     cursor: isListing || !x402Ready ? 'not-allowed' : 'pointer',
                   }}
@@ -2656,13 +2657,13 @@ export default function LMSRAdmin() {
               </div>
             ) : (
               <div style={{
-                backgroundColor: '#001a00',
-                border: '2px solid #00ff00',
+                backgroundColor: theme.colors.primaryDark,
+                border: `2px solid ${theme.colors.primary}`,
                 padding: '16px',
                 marginBottom: '16px',
                 textAlign: 'center',
               }}>
-                <div style={{ color: '#00ff00', fontSize: '14px' }}>
+                <div style={{ color: theme.colors.primary, fontSize: theme.fontSizes.nav }}>
                   ✓ Listed for discovery
                 </div>
               </div>
@@ -2677,7 +2678,7 @@ export default function LMSRAdmin() {
                 style={{
                   ...styles.button,
                   padding: '16px',
-                  backgroundColor: '#001a00',
+                  backgroundColor: theme.colors.primaryDark,
                 }}
               >
                 START TRADING
@@ -2687,8 +2688,8 @@ export default function LMSRAdmin() {
                 style={{
                   ...styles.button,
                   padding: '16px',
-                  borderColor: '#666',
-                  color: '#666',
+                  borderColor: theme.colors.textDim,
+                  color: theme.colors.textDim,
                 }}
               >
                 CLOSE
@@ -2705,18 +2706,18 @@ export default function LMSRAdmin() {
 const styles: Record<string, React.CSSProperties> = {
   container: {
     minHeight: '100vh',
-    backgroundColor: '#0a0a0a',
-    color: '#00ff00',
-    fontFamily: '"IBM Plex Mono", "Courier New", monospace',
-    fontSize: '13px',
+    backgroundColor: theme.colors.pageBg,
+    color: theme.colors.primary,
+    fontFamily: theme.fonts.mono,
+    fontSize: theme.fontSizes.body,
   },
   header: {
-    borderBottom: '3px solid #00ff00',
+    borderBottom: `3px solid ${theme.colors.primary}`,
     padding: '16px 24px',
     display: 'flex',
     justifyContent: 'space-between',
     alignItems: 'center',
-    backgroundColor: '#000',
+    backgroundColor: theme.colors.black,
   },
   headerLeft: {
     display: 'flex',
@@ -2724,15 +2725,15 @@ const styles: Record<string, React.CSSProperties> = {
     gap: '16px',
   },
   logo: {
-    fontSize: '24px',
+    fontSize: theme.fontSizes.sectionTitle,
     fontWeight: 'bold',
     letterSpacing: '4px',
     textTransform: 'uppercase',
   },
   badge: {
     padding: '4px 12px',
-    border: '2px solid #00ff00',
-    fontSize: '11px',
+    border: `2px solid ${theme.colors.primary}`,
+    fontSize: theme.fontSizes.xs,
     letterSpacing: '2px',
   },
   headerRight: {
@@ -2742,29 +2743,29 @@ const styles: Record<string, React.CSSProperties> = {
   },
   networkBadge: {
     padding: '4px 12px',
-    backgroundColor: '#1a1a1a',
-    border: '1px solid #333',
-    fontSize: '11px',
+    backgroundColor: theme.colors.cardBgLight,
+    border: `1px solid ${theme.colors.border}`,
+    fontSize: theme.fontSizes.xs,
   },
   walletBadge: {
     padding: '4px 12px',
-    backgroundColor: '#001a00',
-    border: '1px solid #00ff00',
+    backgroundColor: theme.colors.primaryDark,
+    border: `1px solid ${theme.colors.primary}`,
   },
   nav: {
     display: 'flex',
-    borderBottom: '2px solid #333',
-    backgroundColor: '#0d0d0d',
+    borderBottom: `2px solid ${theme.colors.border}`,
+    backgroundColor: theme.colors.inputBg,
   },
   navButton: {
     padding: '12px 24px',
     backgroundColor: 'transparent',
-    color: '#00ff00',
+    color: theme.colors.primary,
     border: 'none',
-    borderRight: '1px solid #333',
+    borderRight: `1px solid ${theme.colors.border}`,
     cursor: 'pointer',
     fontFamily: 'inherit',
-    fontSize: '12px',
+    fontSize: theme.fontSizes.small,
     fontWeight: 'bold',
     letterSpacing: '2px',
     transition: 'all 0.1s',
@@ -2780,16 +2781,16 @@ const styles: Record<string, React.CSSProperties> = {
   },
   card: {
     padding: '20px',
-    backgroundColor: '#111',
-    border: '1px solid #333',
+    backgroundColor: theme.colors.cardBg,
+    border: `1px solid ${theme.colors.border}`,
   },
   button: {
     padding: '12px 24px',
     backgroundColor: 'transparent',
-    border: '2px solid #00ff00',
-    color: '#00ff00',
-    fontFamily: '"IBM Plex Mono", monospace',
-    fontSize: '12px',
+    border: `2px solid ${theme.colors.primary}`,
+    color: theme.colors.primary,
+    fontFamily: theme.fonts.mono,
+    fontSize: theme.fontSizes.small,
     fontWeight: 'bold',
     letterSpacing: '1px',
     cursor: 'pointer',
@@ -2797,17 +2798,17 @@ const styles: Record<string, React.CSSProperties> = {
   },
   sidebar: {
     width: '320px',
-    borderLeft: '2px solid #333',
-    backgroundColor: '#050505',
+    borderLeft: `2px solid ${theme.colors.border}`,
+    backgroundColor: theme.colors.sidebarBg,
     display: 'flex',
     flexDirection: 'column',
   },
   sidebarHeader: {
     padding: '12px 16px',
-    borderBottom: '1px solid #333',
+    borderBottom: `1px solid ${theme.colors.border}`,
     fontWeight: 'bold',
     letterSpacing: '2px',
-    fontSize: '11px',
+    fontSize: theme.fontSizes.xs,
   },
   logsContainer: {
     flex: 1,
@@ -2817,22 +2818,22 @@ const styles: Record<string, React.CSSProperties> = {
   logEntry: {
     padding: '8px',
     marginBottom: '4px',
-    backgroundColor: '#0a0a0a',
-    borderLeft: '3px solid #666',
-    fontSize: '11px',
+    backgroundColor: theme.colors.pageBg,
+    borderLeft: `3px solid ${theme.colors.textDim}`,
+    fontSize: theme.fontSizes.xs,
   },
   sidebarFooter: {
     padding: '8px',
-    borderTop: '1px solid #333',
+    borderTop: `1px solid ${theme.colors.border}`,
   },
   clearButton: {
     width: '100%',
     padding: '8px',
     backgroundColor: 'transparent',
-    border: '1px solid #333',
-    color: '#666',
+    border: `1px solid ${theme.colors.border}`,
+    color: theme.colors.textDim,
     fontFamily: 'inherit',
-    fontSize: '10px',
+    fontSize: theme.fontSizes.xxs,
     cursor: 'pointer',
   },
 };
@@ -2842,11 +2843,11 @@ function SectionHeader({ children }: { children: React.ReactNode }) {
   return (
     <div
       style={{
-        fontSize: '18px',
+        fontSize: theme.fontSizes.title,
         fontWeight: 'bold',
         letterSpacing: '4px',
         paddingBottom: '12px',
-        borderBottom: '2px solid #00ff00',
+        borderBottom: `2px solid ${theme.colors.primary}`,
         marginBottom: '24px',
       }}
     >
@@ -2875,8 +2876,8 @@ function InputField({
       <label
         style={{
           display: 'block',
-          color: '#666',
-          fontSize: '11px',
+          color: theme.colors.textDim,
+          fontSize: theme.fontSizes.xs,
           marginBottom: '8px',
           letterSpacing: '1px',
         }}
@@ -2892,11 +2893,11 @@ function InputField({
         style={{
           width: '100%',
           padding: '10px 12px',
-          backgroundColor: '#0a0a0a',
-          border: '1px solid #333',
-          color: '#00ff00',
-          fontFamily: '"IBM Plex Mono", monospace',
-          fontSize: '13px',
+          backgroundColor: theme.colors.pageBg,
+          border: `1px solid ${theme.colors.border}`,
+          color: theme.colors.primary,
+          fontFamily: theme.fonts.mono,
+          fontSize: theme.fontSizes.body,
           outline: 'none',
           boxSizing: 'border-box',
         }}
@@ -2908,7 +2909,7 @@ function InputField({
 function InfoRow({
   label,
   value,
-  valueColor = '#fff',
+  valueColor = theme.colors.textWhite,
   mono,
 }: {
   label: string;
@@ -2922,10 +2923,10 @@ function InfoRow({
         display: 'flex',
         justifyContent: 'space-between',
         padding: '8px 0',
-        borderBottom: '1px solid #1a1a1a',
+        borderBottom: `1px solid ${theme.colors.borderDim}`,
       }}
     >
-      <span style={{ color: '#666' }}>{label}</span>
+      <span style={{ color: theme.colors.textDim }}>{label}</span>
       <span
         style={{
           color: valueColor,

@@ -2,11 +2,9 @@
 // Developer-focused onboarding page for AI agents to get started with RBS Prediction Markets SDK
 
 import React, { useState } from 'react';
-
-type TabType = 'npm' | 'manual';
+import { theme } from '../theme';
 
 export function AgentLanding() {
-  const [activeTab, setActiveTab] = useState<TabType>('npm');
   const [copiedText, setCopiedText] = useState<string | null>(null);
 
   const copyToClipboard = (text: string, label: string) => {
@@ -43,32 +41,11 @@ export function AgentLanding() {
         </div>
       </header>
 
-      {/* Quick Start Tabs */}
+      {/* Quick Start */}
       <section style={styles.section}>
         <h2 style={styles.sectionTitle}>Quick Start</h2>
-        <div style={styles.tabs}>
-          <button
-            style={{
-              ...styles.tab,
-              ...(activeTab === 'npm' ? styles.tabActive : {}),
-            }}
-            onClick={() => setActiveTab('npm')}
-          >
-            NPM Package
-          </button>
-          <button
-            style={{
-              ...styles.tab,
-              ...(activeTab === 'manual' ? styles.tabActive : {}),
-            }}
-            onClick={() => setActiveTab('manual')}
-          >
-            Manual API
-          </button>
-        </div>
 
         <div style={styles.tabContent}>
-          {activeTab === 'npm' && (
             <div>
               {/* Install Command */}
               <div style={styles.installBlock}>
@@ -226,122 +203,6 @@ for (const pos of portfolio.positions) {
                 </div>
               </div>
             </div>
-          )}
-
-          {activeTab === 'manual' && (
-            <div>
-              <p style={styles.apiIntro}>
-                If you prefer direct API access without the SDK, use these REST endpoints.
-              </p>
-
-              <div style={styles.endpointSection}>
-                <h3 style={styles.codeTitle}>Get All Markets</h3>
-                <div style={styles.endpoint}>
-                  <span style={styles.methodGet}>GET</span>
-                  <code style={styles.endpointPath}>/rest/v1/markets?select=*&status=eq.active</code>
-                </div>
-                <div style={styles.codeWrapper}>
-                  <pre style={styles.codeBlock}>
-{`curl "https://qkcytrdhdtemyphsswou.supabase.co/rest/v1/markets?select=*&status=eq.active" \\
-  -H "apikey: YOUR_SUPABASE_ANON_KEY" \\
-  -H "Accept: application/json"`}
-                  </pre>
-                </div>
-              </div>
-
-              <div style={styles.endpointSection}>
-                <h3 style={styles.codeTitle}>Get Market by Address</h3>
-                <div style={styles.endpoint}>
-                  <span style={styles.methodGet}>GET</span>
-                  <code style={styles.endpointPath}>/rest/v1/markets?address=eq.0x...</code>
-                </div>
-                <div style={styles.codeWrapper}>
-                  <pre style={styles.codeBlock}>
-{`curl "https://qkcytrdhdtemyphsswou.supabase.co/rest/v1/markets?address=eq.0x3f9498ef0a9cc5a88678d4d4a900ec16875a1f9f" \\
-  -H "apikey: YOUR_SUPABASE_ANON_KEY"`}
-                  </pre>
-                </div>
-              </div>
-
-              <div style={styles.endpointSection}>
-                <h3 style={styles.codeTitle}>On-Chain Trading (viem)</h3>
-                <p style={styles.apiNote}>
-                  Trading is done directly on-chain via the LSLMSR_ERC20 contract.
-                </p>
-                <div style={styles.codeWrapper}>
-                  <pre style={styles.codeBlock}>
-{`import { createWalletClient, http, parseUnits } from 'viem';
-import { monadTestnet } from 'viem/chains';
-
-const client = createWalletClient({
-  chain: monadTestnet,
-  transport: http('https://testnet-rpc.monad.xyz'),
-});
-
-// 1. Approve USDC spending
-await client.writeContract({
-  address: USDC_ADDRESS,
-  abi: erc20Abi,
-  functionName: 'approve',
-  args: [marketAddress, parseUnits('10', 6)],
-});
-
-// 2. Buy shares
-await client.writeContract({
-  address: marketAddress,
-  abi: lslmsrAbi,
-  functionName: 'buy',
-  args: [
-    true,                    // isYes
-    parseUnits('10', 6),     // 10 USDC
-    0n                       // minShares (slippage)
-  ],
-});`}
-                  </pre>
-                </div>
-              </div>
-
-              <div style={styles.endpointSection}>
-                <h3 style={styles.codeTitle}>Contract ABI Functions</h3>
-                <table style={styles.table}>
-                  <thead>
-                    <tr>
-                      <th style={styles.th}>Function</th>
-                      <th style={styles.th}>Parameters</th>
-                      <th style={styles.th}>Description</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    <tr>
-                      <td style={styles.td}><code>buy</code></td>
-                      <td style={styles.td}><code>isYes, usdcAmount, minShares</code></td>
-                      <td style={styles.td}>Buy shares with USDC</td>
-                    </tr>
-                    <tr>
-                      <td style={styles.td}><code>sell</code></td>
-                      <td style={styles.td}><code>isYes, shares, minPayout</code></td>
-                      <td style={styles.td}>Sell shares for USDC</td>
-                    </tr>
-                    <tr>
-                      <td style={styles.td}><code>getYesPrice</code></td>
-                      <td style={styles.td}>-</td>
-                      <td style={styles.td}>Current YES price (18 decimals)</td>
-                    </tr>
-                    <tr>
-                      <td style={styles.td}><code>getNoPrice</code></td>
-                      <td style={styles.td}>-</td>
-                      <td style={styles.td}>Current NO price (18 decimals)</td>
-                    </tr>
-                    <tr>
-                      <td style={styles.td}><code>redeem</code></td>
-                      <td style={styles.td}>-</td>
-                      <td style={styles.td}>Redeem winning shares after resolution</td>
-                    </tr>
-                  </tbody>
-                </table>
-              </div>
-            </div>
-          )}
         </div>
       </section>
 
@@ -354,7 +215,7 @@ await client.writeContract({
             <h3 style={styles.prerequisiteTitle}>Private Key (Required)</h3>
             <p style={styles.prerequisiteText}>
               A Monad testnet wallet private key is required to sign x402 payments and on-chain transactions.
-              Provide as <code style={{color: '#00ff00'}}>PRIVATE_KEY</code> environment variable.
+              Provide as <code style={{color: theme.colors.primary}}>PRIVATE_KEY</code> environment variable.
             </p>
             <span style={{...styles.prerequisiteLink, cursor: 'default'}}>
               Required for all operations
@@ -657,9 +518,9 @@ const styles: Record<string, React.CSSProperties> = {
     maxWidth: '1000px',
     margin: '0 auto',
     padding: '40px 24px',
-    fontFamily: "'IBM Plex Mono', monospace",
-    color: '#e0e0e0',
-    backgroundColor: '#0a0a0a',
+    fontFamily: theme.fonts.mono,
+    color: theme.colors.textLight,
+    backgroundColor: theme.colors.pageBg,
     minHeight: '100vh',
   },
 
@@ -669,7 +530,7 @@ const styles: Record<string, React.CSSProperties> = {
     textAlign: 'center',
     padding: '60px 20px',
     marginBottom: '60px',
-    borderBottom: '1px solid #333',
+    borderBottom: `1px solid ${theme.colors.border}`,
   },
   heroGlow: {
     position: 'absolute',
@@ -682,15 +543,15 @@ const styles: Record<string, React.CSSProperties> = {
     pointerEvents: 'none',
   },
   heroTitle: {
-    fontSize: '36px',
+    fontSize: theme.fontSizes.heroTitle,
     fontWeight: 700,
-    color: '#00ff00',
+    color: theme.colors.primary,
     marginBottom: '16px',
     letterSpacing: '-0.5px',
   },
   heroSubtitle: {
-    fontSize: '18px',
-    color: '#888',
+    fontSize: theme.fontSizes.title,
+    color: theme.colors.textMutedAlt,
     marginBottom: '24px',
     maxWidth: '600px',
     margin: '0 auto 24px',
@@ -704,10 +565,10 @@ const styles: Record<string, React.CSSProperties> = {
   },
   badge: {
     padding: '6px 14px',
-    backgroundColor: '#1a1a1a',
-    border: '1px solid #333',
-    color: '#00ff00',
-    fontSize: '12px',
+    backgroundColor: theme.colors.cardBgLight,
+    border: `1px solid ${theme.colors.border}`,
+    color: theme.colors.primary,
+    fontSize: theme.fontSizes.small,
     fontWeight: 600,
     textTransform: 'uppercase',
     letterSpacing: '0.5px',
@@ -718,53 +579,26 @@ const styles: Record<string, React.CSSProperties> = {
     marginBottom: '60px',
   },
   sectionTitle: {
-    fontSize: '24px',
+    fontSize: theme.fontSizes.sectionTitle,
     fontWeight: 700,
-    color: '#fff',
+    color: theme.colors.textWhite,
     marginBottom: '16px',
     paddingBottom: '12px',
-    borderBottom: '2px solid #00ff00',
+    borderBottom: `2px solid ${theme.colors.primary}`,
     display: 'inline-block',
   },
   sectionSubtitle: {
-    color: '#888',
+    color: theme.colors.textMutedAlt,
     marginBottom: '24px',
     lineHeight: 1.6,
   },
 
   // Tabs
-  tabs: {
-    display: 'flex',
-    gap: '0',
-    marginBottom: '0',
-    borderBottom: '1px solid #333',
-  },
-  tab: {
-    padding: '14px 28px',
-    backgroundColor: '#111',
-    border: '1px solid #333',
-    borderBottom: 'none',
-    color: '#888',
-    cursor: 'pointer',
-    fontFamily: "'IBM Plex Mono', monospace",
-    fontSize: '14px',
-    fontWeight: 600,
-    transition: 'all 0.2s',
-  },
-  tabActive: {
-    backgroundColor: '#1a1a1a',
-    color: '#00ff00',
-    borderColor: '#00ff00',
-    borderBottom: '1px solid #1a1a1a',
-    marginBottom: '-1px',
-  },
-
-  // Tab Content
+  // Content wrapper
   tabContent: {
     padding: '30px',
-    backgroundColor: '#1a1a1a',
-    border: '1px solid #333',
-    borderTop: 'none',
+    backgroundColor: theme.colors.cardBgLight,
+    border: `1px solid ${theme.colors.border}`,
   },
 
   // Install Block
@@ -773,13 +607,13 @@ const styles: Record<string, React.CSSProperties> = {
     alignItems: 'center',
     justifyContent: 'space-between',
     padding: '16px 20px',
-    backgroundColor: '#0d0d0d',
-    border: '2px solid #00ff00',
+    backgroundColor: theme.colors.inputBg,
+    border: `2px solid ${theme.colors.primary}`,
     marginBottom: '32px',
   },
   installCode: {
-    color: '#00ff00',
-    fontSize: '16px',
+    color: theme.colors.primary,
+    fontSize: theme.fontSizes.subtitle,
     fontWeight: 600,
   },
 
@@ -788,9 +622,9 @@ const styles: Record<string, React.CSSProperties> = {
     marginBottom: '28px',
   },
   codeTitle: {
-    fontSize: '16px',
+    fontSize: theme.fontSizes.subtitle,
     fontWeight: 600,
-    color: '#00ff00',
+    color: theme.colors.primary,
     marginBottom: '12px',
   },
   codeWrapper: {
@@ -798,12 +632,12 @@ const styles: Record<string, React.CSSProperties> = {
   },
   codeBlock: {
     padding: '20px',
-    backgroundColor: '#0d0d0d',
-    border: '1px solid #333',
+    backgroundColor: theme.colors.inputBg,
+    border: `1px solid ${theme.colors.border}`,
     overflow: 'auto',
-    fontSize: '13px',
+    fontSize: theme.fontSizes.body,
     lineHeight: 1.6,
-    color: '#ccc',
+    color: theme.colors.textBody,
     margin: 0,
   },
   copyButton: {
@@ -811,70 +645,13 @@ const styles: Record<string, React.CSSProperties> = {
     top: '10px',
     right: '10px',
     padding: '6px 12px',
-    backgroundColor: '#333',
+    backgroundColor: theme.colors.border,
     border: 'none',
-    color: '#888',
-    fontSize: '11px',
-    fontFamily: "'IBM Plex Mono', monospace",
+    color: theme.colors.textMutedAlt,
+    fontSize: theme.fontSizes.xs,
+    fontFamily: theme.fonts.mono,
     cursor: 'pointer',
     transition: 'all 0.2s',
-  },
-
-  // API Section
-  apiIntro: {
-    color: '#888',
-    marginBottom: '24px',
-    lineHeight: 1.6,
-  },
-  apiNote: {
-    color: '#666',
-    fontSize: '14px',
-    marginBottom: '12px',
-  },
-  endpointSection: {
-    marginBottom: '32px',
-  },
-  endpoint: {
-    display: 'flex',
-    alignItems: 'center',
-    gap: '12px',
-    marginBottom: '12px',
-  },
-  methodGet: {
-    padding: '4px 10px',
-    backgroundColor: '#0f5132',
-    color: '#00ff00',
-    fontWeight: 700,
-    fontSize: '11px',
-    letterSpacing: '0.5px',
-  },
-  endpointPath: {
-    color: '#ccc',
-    fontSize: '13px',
-  },
-
-  // Tables
-  table: {
-    width: '100%',
-    borderCollapse: 'collapse',
-    border: '1px solid #333',
-    marginTop: '12px',
-  },
-  th: {
-    padding: '12px 16px',
-    textAlign: 'left',
-    backgroundColor: '#0d0d0d',
-    color: '#00ff00',
-    fontWeight: 600,
-    fontSize: '12px',
-    textTransform: 'uppercase',
-    borderBottom: '1px solid #333',
-  },
-  td: {
-    padding: '12px 16px',
-    borderBottom: '1px solid #222',
-    color: '#ccc',
-    fontSize: '13px',
   },
 
   // Prerequisites
@@ -885,38 +662,38 @@ const styles: Record<string, React.CSSProperties> = {
   },
   prerequisiteCard: {
     padding: '24px',
-    backgroundColor: '#1a1a1a',
-    border: '1px solid #333',
+    backgroundColor: theme.colors.cardBgLight,
+    border: `1px solid ${theme.colors.border}`,
   },
   prerequisiteIcon: {
     width: '48px',
     height: '48px',
-    backgroundColor: '#0d0d0d',
-    border: '2px solid #00ff00',
-    color: '#00ff00',
+    backgroundColor: theme.colors.inputBg,
+    border: `2px solid ${theme.colors.primary}`,
+    color: theme.colors.primary,
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'center',
     fontWeight: 700,
-    fontSize: '14px',
+    fontSize: theme.fontSizes.nav,
     marginBottom: '16px',
   },
   prerequisiteTitle: {
-    fontSize: '18px',
+    fontSize: theme.fontSizes.title,
     fontWeight: 600,
-    color: '#fff',
+    color: theme.colors.textWhite,
     marginBottom: '8px',
   },
   prerequisiteText: {
-    color: '#888',
-    fontSize: '14px',
+    color: theme.colors.textMutedAlt,
+    fontSize: theme.fontSizes.nav,
     lineHeight: 1.6,
     marginBottom: '16px',
   },
   prerequisiteLink: {
-    color: '#00ff00',
+    color: theme.colors.primary,
     textDecoration: 'none',
-    fontSize: '14px',
+    fontSize: theme.fontSizes.nav,
     fontWeight: 600,
   },
 
@@ -924,59 +701,59 @@ const styles: Record<string, React.CSSProperties> = {
   costTable: {
     width: '100%',
     borderCollapse: 'collapse',
-    border: '1px solid #333',
+    border: `1px solid ${theme.colors.border}`,
   },
   costTh: {
     padding: '14px 20px',
     textAlign: 'left',
-    backgroundColor: '#0d0d0d',
-    color: '#00ff00',
+    backgroundColor: theme.colors.inputBg,
+    color: theme.colors.primary,
     fontWeight: 600,
-    fontSize: '12px',
+    fontSize: theme.fontSizes.small,
     textTransform: 'uppercase',
-    borderBottom: '2px solid #00ff00',
+    borderBottom: `2px solid ${theme.colors.primary}`,
   },
   costTd: {
     padding: '14px 20px',
-    borderBottom: '1px solid #222',
-    color: '#ccc',
-    fontSize: '14px',
+    borderBottom: `1px solid ${theme.colors.borderLight}`,
+    color: theme.colors.textBody,
+    fontSize: theme.fontSizes.nav,
   },
   costTdPrice: {
     padding: '14px 20px',
-    borderBottom: '1px solid #222',
-    color: '#00ff00',
-    fontSize: '14px',
+    borderBottom: `1px solid ${theme.colors.borderLight}`,
+    color: theme.colors.primary,
+    fontSize: theme.fontSizes.nav,
     fontWeight: 600,
     textAlign: 'center',
   },
   costTdCategory: {
     padding: '10px 20px',
-    backgroundColor: '#1a1a1a',
-    color: '#888',
-    fontSize: '11px',
+    backgroundColor: theme.colors.cardBgLight,
+    color: theme.colors.textMutedAlt,
+    fontSize: theme.fontSizes.xs,
     fontWeight: 700,
     textTransform: 'uppercase',
     letterSpacing: '1px',
-    borderBottom: '1px solid #333',
+    borderBottom: `1px solid ${theme.colors.border}`,
   },
   costNote: {
     marginTop: '16px',
     padding: '12px 16px',
-    backgroundColor: '#1a1a0a',
-    border: '1px solid #333300',
-    color: '#cccc00',
-    fontSize: '13px',
+    backgroundColor: theme.colors.highlightBgLight,
+    border: `1px solid ${theme.colors.highlightBorder}`,
+    color: theme.colors.highlightMuted,
+    fontSize: theme.fontSizes.body,
   },
   x402Box: {
     marginTop: '32px',
     padding: '24px',
-    backgroundColor: '#0d1a0d',
-    border: '1px solid #00ff00',
+    backgroundColor: theme.colors.successDark,
+    border: `1px solid ${theme.colors.primary}`,
   },
   x402Title: {
-    color: '#00ff00',
-    fontSize: '16px',
+    color: theme.colors.primary,
+    fontSize: theme.fontSizes.subtitle,
     fontWeight: 600,
     marginBottom: '16px',
     marginTop: 0,
@@ -984,17 +761,17 @@ const styles: Record<string, React.CSSProperties> = {
   x402List: {
     margin: '0 0 16px 0',
     paddingLeft: '20px',
-    color: '#ccc',
-    fontSize: '14px',
+    color: theme.colors.textBody,
+    fontSize: theme.fontSizes.nav,
     lineHeight: 1.8,
   },
   x402Note: {
     margin: 0,
     padding: '12px 16px',
-    backgroundColor: '#1a0a0a',
-    border: '1px solid #330000',
-    color: '#ff6666',
-    fontSize: '13px',
+    backgroundColor: theme.colors.errorDark,
+    border: `1px solid ${theme.colors.errorBorder}`,
+    color: theme.colors.errorLight,
+    fontSize: theme.fontSizes.body,
   },
 
   // Network Info
@@ -1006,50 +783,50 @@ const styles: Record<string, React.CSSProperties> = {
   },
   networkItem: {
     padding: '16px 20px',
-    backgroundColor: '#1a1a1a',
-    border: '1px solid #333',
+    backgroundColor: theme.colors.cardBgLight,
+    border: `1px solid ${theme.colors.border}`,
   },
   networkLabel: {
     display: 'block',
-    color: '#666',
-    fontSize: '12px',
+    color: theme.colors.textDim,
+    fontSize: theme.fontSizes.small,
     textTransform: 'uppercase',
     marginBottom: '6px',
   },
   networkValue: {
-    color: '#fff',
-    fontSize: '14px',
+    color: theme.colors.textWhite,
+    fontSize: theme.fontSizes.nav,
     fontWeight: 600,
     wordBreak: 'break-all',
   },
 
   // Contracts Table
   contractsTitle: {
-    fontSize: '18px',
+    fontSize: theme.fontSizes.title,
     fontWeight: 600,
-    color: '#fff',
+    color: theme.colors.textWhite,
     marginBottom: '16px',
     marginTop: '0',
   },
   contractTable: {
     width: '100%',
     borderCollapse: 'collapse',
-    border: '1px solid #333',
+    border: `1px solid ${theme.colors.border}`,
   },
   contractLabel: {
     padding: '14px 20px',
-    backgroundColor: '#0d0d0d',
-    color: '#888',
+    backgroundColor: theme.colors.inputBg,
+    color: theme.colors.textMutedAlt,
     fontWeight: 600,
-    fontSize: '13px',
-    borderBottom: '1px solid #222',
+    fontSize: theme.fontSizes.body,
+    borderBottom: `1px solid ${theme.colors.borderLight}`,
     width: '180px',
   },
   contractAddress: {
     padding: '14px 20px',
-    borderBottom: '1px solid #222',
-    color: '#00ff00',
-    fontSize: '12px',
+    borderBottom: `1px solid ${theme.colors.borderLight}`,
+    color: theme.colors.primary,
+    fontSize: theme.fontSizes.small,
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'space-between',
@@ -1070,45 +847,45 @@ const styles: Record<string, React.CSSProperties> = {
     alignItems: 'center',
     gap: '16px',
     padding: '20px',
-    backgroundColor: '#1a1a1a',
-    border: '1px solid #333',
+    backgroundColor: theme.colors.cardBgLight,
+    border: `1px solid ${theme.colors.border}`,
     textDecoration: 'none',
     transition: 'all 0.2s',
   },
   linkIcon: {
     width: '48px',
     height: '48px',
-    backgroundColor: '#0d0d0d',
-    border: '1px solid #333',
-    color: '#00ff00',
+    backgroundColor: theme.colors.inputBg,
+    border: `1px solid ${theme.colors.border}`,
+    color: theme.colors.primary,
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'center',
     fontWeight: 700,
-    fontSize: '14px',
+    fontSize: theme.fontSizes.nav,
     flexShrink: 0,
   },
   linkTitle: {
-    color: '#fff',
+    color: theme.colors.textWhite,
     fontWeight: 600,
-    fontSize: '14px',
+    fontSize: theme.fontSizes.nav,
     marginBottom: '4px',
   },
   linkDesc: {
-    color: '#666',
-    fontSize: '12px',
+    color: theme.colors.textDim,
+    fontSize: theme.fontSizes.small,
   },
 
   // Footer
   footer: {
     textAlign: 'center',
     paddingTop: '40px',
-    borderTop: '1px solid #333',
-    color: '#666',
-    fontSize: '14px',
+    borderTop: `1px solid ${theme.colors.border}`,
+    color: theme.colors.textDim,
+    fontSize: theme.fontSizes.nav,
   },
   footerLink: {
-    color: '#00ff00',
+    color: theme.colors.primary,
     textDecoration: 'none',
     marginTop: '12px',
     display: 'inline-block',
