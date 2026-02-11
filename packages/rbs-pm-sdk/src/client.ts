@@ -206,8 +206,26 @@ export class RBSPMClient {
       throw new Error('Failed to fetch markets');
     }
 
-    const data = await response.json() as { success: boolean; markets: Market[] };
-    return data.markets;
+    const data = await response.json() as { success: boolean; markets: Array<Record<string, unknown>> };
+    return (data.markets || []).map((m) => ({
+      address: (m.address as string) as `0x${string}`,
+      question: m.question as string,
+      resolutionTime: m.resolution_time ? new Date(m.resolution_time as string) : new Date(),
+      oracle: (m.oracle_address as string || '') as `0x${string}`,
+      status: (m.status as 'ACTIVE' | 'RESOLVED' | 'PAUSED') || 'ACTIVE',
+      resolved: (m.resolved as boolean) || false,
+      yesWins: (m.yes_wins as boolean | null) ?? null,
+      yesToken: (m.yes_token_address as string || '') as `0x${string}`,
+      noToken: (m.no_token_address as string || '') as `0x${string}`,
+      yesPrice: (m.yes_price as number) || 0.5,
+      noPrice: (m.no_price as number) || 0.5,
+      yesShares: BigInt(0),
+      noShares: BigInt(0),
+      totalVolume: BigInt(0),
+      totalTrades: (m.total_trades as number) || 0,
+      category: m.category as string | undefined,
+      tags: m.tags as string[] | undefined,
+    }));
   }
 
   /**
@@ -457,6 +475,22 @@ export class RBSPMClient {
 
     console.log('Market deployed at:', marketAddress);
 
+    // Read token addresses from deployed contract
+    const [yesTokenAddress, noTokenAddress] = await Promise.all([
+      this.publicClient.readContract({
+        address: marketAddress,
+        abi: LSLMSR_ABI,
+        functionName: 'yesToken',
+      }) as Promise<`0x${string}`>,
+      this.publicClient.readContract({
+        address: marketAddress,
+        abi: LSLMSR_ABI,
+        functionName: 'noToken',
+      }) as Promise<`0x${string}`>,
+    ]);
+    console.log('YES token:', yesTokenAddress);
+    console.log('NO token:', noTokenAddress);
+
     // Initialize with liquidity
     console.log('Initializing with liquidity...');
     const initTxHash = await this.initializeMarket(marketAddress, params.initialLiquidity);
@@ -471,6 +505,9 @@ export class RBSPMClient {
         question: params.question,
         resolutionTime: params.resolutionTime,
         oracle: (params.oracle || this.account.address) as string,
+        yesTokenAddress,
+        noTokenAddress,
+        initialLiquidity: params.initialLiquidity,
         category: params.category,
         tags: params.tags,
       });
