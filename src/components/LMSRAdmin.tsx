@@ -1284,7 +1284,7 @@ export default function LMSRAdmin() {
                       }}>
                         <div style={{ color: theme.colors.textDim, fontSize: theme.fontSizes.xs, marginBottom: '8px' }}>{yesSymbol} TOKEN</div>
                         <div style={{ color: theme.colors.primary, fontSize: theme.fontSizes.displayLg, fontWeight: 'bold' }}>
-                          {(Number(marketInfo.yesPrice) / 1e18 * 100).toFixed(1)}%
+                          {(Number(marketInfo.yesPrice) / (Number(marketInfo.yesPrice) + Number(marketInfo.noPrice)) * 100).toFixed(1)}%
                         </div>
                         <div style={{ color: theme.colors.primary, fontSize: theme.fontSizes.small, marginTop: '4px' }}>
                           {(Number(marketInfo.yesPrice) / 1e18).toFixed(4)} USDC
@@ -1303,7 +1303,7 @@ export default function LMSRAdmin() {
                       }}>
                         <div style={{ color: theme.colors.textDim, fontSize: theme.fontSizes.xs, marginBottom: '8px' }}>{noSymbol} TOKEN</div>
                         <div style={{ color: theme.colors.warning, fontSize: theme.fontSizes.displayLg, fontWeight: 'bold' }}>
-                          {(Number(marketInfo.noPrice) / 1e18 * 100).toFixed(1)}%
+                          {(Number(marketInfo.noPrice) / (Number(marketInfo.yesPrice) + Number(marketInfo.noPrice)) * 100).toFixed(1)}%
                         </div>
                         <div style={{ color: theme.colors.warning, fontSize: theme.fontSizes.small, marginTop: '4px' }}>
                           {(Number(marketInfo.noPrice) / 1e18).toFixed(4)} USDC
@@ -1318,7 +1318,7 @@ export default function LMSRAdmin() {
                     <div style={{ marginBottom: '16px' }}>
                       <div style={{ display: 'flex', height: '24px', border: `1px solid ${theme.colors.border}`, overflow: 'hidden' }}>
                         <div style={{
-                          width: `${(Number(marketInfo.yesPrice) / 1e18 * 100)}%`,
+                          width: `${(Number(marketInfo.yesPrice) / (Number(marketInfo.yesPrice) + Number(marketInfo.noPrice)) * 100)}%`,
                           backgroundColor: theme.colors.primary,
                           display: 'flex',
                           alignItems: 'center',
@@ -1600,7 +1600,7 @@ export default function LMSRAdmin() {
                       )}
                     </div>
                     <div style={{ color: theme.colors.textDisabled, fontSize: theme.fontSizes.xxs, marginTop: '8px' }}>
-                      Current price: {(Number(tradeParams.isYes ? marketInfo.yesPrice : marketInfo.noPrice) / 1e18 * 100).toFixed(1)}%
+                      Current price: {(Number(tradeParams.isYes ? marketInfo.yesPrice : marketInfo.noPrice) / (Number(marketInfo.yesPrice) + Number(marketInfo.noPrice)) * 100).toFixed(1)}%
                     </div>
                   </div>
                 )}
@@ -2374,10 +2374,10 @@ export default function LMSRAdmin() {
                                     {prices && (
                                       <div style={{ marginTop: '8px', display: 'flex', gap: '16px' }}>
                                         <span style={{ color: theme.colors.primary, fontSize: theme.fontSizes.small }}>
-                                          YES: {(prices.yesPrice * 100).toFixed(1)}%
+                                          YES: {(prices.yesPrice / (prices.yesPrice + prices.noPrice) * 100).toFixed(1)}%
                                         </span>
                                         <span style={{ color: theme.colors.warning, fontSize: theme.fontSizes.small }}>
-                                          NO: {(prices.noPrice * 100).toFixed(1)}%
+                                          NO: {(prices.noPrice / (prices.yesPrice + prices.noPrice) * 100).toFixed(1)}%
                                         </span>
                                       </div>
                                     )}

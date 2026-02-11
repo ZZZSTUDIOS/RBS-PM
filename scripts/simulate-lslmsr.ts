@@ -110,7 +110,7 @@ function getCost(isYes: boolean, shares: bigint, s: MarketState): bigint {
   return newCost > currentCost ? newCost - currentCost : 0n;
 }
 
-function getYesPrice(s: MarketState): bigint {
+function softmaxYes(s: MarketState): bigint {
   const b = liquidityParameter(s);
   if (s.yesShares >= s.noShares) {
     const diff = ((s.yesShares - s.noShares) * SCALE) / b;
@@ -123,17 +123,36 @@ function getYesPrice(s: MarketState): bigint {
   }
 }
 
-function getNoPrice(s: MarketState): bigint {
+// Entropy term α·H(s) from Theorem 4.3 of Othman et al.
+// H(s) = L - s_max * diff, where L = softplus(diff)
+function entropyTerm(s: MarketState): bigint {
   const b = liquidityParameter(s);
-  if (s.noShares >= s.yesShares) {
-    const diff = ((s.noShares - s.yesShares) * SCALE) / b;
-    const expDiff = _exp(diff);
-    return (expDiff * SCALE) / (expDiff + SCALE);
+  const LN2 = 693147180559945309n;
+  let gap: bigint;
+  if (s.yesShares >= s.noShares) {
+    gap = s.yesShares - s.noShares;
   } else {
-    const diff = ((s.yesShares - s.noShares) * SCALE) / b;
-    const expDiff = _exp(diff);
-    return (SCALE * SCALE) / (SCALE + expDiff);
+    gap = s.noShares - s.yesShares;
   }
+  if (gap === 0n) {
+    return (s.alpha * LN2) / SCALE;
+  }
+  const diff = (gap * SCALE) / b;
+  const expDiff = _exp(diff);
+  const sMax = (expDiff * SCALE) / (expDiff + SCALE);
+  const L = _ln(expDiff + SCALE);
+  const sMaxTimesDiff = (sMax * diff) / SCALE;
+  const entropy = L > sMaxTimesDiff ? L - sMaxTimesDiff : 0n;
+  return (s.alpha * entropy) / SCALE;
+}
+
+// LS-LMSR price: p_i = s_i + α·H(s) (Theorem 4.3)
+function getYesPrice(s: MarketState): bigint {
+  return softmaxYes(s) + entropyTerm(s);
+}
+
+function getNoPrice(s: MarketState): bigint {
+  return (SCALE - softmaxYes(s)) + entropyTerm(s);
 }
 
 // Binary search for shares (matches _calculateSharesForPayment)

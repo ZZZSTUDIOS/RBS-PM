@@ -234,45 +234,89 @@ contract LSLMSR is Ownable, ReentrancyGuard, Pausable {
     }
 
     /**
-     * @notice Get current price for YES outcome
-     * @dev In LS-LMSR, prices can sum to > 1 (that's the spread/profit margin)
+     * @notice Softmax for YES: s_yes = exp(yes/b) / (exp(yes/b) + exp(no/b))
+     * @dev Uses log-sum-exp trick to keep exp arguments bounded
+     */
+    function _softmaxYes() internal view returns (uint256) {
+        uint256 b = liquidityParameter();
+        if (yesShares >= noShares) {
+            uint256 diff = ((yesShares - noShares) * 1e18) / b;
+            uint256 expDiff = _exp(diff);
+            return (expDiff * 1e18) / (expDiff + 1e18);
+        } else {
+            uint256 diff = ((noShares - yesShares) * 1e18) / b;
+            uint256 expDiff = _exp(diff);
+            return (1e18 * 1e18) / (1e18 + expDiff);
+        }
+    }
+
+    /**
+     * @notice Entropy term α·H(s) from Theorem 4.3 of Othman et al.
+     * @dev H(s) = -Σ s_j·ln(s_j). For binary: H = L - s_max·diff
+     *      where L = ln(exp(diff)+1) (softplus), diff = |yes-no|/b
+     */
+    function _entropyTerm() internal view returns (uint256) {
+        uint256 b = liquidityParameter();
+        uint256 gap;
+        if (yesShares >= noShares) {
+            gap = yesShares - noShares;
+        } else {
+            gap = noShares - yesShares;
+        }
+
+        if (gap == 0) {
+            // Equal shares: H(s) = ln(2) for binary
+            return (alpha * 693147180559945309) / 1e18;
+        }
+
+        uint256 diff = (gap * 1e18) / b;
+        uint256 expDiff = _exp(diff);
+
+        // s_max = softmax of the dominant outcome
+        uint256 sMax = (expDiff * 1e18) / (expDiff + 1e18);
+
+        // L = ln(exp(diff) + 1) = softplus(diff)
+        uint256 L = _ln(expDiff + 1e18);
+
+        // H(s) = L - s_max * diff
+        uint256 sMaxTimesDiff = (sMax * diff) / 1e18;
+        uint256 entropy = L > sMaxTimesDiff ? L - sMaxTimesDiff : 0;
+
+        return (alpha * entropy) / 1e18;
+    }
+
+    /**
+     * @notice LS-LMSR price for YES: p_yes = s_yes + α·H(s) (Theorem 4.3)
+     * @dev Prices sum to 1 + 2·α·H(s) > 1 — the spread is market maker profit
      */
     function getYesPrice() public view returns (uint256) {
-        uint256 b = liquidityParameter();
-        uint256 expYes = _exp((yesShares * 1e18) / b);
-        uint256 expNo = _exp((noShares * 1e18) / b);
-        return (expYes * 1e18) / (expYes + expNo);
+        return _softmaxYes() + _entropyTerm();
     }
 
     /**
-     * @notice Get current price for NO outcome
+     * @notice LS-LMSR price for NO outcome
      */
     function getNoPrice() public view returns (uint256) {
-        uint256 b = liquidityParameter();
-        uint256 expYes = _exp((yesShares * 1e18) / b);
-        uint256 expNo = _exp((noShares * 1e18) / b);
-        return (expNo * 1e18) / (expYes + expNo);
+        return (1e18 - _softmaxYes()) + _entropyTerm();
     }
 
     /**
-     * @notice Get the sum of prices (will be >= 1, difference is the spread)
-     * @dev Sum approaches 1 + α×n×ln(n) when shares are equal
+     * @notice Get the sum of prices: 1 + 2·α·H(s) ≥ 1
      */
     function getPriceSum() public view returns (uint256) {
         return getYesPrice() + getNoPrice();
     }
 
     /**
-     * @notice Get normalized probability (prices divided by sum)
+     * @notice True probability (softmax), NOT the price
+     * @dev Probability is s_i, price is s_i + α·H(s). Use this for probability display.
      */
     function getYesProbability() public view returns (uint256) {
-        uint256 yesPrice = getYesPrice();
-        uint256 priceSum = getPriceSum();
-        return (yesPrice * 1e18) / priceSum;
+        return _softmaxYes();
     }
 
     function getNoProbability() public view returns (uint256) {
-        return 1e18 - getYesProbability();
+        return 1e18 - _softmaxYes();
     }
 
     // ============ Trading Functions ============
