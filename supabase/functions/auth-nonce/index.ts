@@ -20,6 +20,13 @@ serve(async (req: Request) => {
     return new Response("ok", { headers: corsHeaders });
   }
 
+  if (req.method !== "POST") {
+    return new Response(
+      JSON.stringify({ error: "Method not allowed. Use POST with { wallet_address: '0x...' }" }),
+      { status: 405, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+    );
+  }
+
   try {
     // Parse request
     const { wallet_address }: NonceRequest = await req.json();

@@ -565,8 +565,8 @@ await client.writeContract({
             <tr>
               <td style={styles.contractLabel}>MarketFactory</td>
               <td style={styles.contractAddress}>
-                <code>0xc486fD94Af1b18CE2d246cBD0941d06F06d4d159</code>
-                <CopyButton text="0xc486fD94Af1b18CE2d246cBD0941d06F06d4d159" label="factory" />
+                <code>0xB8E34413AF1416b8f4dD55eE68b1af428aD86C5E</code>
+                <CopyButton text="0xB8E34413AF1416b8f4dD55eE68b1af428aD86C5E" label="factory" />
               </td>
             </tr>
             <tr>

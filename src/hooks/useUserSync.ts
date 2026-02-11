@@ -114,7 +114,7 @@ export function useUserSync() {
       const tradingFee = trade.creatorFee;
 
       // Insert trade with fee information
-      const { data: tradeData, error } = await supabase.from('trades').upsert({
+      const { error } = await supabase.from('trades').upsert({
         market_id: marketData.id,
         user_id: user.id,
         trade_type: trade.tradeType,
