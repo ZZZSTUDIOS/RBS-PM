@@ -1585,13 +1585,17 @@ export default function LMSRAdmin() {
                           if (!marketInfo || !tradeParams.amount || parseFloat(tradeParams.amount) <= 0 || parseFloat(estimatedShares) <= 0 || isEstimating) {
                             return <span style={{ color: theme.colors.textDim, fontSize: theme.fontSizes.nav }}>--</span>;
                           }
-                          const spotPrice = Number(tradeParams.isYes ? marketInfo.yesPrice : marketInfo.noPrice) / 1e18;
+                          // Use probability (softmax) as fair value — price includes entropy premium
+                          const fairValue = Number(tradeParams.isYes
+                            ? (marketInfo.yesProbability || marketInfo.yesPrice)
+                            : (marketInfo.noProbability || marketInfo.noPrice)) / 1e18;
                           const avgPrice = parseFloat(tradeParams.amount) / parseFloat(estimatedShares);
-                          const impact = ((avgPrice - spotPrice) / spotPrice) * 100;
-                          const impactColor = impact < 1 ? theme.colors.primary : impact < 5 ? theme.colors.highlight : theme.colors.warning;
+                          const impact = ((avgPrice - fairValue) / fairValue) * 100;
+                          const absImpact = Math.abs(impact);
+                          const impactColor = absImpact < 1 ? theme.colors.primary : absImpact < 5 ? theme.colors.highlight : theme.colors.warning;
                           return (
                             <span style={{ color: impactColor, fontSize: theme.fontSizes.title, fontWeight: 'bold' }}>
-                              {impact.toFixed(2)}%
+                              {impact > 0 ? '+' : ''}{impact.toFixed(2)}%
                             </span>
                           );
                         })()}
@@ -1612,13 +1616,17 @@ export default function LMSRAdmin() {
                           if (!marketInfo || !tradeParams.amount || parseFloat(tradeParams.amount) <= 0 || parseFloat(estimatedPayout) <= 0) {
                             return <span style={{ color: theme.colors.textDim, fontSize: theme.fontSizes.nav }}>--</span>;
                           }
-                          const spotPrice = Number(tradeParams.isYes ? marketInfo.yesPrice : marketInfo.noPrice) / 1e18;
+                          // Use probability (softmax) as fair value — price includes entropy premium
+                          const fairValue = Number(tradeParams.isYes
+                            ? (marketInfo.yesProbability || marketInfo.yesPrice)
+                            : (marketInfo.noProbability || marketInfo.noPrice)) / 1e18;
                           const avgPrice = parseFloat(estimatedPayout) / parseFloat(tradeParams.amount);
-                          const impact = ((spotPrice - avgPrice) / spotPrice) * 100;
-                          const impactColor = impact < 1 ? theme.colors.primary : impact < 5 ? theme.colors.highlight : theme.colors.warning;
+                          const impact = ((fairValue - avgPrice) / fairValue) * 100;
+                          const absImpact = Math.abs(impact);
+                          const impactColor = absImpact < 1 ? theme.colors.primary : absImpact < 5 ? theme.colors.highlight : theme.colors.warning;
                           return (
                             <span style={{ color: impactColor, fontSize: theme.fontSizes.title, fontWeight: 'bold' }}>
-                              {impact.toFixed(2)}%
+                              {impact > 0 ? '-' : '+'}{Math.abs(impact).toFixed(2)}%
                             </span>
                           );
                         })()}
@@ -1653,7 +1661,7 @@ export default function LMSRAdmin() {
                       )}
                     </div>
                     <div style={{ color: theme.colors.textDisabled, fontSize: theme.fontSizes.xxs, marginTop: '8px' }}>
-                      Current price: {(Number(tradeParams.isYes ? marketInfo.yesPrice : marketInfo.noPrice) / (Number(marketInfo.yesPrice) + Number(marketInfo.noPrice)) * 100).toFixed(1)}%
+                      Current price: {(Number(tradeParams.isYes ? (marketInfo.yesProbability || marketInfo.yesPrice) : (marketInfo.noProbability || marketInfo.noPrice)) / 1e18 * 100).toFixed(1)}%
                     </div>
                   </div>
                 )}

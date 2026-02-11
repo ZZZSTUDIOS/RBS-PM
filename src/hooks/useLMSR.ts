@@ -53,6 +53,8 @@ export interface MarketInfo {
   oracle: Address;
   yesPrice: bigint;
   noPrice: bigint;
+  yesProbability?: bigint; // Softmax probability (without entropy term)
+  noProbability?: bigint;
   yesShares: bigint;
   noShares: bigint;
   totalCollateral: bigint;
@@ -1695,6 +1697,8 @@ export function useUnifiedMarketData(marketAddress: Address | undefined) {
           oracle: info[2],
           yesPrice: info[3],
           noPrice: info[4],
+          yesProbability: info[5],
+          noProbability: info[6],
           yesShares: info[7],
           noShares: info[8],
           totalCollateral: info[9],
