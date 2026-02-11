@@ -589,7 +589,7 @@ contract LSLMSR is Ownable, ReentrancyGuard, Pausable {
      */
     function claimCreatorFees() external nonReentrant {
         if (msg.sender != marketCreator) revert NotCreator();
-        if (!resolved && block.timestamp < resolutionTime) revert MarketNotResolved();
+        if (!resolved) revert MarketNotResolved();
 
         uint256 amount = creatorFeesAccrued;
         if (amount == 0) revert NoFeesToClaim();
@@ -610,11 +610,18 @@ contract LSLMSR is Ownable, ReentrancyGuard, Pausable {
         if (msg.sender != marketCreator) revert NotCreator();
         if (!resolved) revert MarketNotResolved();
 
-        // Allow withdrawal of any remaining collateral after resolution
         if (totalCollateral == 0) revert NoFeesToClaim();
 
-        uint256 amount = totalCollateral;
-        totalCollateral = 0;
+        // Calculate collateral owed to unredeemed winning token holders
+        // In native MON version: 1 share (1e18) = 1 MON (1e18 wei)
+        OutcomeToken winningToken = yesWins ? yesToken : noToken;
+        uint256 owedToWinners = winningToken.totalSupply();
+
+        // Only allow withdrawal of excess above what's owed
+        if (totalCollateral <= owedToWinners) revert NoFeesToClaim();
+        uint256 amount = totalCollateral - owedToWinners;
+
+        totalCollateral -= amount;
 
         (bool success, ) = marketCreator.call{value: amount}("");
         if (!success) revert TransferFailed();

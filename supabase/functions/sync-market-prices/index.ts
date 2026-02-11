@@ -64,6 +64,20 @@ serve(async (req: Request) => {
   }
 
   try {
+    // Verify the request has a valid Supabase API key or service key
+    const authHeader = req.headers.get("authorization");
+    const apiKeyHeader = req.headers.get("apikey");
+    const supabaseAnonKey = Deno.env.get("SUPABASE_ANON_KEY");
+    const supabaseServiceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
+
+    const providedKey = apiKeyHeader || authHeader?.replace("Bearer ", "");
+    if (!providedKey || (providedKey !== supabaseAnonKey && providedKey !== supabaseServiceKey)) {
+      return new Response(
+        JSON.stringify({ error: "Unauthorized" }),
+        { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+
     const body = await req.json();
     const { marketAddress } = body;
 
@@ -71,6 +85,24 @@ serve(async (req: Request) => {
       return new Response(
         JSON.stringify({ error: "Valid marketAddress required" }),
         { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+
+    // Verify market exists in database before syncing (prevents arbitrary contract injection)
+    const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
+    const supabaseServiceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
+    const supabase = createClient(supabaseUrl, supabaseServiceKey);
+
+    const { data: existingMarket } = await supabase
+      .from("markets")
+      .select("address")
+      .eq("address", marketAddress.toLowerCase())
+      .single();
+
+    if (!existingMarket) {
+      return new Response(
+        JSON.stringify({ error: "Market not found in database" }),
+        { status: 404, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
 
@@ -126,11 +158,7 @@ serve(async (req: Request) => {
     const noSharesFormatted = formatUnits(noShares, 18);
     const totalCollateralFormatted = formatUnits(totalCollateral, 6); // USDC has 6 decimals
 
-    // Upsert to database (insert if not exists, update if exists)
-    const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
-    const supabaseServiceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
-    const supabase = createClient(supabaseUrl, supabaseServiceKey);
-
+    // Update market prices in database
     const { data, error } = await supabase
       .from("markets")
       .upsert({

@@ -32,6 +32,21 @@ import type {
 // USDC decimals
 const USDC_DECIMALS = 6;
 
+// Input validation helpers
+const ADDRESS_REGEX = /^0x[0-9a-fA-F]{40}$/;
+
+function validateAddress(address: string, name: string): void {
+  if (!address || !ADDRESS_REGEX.test(address)) {
+    throw new Error(`Invalid ${name}: must be a 42-character hex address (got "${address}")`);
+  }
+}
+
+function validatePositiveAmount(amount: string, name: string): void {
+  if (!amount || isNaN(Number(amount)) || Number(amount) <= 0) {
+    throw new Error(`Invalid ${name}: must be a positive number (got "${amount}")`);
+  }
+}
+
 // Define Monad Testnet chain
 const monadTestnet = {
   id: MONAD_TESTNET.id,
@@ -679,6 +694,8 @@ export class RBSPMClient {
     usdcAmount: string,
     minShares: bigint = 0n
   ): Promise<TradeResult> {
+    validateAddress(marketAddress, 'marketAddress');
+    validatePositiveAmount(usdcAmount, 'usdcAmount');
     if (!this.walletClient || !this.account) {
       throw new Error('Wallet not configured. Provide privateKey in constructor.');
     }
@@ -692,8 +709,12 @@ export class RBSPMClient {
       minOutput: minShares.toString(),
     });
 
-    // Execute approval if needed
+    // Validate server-provided calldata before signing
     if (instructions.approval) {
+      const approvalTo = (instructions.approval.to as string).toLowerCase();
+      if (approvalTo !== ADDRESSES.USDC.toLowerCase()) {
+        throw new Error(`Unexpected approval target: ${approvalTo}. Expected USDC: ${ADDRESSES.USDC}`);
+      }
       const approvalHash = await this.walletClient.sendTransaction({
         account: this.account,
         chain: monadTestnet,
@@ -701,6 +722,11 @@ export class RBSPMClient {
         data: instructions.approval.data as `0x${string}`,
       });
       await this.publicClient.waitForTransactionReceipt({ hash: approvalHash });
+    }
+
+    const tradeTo = (instructions.trade.to as string).toLowerCase();
+    if (tradeTo !== marketAddress.toLowerCase()) {
+      throw new Error(`Unexpected trade target: ${tradeTo}. Expected market: ${marketAddress}`);
     }
 
     // Execute trade using calldata from x402 endpoint
@@ -744,6 +770,10 @@ export class RBSPMClient {
     shares: bigint,
     minPayout: bigint = 0n
   ): Promise<TradeResult> {
+    validateAddress(marketAddress, 'marketAddress');
+    if (shares <= 0n) {
+      throw new Error('Invalid shares: must be greater than 0');
+    }
     if (!this.walletClient || !this.account) {
       throw new Error('Wallet not configured. Provide privateKey in constructor.');
     }
@@ -786,6 +816,12 @@ export class RBSPMClient {
       await this.publicClient.waitForTransactionReceipt({ hash: approveHash });
     }
 
+    // Validate server-provided trade calldata target
+    const tradeTo = (instructions.trade.to as string).toLowerCase();
+    if (tradeTo !== marketAddress.toLowerCase()) {
+      throw new Error(`Unexpected trade target: ${tradeTo}. Expected market: ${marketAddress}`);
+    }
+
     // Execute trade using calldata from x402 endpoint
     const hash = await this.walletClient.sendTransaction({
       account: this.account,
@@ -799,8 +835,8 @@ export class RBSPMClient {
     // Sync prices to database after trade completes (via x402-prices)
     try {
       await this.getPrices(marketAddress);
-    } catch (syncErr) {
-      console.log('Price sync skipped:', syncErr);
+    } catch {
+      // Price sync is best-effort, don't fail the trade
     }
 
     return {
@@ -818,6 +854,7 @@ export class RBSPMClient {
    * IMPORTANT: Routes through x402-redeem endpoint for tracking (0.0001 USDC)
    */
   async redeem(marketAddress: `0x${string}`): Promise<`0x${string}`> {
+    validateAddress(marketAddress, 'marketAddress');
     if (!this.walletClient || !this.account) {
       throw new Error('Wallet not configured. Provide privateKey in constructor.');
     }
@@ -848,12 +885,22 @@ export class RBSPMClient {
       throw new Error(data.error || 'Failed to get redeem instructions');
     }
 
+    if (!data.transaction) {
+      throw new Error('Server response missing transaction data');
+    }
+
+    // Validate the redeem transaction target matches the market
+    const redeemTo = data.transaction.to.toLowerCase();
+    if (redeemTo !== marketAddress.toLowerCase()) {
+      throw new Error(`Unexpected redeem target: ${redeemTo}. Expected market: ${marketAddress}`);
+    }
+
     // Execute the redeem transaction
     const hash = await this.walletClient.sendTransaction({
       account: this.account,
       chain: monadTestnet,
-      to: data.transaction!.to as `0x${string}`,
-      data: data.transaction!.data as `0x${string}`,
+      to: data.transaction.to as `0x${string}`,
+      data: data.transaction.data as `0x${string}`,
     });
 
     await this.publicClient.waitForTransactionReceipt({ hash });
@@ -1109,6 +1156,7 @@ export class RBSPMClient {
    * ```
    */
   async resolve(marketAddress: `0x${string}`, yesWins: boolean): Promise<`0x${string}`> {
+    validateAddress(marketAddress, 'marketAddress');
     if (!this.walletClient || !this.account) {
       throw new Error('Wallet not configured. Provide privateKey in constructor.');
     }
@@ -1140,12 +1188,21 @@ export class RBSPMClient {
       throw new Error(data.error || 'Failed to get resolve instructions');
     }
 
+    if (!data.transaction) {
+      throw new Error('Server response missing transaction data');
+    }
+
+    const resolveTo = data.transaction.to.toLowerCase();
+    if (resolveTo !== marketAddress.toLowerCase()) {
+      throw new Error(`Unexpected resolve target: ${resolveTo}. Expected market: ${marketAddress}`);
+    }
+
     // Execute the transaction
     const hash = await this.walletClient.sendTransaction({
       account: this.account,
       chain: monadTestnet,
-      to: data.transaction!.to as `0x${string}`,
-      data: data.transaction!.data as `0x${string}`,
+      to: data.transaction.to as `0x${string}`,
+      data: data.transaction.data as `0x${string}`,
     });
 
     await this.publicClient.waitForTransactionReceipt({ hash });

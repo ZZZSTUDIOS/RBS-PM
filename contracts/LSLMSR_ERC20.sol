@@ -50,7 +50,7 @@ contract LSLMSR_ERC20 is Ownable, ReentrancyGuard, Pausable {
     // Fee configuration
     uint256 public constant TRADING_FEE_BPS = 50; // 0.5% - 100% goes to market creator
     uint256 public constant FEE_DENOMINATOR = 10000;
-    address public immutable marketCreator;
+    address public marketCreator;
 
     // Accumulated fees
     uint256 public creatorFeesAccrued;
@@ -568,11 +568,16 @@ contract LSLMSR_ERC20 is Ownable, ReentrancyGuard, Pausable {
         _unpause();
     }
 
+    function transferCreator(address _newCreator) external onlyOwner {
+        if (_newCreator == address(0)) revert InvalidParameters();
+        marketCreator = _newCreator;
+    }
+
     // ============ Fee Claiming Functions ============
 
     function claimCreatorFees() external nonReentrant {
         if (msg.sender != marketCreator) revert NotCreator();
-        if (!resolved && block.timestamp < resolutionTime) revert MarketNotResolved();
+        if (!resolved) revert MarketNotResolved();
 
         uint256 amount = creatorFeesAccrued;
         if (amount == 0) revert NoFeesToClaim();
@@ -590,8 +595,16 @@ contract LSLMSR_ERC20 is Ownable, ReentrancyGuard, Pausable {
 
         if (totalCollateral == 0) revert NoFeesToClaim();
 
-        uint256 amount = totalCollateral;
-        totalCollateral = 0;
+        // Calculate collateral owed to unredeemed winning token holders
+        OutcomeToken winningToken = yesWins ? yesToken : noToken;
+        uint256 outstandingShares = winningToken.totalSupply();
+        uint256 owedToWinners = outstandingShares / SHARE_SCALE;
+
+        // Only allow withdrawal of excess above what's owed
+        if (totalCollateral <= owedToWinners) revert NoFeesToClaim();
+        uint256 amount = totalCollateral - owedToWinners;
+
+        totalCollateral -= amount;
 
         collateralToken.safeTransfer(marketCreator, amount);
 

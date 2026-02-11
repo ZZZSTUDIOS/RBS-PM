@@ -237,24 +237,36 @@ serve(async (req: Request) => {
       },
     };
 
+    // Parse and validate request body BEFORE charging payment
+    const body = await req.json() as MarketCreateRequest;
+
+    if (!body.address || !body.question || !body.resolutionTime || !body.oracle) {
+      return new Response(
+        JSON.stringify({ error: "Missing required fields: address, question, resolutionTime, oracle" }),
+        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+
+    if (!/^0x[a-fA-F0-9]{40}$/.test(body.address)) {
+      return new Response(
+        JSON.stringify({ error: "Invalid market address format" }),
+        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+
     // Verify and settle with facilitator
     const settlement = await verifyAndSettlePayment(paymentPayload, paymentRequirements);
 
     if (!settlement.success) {
       const { header } = createPaymentRequiredResponse(url, settlement.error);
       return new Response(
-        JSON.stringify({ error: "Payment failed", details: settlement.error }),
+        JSON.stringify({ error: "Payment failed" }),
         {
           status: 402,
           headers: { ...corsHeaders, "Content-Type": "application/json", "PAYMENT-REQUIRED": header },
         }
       );
     }
-
-    console.log("Payment settled, txHash:", settlement.txHash);
-
-    // Parse request body
-    const body = await req.json() as MarketCreateRequest;
 
     // Get payer address for logging
     const payerAddressForLogging = (paymentPayload.payload as { authorization?: { from?: string } })?.authorization?.from || "unknown";
@@ -267,22 +279,6 @@ serve(async (req: Request) => {
       true,
       settlement.txHash
     );
-
-    // Validate required fields
-    if (!body.address || !body.question || !body.resolutionTime || !body.oracle) {
-      return new Response(
-        JSON.stringify({ error: "Missing required fields: address, question, resolutionTime, oracle" }),
-        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-      );
-    }
-
-    // Validate address format
-    if (!/^0x[a-fA-F0-9]{40}$/.test(body.address)) {
-      return new Response(
-        JSON.stringify({ error: "Invalid market address format" }),
-        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-      );
-    }
 
     // Initialize Supabase
     const supabaseUrl = Deno.env.get("SUPABASE_URL")!;

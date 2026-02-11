@@ -68,7 +68,7 @@ contract MarketFactory {
             noName = string(abi.encodePacked(noSymbol, " Token"));
         }
 
-        // Deploy new market
+        // Deploy new market (factory is initial owner)
         LSLMSR_ERC20 newMarket = new LSLMSR_ERC20(
             USDC,
             USDC_DECIMALS,
@@ -84,6 +84,10 @@ contract MarketFactory {
             noName,
             noSymbol
         );
+
+        // Transfer creator role and ownership to the actual caller
+        newMarket.transferCreator(msg.sender);
+        newMarket.transferOwnership(msg.sender);
 
         market = address(newMarket);
 
@@ -110,6 +114,10 @@ contract MarketFactory {
     ) external returns (address market) {
         require(resolutionTime > block.timestamp, "Resolution time must be in future");
         require(bytes(question).length > 0, "Question cannot be empty");
+        require(oracle != address(0), "Oracle cannot be zero address");
+        require(alpha > 0 && alpha <= 1e18, "Invalid alpha");
+        require(minLiquidity > 0, "Invalid minLiquidity");
+        require(initialShares > 0, "Invalid initialShares");
 
         string memory yesName = string(abi.encodePacked(yesSymbol, " Token"));
         string memory noName = string(abi.encodePacked(noSymbol, " Token"));
@@ -129,6 +137,10 @@ contract MarketFactory {
             noName,
             noSymbol
         );
+
+        // Transfer creator role and ownership to the actual caller
+        newMarket.transferCreator(msg.sender);
+        newMarket.transferOwnership(msg.sender);
 
         market = address(newMarket);
         markets.push(market);

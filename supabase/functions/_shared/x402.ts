@@ -100,7 +100,7 @@ export async function verifyAndSettlePayment(
       }
     }
 
-    console.log("Payment payload received:", JSON.stringify(paymentPayload).substring(0, 200));
+    // Payment received (redacted for security)
 
     // Build the facilitator request
     const facilitatorRequest = {
@@ -239,7 +239,17 @@ export async function handlePayment(
     return {
       success: false,
       response: new Response(
-        JSON.stringify({ error: "Payment verification failed", details: verification.error }),
+        JSON.stringify({ error: "Payment verification failed" }),
+        { status: 402, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      ),
+    };
+  }
+
+  if (!verification.settled) {
+    return {
+      success: false,
+      response: new Response(
+        JSON.stringify({ error: "Payment settlement failed. You were not charged." }),
         { status: 402, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       ),
     };

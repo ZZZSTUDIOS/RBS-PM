@@ -195,12 +195,14 @@ contract LMSR is Ownable, ReentrancyGuard {
         if (payout < minPayout) revert InsufficientPayment();
         if (payout > totalCollateral) payout = totalCollateral;
 
-        // Burn tokens
+        // Transfer and burn tokens
         if (isYes) {
             yesToken.transferFrom(msg.sender, address(this), shares);
+            yesToken.burn(shares);
             yesShares -= shares;
         } else {
             noToken.transferFrom(msg.sender, address(this), shares);
+            noToken.burn(shares);
             noShares -= shares;
         }
 
@@ -240,8 +242,9 @@ contract LMSR is Ownable, ReentrancyGuard {
         uint256 shares = winningToken.balanceOf(msg.sender);
         if (shares == 0) revert InvalidAmount();
 
-        // Transfer tokens to this contract (effectively burning)
+        // Transfer and burn tokens
         winningToken.transferFrom(msg.sender, address(this), shares);
+        winningToken.burn(shares);
 
         // Calculate payout: proportional share of total collateral
         uint256 totalWinningShares = yesWins ? yesShares : noShares;

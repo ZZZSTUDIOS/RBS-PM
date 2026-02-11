@@ -3,7 +3,7 @@
 
 import { serve } from "https://deno.land/std@0.177.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.39.0";
-import { encodeFunctionData } from "https://esm.sh/viem@2.0.0";
+import { encodeFunctionData, parseUnits } from "https://esm.sh/viem@2.0.0";
 import { corsHeaders, handlePayment, X402_CONFIG } from "../_shared/x402.ts";
 
 // MarketFactory address on Monad Testnet
@@ -133,7 +133,7 @@ serve(async (req: Request) => {
     });
 
     // Parse initial liquidity (USDC has 6 decimals)
-    const liquidityAmount = BigInt(Math.floor(parseFloat(body.initialLiquidity) * 1e6));
+    const liquidityAmount = parseUnits(String(body.initialLiquidity), 6);
 
     // Encode USDC approval for factory (for initialization later)
     // Note: Approval is for a placeholder - actual market address comes from factory

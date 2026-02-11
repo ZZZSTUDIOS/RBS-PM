@@ -106,6 +106,16 @@ serve(async (req: Request) => {
   }
 
   try {
+    // Verify API key authentication
+    const apiKey = Deno.env.get("INDEXER_API_KEY");
+    const authHeader = req.headers.get("authorization");
+    if (!apiKey || !authHeader || authHeader !== `Bearer ${apiKey}`) {
+      return new Response(
+        JSON.stringify({ error: "Unauthorized" }),
+        { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+
     // Initialize Supabase
     const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
     const supabaseServiceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;

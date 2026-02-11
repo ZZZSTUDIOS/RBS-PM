@@ -830,11 +830,16 @@ export default function LMSRAdmin() {
     try {
       if (tradeParams.direction === 'buy') {
         addLog(`Buying ${tradeParams.isYes ? 'YES' : 'NO'} shares with ${tradeParams.amount} USDC...`, 'pending');
+        // Apply 3% slippage tolerance on estimated shares
+        const estShares = parseFloat(estimatedShares);
+        const minSharesWithSlippage = estShares > 0
+          ? parseUnits((estShares * 0.97).toFixed(18), 18)
+          : 0n;
         const txResult = await buyShares(
           tradeParams.marketAddress as Address,
           tradeParams.isYes,
           tradeParams.amount, // USDC amount
-          0n // No minimum shares
+          minSharesWithSlippage
         );
         result = {
           success: true,
@@ -845,11 +850,16 @@ export default function LMSRAdmin() {
       } else {
         addLog(`Selling ${tradeParams.amount} ${tradeParams.isYes ? 'YES' : 'NO'} shares...`, 'pending');
         const shares = parseUnits(tradeParams.amount, 18); // Shares are 18 decimals
+        // Apply 3% slippage tolerance on estimated payout
+        const estPayout = parseFloat(estimatedPayout);
+        const minPayoutWithSlippage = estPayout > 0
+          ? parseUnits((estPayout * 0.97).toFixed(6), 6)
+          : 0n;
         const txResult = await sellShares(
           tradeParams.marketAddress as Address,
           tradeParams.isYes,
           shares,
-          0n // No minimum payout
+          minPayoutWithSlippage
         );
         result = {
           success: true,

@@ -3,7 +3,7 @@
 
 import { serve } from "https://deno.land/std@0.177.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.39.0";
-import { encodeFunctionData } from "https://esm.sh/viem@2.0.0";
+import { encodeFunctionData, parseUnits } from "https://esm.sh/viem@2.0.0";
 import { corsHeaders, handlePayment, X402_CONFIG } from "../_shared/x402.ts";
 
 // USDC address on Monad Testnet
@@ -123,7 +123,7 @@ serve(async (req: Request) => {
 
     // Parse amount (USDC has 6 decimals, shares have 18)
     const decimals = isBuy ? 6 : 18;
-    const amountBigInt = BigInt(Math.floor(parseFloat(body.amount) * (10 ** decimals)));
+    const amountBigInt = parseUnits(body.amount, decimals);
     const minOutput = body.minOutput ? BigInt(body.minOutput) : 0n;
 
     let instructions: TradeInstructions;

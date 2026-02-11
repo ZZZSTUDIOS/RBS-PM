@@ -16,36 +16,31 @@ interface VerifyRequest {
   signature: string;
 }
 
-// Simple JWT creation (in production, use a proper JWT library)
-function createJWT(payload: Record<string, unknown>, secret: string): string {
+async function createJWT(payload: Record<string, unknown>, secret: string): Promise<string> {
   const header = { alg: "HS256", typ: "JWT" };
 
-  const base64UrlEncode = (obj: Record<string, unknown>) => {
-    const str = JSON.stringify(obj);
-    const bytes = new TextEncoder().encode(str);
-    return btoa(String.fromCharCode(...bytes))
+  const base64UrlEncode = (data: Uint8Array) => {
+    return btoa(String.fromCharCode(...data))
       .replace(/\+/g, "-")
       .replace(/\//g, "_")
       .replace(/=/g, "");
   };
 
-  const headerB64 = base64UrlEncode(header);
-  const payloadB64 = base64UrlEncode(payload);
+  const encoder = new TextEncoder();
+  const headerB64 = base64UrlEncode(encoder.encode(JSON.stringify(header)));
+  const payloadB64 = base64UrlEncode(encoder.encode(JSON.stringify(payload)));
   const message = `${headerB64}.${payloadB64}`;
 
-  // Create HMAC signature
-  const encoder = new TextEncoder();
-  const keyData = encoder.encode(secret);
-  const messageData = encoder.encode(message);
+  const key = await crypto.subtle.importKey(
+    "raw",
+    encoder.encode(secret),
+    { name: "HMAC", hash: "SHA-256" },
+    false,
+    ["sign"]
+  );
 
-  // Simple signature (in production use crypto.subtle)
-  const signature = btoa(
-    String.fromCharCode(
-      ...Array.from(new Uint8Array(32)).map((_, i) =>
-        (keyData[i % keyData.length] ^ messageData[i % messageData.length]) & 255
-      )
-    )
-  ).replace(/\+/g, "-").replace(/\//g, "_").replace(/=/g, "");
+  const signatureBuffer = await crypto.subtle.sign("HMAC", key, encoder.encode(message));
+  const signature = base64UrlEncode(new Uint8Array(signatureBuffer));
 
   return `${message}.${signature}`;
 }
@@ -103,7 +98,14 @@ serve(async (req: Request) => {
     // Initialize Supabase
     const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
     const supabaseServiceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
-    const jwtSecret = Deno.env.get("JWT_SECRET") || supabaseServiceKey;
+    const jwtSecret = Deno.env.get("JWT_SECRET");
+    if (!jwtSecret) {
+      console.error("JWT_SECRET environment variable is required");
+      return new Response(
+        JSON.stringify({ error: "Internal server error" }),
+        { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
     const supabase = createClient(supabaseUrl, supabaseServiceKey);
 
     // Verify nonce
@@ -162,7 +164,7 @@ serve(async (req: Request) => {
 
     // Create JWT
     const now = Math.floor(Date.now() / 1000);
-    const jwt = createJWT(
+    const jwt = await createJWT(
       {
         sub: userId,
         wallet_address: walletAddress,

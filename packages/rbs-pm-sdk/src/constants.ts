@@ -34,7 +34,6 @@ export const ADDRESSES = {
 // API Configuration
 export const API_CONFIG = {
   base: 'https://qkcytrdhdtemyphsswou.supabase.co',
-  anonKey: 'sb_publishable_mKTNqXht6ek37VkHAGWoUQ_TMzoC3wp',
 } as const;
 
 // API Endpoints

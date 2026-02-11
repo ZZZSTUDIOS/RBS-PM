@@ -5,8 +5,12 @@ import { createWalletClient, createPublicClient, http, formatUnits } from 'viem'
 import { privateKeyToAccount } from 'viem/accounts';
 import { keccak256, toHex } from 'viem';
 
-// Test wallet private key
-const PRIVATE_KEY = '0x39733f3e7a837d5c5a2c0e77c52345ca8016641914c8f8b68621deed2a0ba78a';
+// Test wallet private key (from environment)
+if (!process.env.PRIVATE_KEY) {
+  console.error('ERROR: Set PRIVATE_KEY environment variable');
+  process.exit(1);
+}
+const PRIVATE_KEY = process.env.PRIVATE_KEY;
 
 // Monad testnet
 const MONAD_RPC = 'https://testnet-rpc.monad.xyz';
