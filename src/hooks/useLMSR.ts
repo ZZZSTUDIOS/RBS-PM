@@ -1938,20 +1938,10 @@ export function useUnifiedEstimateShares() {
       // Parse with correct collateral decimals
       const grossPayment = parseUnits(paymentAmount, collateralDecimals);
 
-      // First try the contract's estimation function (for newer deployments)
-      try {
-        const shares = await publicClient.readContract({
-          address: marketAddress,
-          abi: LSLMSR_ABI,
-          functionName: 'estimateSharesForPayment',
-          args: [isYes, grossPayment],
-        }) as bigint;
-
-        // Shares are always 18 decimals internally
-        return formatEther(shares);
-      } catch (contractErr) {
-        // Fallback: Calculate in JavaScript for older deployments
-        console.log('Contract estimation not available, using JS fallback', contractErr);
+      // Always use JS fallback — deployed contracts have a binary search upper bound
+      // bug (high = payment * 2) that underestimates shares when price < 0.5.
+      // The JS implementation uses payment * 100 which is correct.
+      {
 
         // Fetch market parameters
         console.log('Fetching market parameters for JS estimation...');

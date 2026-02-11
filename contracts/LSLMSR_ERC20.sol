@@ -547,7 +547,7 @@ contract LSLMSR_ERC20 is Ownable, ReentrancyGuard, Pausable {
 
     function _calculateSharesForPayment(bool isYes, uint256 paymentInShareScale) internal view returns (uint256) {
         uint256 low = 0;
-        uint256 high = paymentInShareScale > type(uint256).max / 2 ? type(uint256).max : paymentInShareScale * 2;
+        uint256 high = paymentInShareScale > type(uint256).max / 100 ? type(uint256).max : paymentInShareScale * 100;
         uint256 mid;
 
         for (uint256 i = 0; i < 64; i++) {
