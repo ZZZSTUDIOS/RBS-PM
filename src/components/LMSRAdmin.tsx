@@ -467,7 +467,7 @@ export default function LMSRAdmin() {
     };
 
     fetchUSDCBalance();
-    const interval = setInterval(fetchUSDCBalance, 5000); // Refresh every 5 seconds
+    const interval = setInterval(fetchUSDCBalance, 30000);
     return () => clearInterval(interval);
   }, [publicClient, address]);
 
@@ -1267,7 +1267,7 @@ export default function LMSRAdmin() {
                           {(Number(marketInfo.yesPrice) / 1e18).toFixed(4)} USDC
                         </div>
                         <div style={{ color: theme.colors.textDim, fontSize: theme.fontSizes.xxs, marginTop: '8px' }}>
-                          {formatEther(marketInfo.yesShares)} shares
+                          {parseFloat(formatEther(marketInfo.yesShares)).toFixed(2)} shares
                         </div>
                       </div>
 
@@ -1286,7 +1286,7 @@ export default function LMSRAdmin() {
                           {(Number(marketInfo.noPrice) / 1e18).toFixed(4)} USDC
                         </div>
                         <div style={{ color: theme.colors.textDim, fontSize: theme.fontSizes.xxs, marginTop: '8px' }}>
-                          {formatEther(marketInfo.noShares)} shares
+                          {parseFloat(formatEther(marketInfo.noShares)).toFixed(2)} shares
                         </div>
                       </div>
                     </div>

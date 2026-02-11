@@ -1742,10 +1742,9 @@ export function useUnifiedMarketData(marketAddress: Address | undefined) {
   }, [publicClient, marketAddress]);
 
   useEffect(() => {
+    // One-time fetch for market metadata (type, collateralDecimals, etc.)
+    // Prices updated via Supabase Realtime from the indexer — no RPC polling
     refetch();
-    // Poll for price updates every 15 seconds to avoid rate limiting
-    const interval = setInterval(refetch, 15000);
-    return () => clearInterval(interval);
   }, [refetch]);
 
   return { marketInfo, marketType, isLoading, refetch };

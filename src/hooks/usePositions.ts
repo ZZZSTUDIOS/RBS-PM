@@ -357,10 +357,20 @@ export function useMarketTrades(marketAddresses: string[]) {
 
     fetchTrades();
 
-    // Poll every 30 seconds for new trades
-    const interval = setInterval(fetchTrades, 30_000);
+    // Subscribe to Realtime changes on trades table
+    const channel = supabase
+      .channel('trades-realtime')
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'trades' },
+        () => { fetchTrades(); }
+      )
+      .subscribe();
 
-    return () => { cancelled = true; clearInterval(interval); };
+    // 5-minute fallback poll as safety net
+    const interval = setInterval(fetchTrades, 300_000);
+
+    return () => { cancelled = true; supabase.removeChannel(channel); clearInterval(interval); };
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [addressesKey]);
 
