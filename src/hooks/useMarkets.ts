@@ -3,13 +3,12 @@ import { useState, useCallback, useEffect, useRef } from 'react';
 import { supabase } from '../lib/supabase';
 import type { Address } from 'viem';
 
-// V2 MarketFactory (0x99E1B2a0e68A2D0a1F60e5F0d24bC1e60518F1cd): only show its markets
-const V2_MARKET_ADDRESSES = new Set([
-  '0xd68a2957c1697131301eaeed6763395fffad4904',
-  '0x22ab793d2bc35c159a2d87c625966ecf9cf5f36e',
-  '0xf6ca8197c857c1a28d2552fdffaf1ffe1ccd0de4',
-  '0x42dc4411c9796904c0b4352a036785e650dc7f53',
-  '0x0e52b8edf0a96e5faadcd5b21fec05a8dc3e7eba',
+// Old factory markets with broken costFunction (always returns constant → 50/50 prices)
+// These are excluded from display since they can never have correct pricing
+const BROKEN_MARKET_ADDRESSES = new Set([
+  '0x3f9498ef0a9cc5a88678d4d4a900ec16875a1f9f',
+  '0x6e2f4b22042c7807a07af0801a7076d2c9f7854f',
+  '0x15e9094b5db262d09439fba90ef27039c6c62900',
 ]);
 
 // Market type (simplified for runtime use)
@@ -109,10 +108,10 @@ export function useMarkets(options: UseMarketsOptions = {}) {
 
       if (fetchError) throw fetchError;
 
-      // Filter to only V2 factory markets
+      // Filter out old broken factory markets
       const now = Date.now();
       const rawMarkets = ((data || []) as Market[]).filter(
-        m => V2_MARKET_ADDRESSES.has(m.address.toLowerCase())
+        m => !BROKEN_MARKET_ADDRESSES.has(m.address.toLowerCase())
       );
       const marketsWithMeta: MarketWithMeta[] = rawMarkets.map(market => ({
         ...market,
