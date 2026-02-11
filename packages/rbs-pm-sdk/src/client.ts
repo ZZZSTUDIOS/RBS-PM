@@ -774,7 +774,7 @@ export class RBSPMClient {
       chain: monadTestnet,
       to: instructions.trade.to as `0x${string}`,
       data: instructions.trade.data as `0x${string}`,
-      gas: 500_000n,
+      gas: 3_000_000n,
     });
 
     const receipt = await this.publicClient.waitForTransactionReceipt({ hash });
@@ -890,7 +890,7 @@ export class RBSPMClient {
       chain: monadTestnet,
       to: instructions.trade.to as `0x${string}`,
       data: instructions.trade.data as `0x${string}`,
-      gas: 500_000n,
+      gas: 3_000_000n,
     });
 
     const receipt = await this.publicClient.waitForTransactionReceipt({ hash });

@@ -329,7 +329,7 @@ export function useLSLMSR_ERC20() {
           abi: LSLMSR_ERC20_ABI,
           functionName: 'buy',
           args: [isYes, amountInUnits, minShares],
-          gas: 500_000n,
+          gas: 3_000_000n,
         });
 
         const receipt = await publicClient?.waitForTransactionReceipt({ hash });
@@ -394,7 +394,7 @@ export function useLSLMSR_ERC20() {
           abi: LSLMSR_ERC20_ABI,
           functionName: 'sell',
           args: [isYes, shares, minPayout],
-          gas: 500_000n,
+          gas: 3_000_000n,
         });
 
         const receipt = await publicClient?.waitForTransactionReceipt({ hash });

@@ -858,7 +858,7 @@ export function useLMSRBuy() {
         functionName: 'buy',
         args: [isYes, parseEther(minShares || '0')],
         value: parseEther(amount),
-        gas: 500_000n,
+        gas: 3_000_000n,
       });
 
       const receipt = await publicClient.waitForTransactionReceipt({ hash });
@@ -992,7 +992,7 @@ export function useLMSRSell() {
         abi: LSLMSR_ABI,
         functionName: 'sell',
         args: [isYes, sharesAmount, parseEther(minPayout || '0')],
-        gas: 500_000n,
+        gas: 3_000_000n,
       });
 
       const receipt = await publicClient.waitForTransactionReceipt({ hash });
