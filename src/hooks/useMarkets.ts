@@ -119,10 +119,10 @@ export function useMarkets(options: UseMarketsOptions = {}) {
     }
   }, [status, category, creator, orderBy, orderDirection, limit]);
 
-  // Initial fetch + polling every 15 seconds
+  // Initial fetch + polling every 30 seconds
   useEffect(() => {
     fetchMarkets();
-    const interval = setInterval(fetchMarkets, 15_000);
+    const interval = setInterval(fetchMarkets, 30_000);
     return () => clearInterval(interval);
   }, [fetchMarkets]);
 

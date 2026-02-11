@@ -325,43 +325,46 @@ export default function LMSRAdmin() {
       // Combine markets from trades and deployed markets
       const tradeMarkets = trades.map(t => t.marketAddress.toLowerCase());
       const deployedMarkets = markets.map(m => m.address.toLowerCase());
-      const ZERO_ADDR = '0x0000000000000000000000000000000000000000';
       const uniqueMarkets = [...new Set([...tradeMarkets, ...deployedMarkets])]
-        .filter(addr => addr && addr !== ZERO_ADDR && addr.length >= 42);
+        .filter(addr => addr && /^0x[a-f0-9]{40}$/i.test(addr) && !/^0x0+$/.test(addr));
 
       if (uniqueMarkets.length === 0) return;
 
-      for (const marketAddr of uniqueMarkets) {
-        try {
-          // LS-LMSR getMarketInfo returns 14 fields
+      // Fetch all markets concurrently with Promise.allSettled to avoid cascading failures
+      const results = await Promise.allSettled(
+        uniqueMarkets.map(async (marketAddr) => {
           const info = await publicClient.readContract({
             address: marketAddr as Address,
             abi: LSLMSR_ABI,
             functionName: 'getMarketInfo',
           }) as [string, bigint, Address, bigint, bigint, bigint, bigint, bigint, bigint, bigint, bigint, bigint, boolean, boolean];
+          return { marketAddr, info };
+        })
+      );
 
-          // Indices: 0=question, 1=resTime, 2=oracle, 3=yesPrice, 4=noPrice, 5=yesProbability, 6=noProbability, 7=yesShares, 8=noShares, 9=totalCollateral, 10=liquidityParam, 11=priceSum, 12=resolved, 13=yesWins
+      const updates: Record<string, { yesPrice: number; noPrice: number; resolved: boolean; yesWins: boolean; oracle: string }> = {};
+      for (const result of results) {
+        if (result.status === 'fulfilled') {
+          const { marketAddr, info } = result.value;
           const [, , oracle, yesPrice, noPrice, , , , , , , , resolved, yesWins] = info;
-
-          setMarketPrices(prev => ({
-            ...prev,
-            [marketAddr]: {
-              yesPrice: Number(yesPrice) / 1e18,
-              noPrice: Number(noPrice) / 1e18,
-              resolved,
-              yesWins,
-              oracle: oracle.toLowerCase(),
-            },
-          }));
-        } catch (err) {
-          console.error(`Failed to fetch prices for ${marketAddr}:`, err);
+          updates[marketAddr] = {
+            yesPrice: Number(yesPrice) / 1e18,
+            noPrice: Number(noPrice) / 1e18,
+            resolved,
+            yesWins,
+            oracle: oracle.toLowerCase(),
+          };
         }
+      }
+
+      if (Object.keys(updates).length > 0) {
+        setMarketPrices(prev => ({ ...prev, ...updates }));
       }
     };
 
     fetchPrices();
-    // Refresh prices every 15 seconds
-    const interval = setInterval(fetchPrices, 15000);
+    // Refresh prices every 30 seconds
+    const interval = setInterval(fetchPrices, 30000);
     return () => clearInterval(interval);
   }, [publicClient, trades, markets]);
 
