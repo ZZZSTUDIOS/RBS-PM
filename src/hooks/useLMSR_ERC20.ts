@@ -3,7 +3,7 @@
 
 import { useState, useCallback } from 'react';
 import { useAccount, usePublicClient, useWalletClient } from 'wagmi';
-import { parseUnits, formatUnits, type Address } from 'viem';
+import { parseUnits, formatUnits, maxUint256, type Address } from 'viem';
 import { ADDRESSES, ERC20_ABI, monadTestnet } from '../config/wagmi';
 
 // Supabase Edge Function URL for price sync
@@ -250,10 +250,8 @@ export function useLSLMSR_ERC20() {
 
   // Approve USDC for a market
   const approveUSDC = useCallback(
-    async (marketAddress: Address, amount: string) => {
-      if (!walletClient || !address) throw new Error('Wallet not connected');
-
-      const amountInUnits = parseUnits(amount, USDC_DECIMALS);
+    async (marketAddress: Address) => {
+      if (!walletClient || !address || !publicClient) throw new Error('Wallet not connected');
 
       const hash = await walletClient.writeContract({
         account: address,
@@ -261,10 +259,10 @@ export function useLSLMSR_ERC20() {
         address: ADDRESSES.USDC,
         abi: ERC20_ABI,
         functionName: 'approve',
-        args: [marketAddress, amountInUnits],
+        args: [marketAddress, maxUint256],
       });
 
-      await publicClient?.waitForTransactionReceipt({ hash });
+      await publicClient.waitForTransactionReceipt({ hash });
       return hash;
     },
     [walletClient, address, publicClient]
@@ -315,10 +313,10 @@ export function useLSLMSR_ERC20() {
       try {
         const amountInUnits = parseUnits(usdcAmount, USDC_DECIMALS);
 
-        // Check and set approval if needed
+        // Check and set approval if needed (approve max once per market)
         const allowance = await checkAllowance(marketAddress);
         if (allowance < amountInUnits) {
-          await approveUSDC(marketAddress, usdcAmount);
+          await approveUSDC(marketAddress);
         }
 
         // Execute buy — explicit gas limit needed for LS-LMSR's complex math
