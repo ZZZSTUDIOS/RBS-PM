@@ -7,6 +7,7 @@ import {
   http,
   parseUnits,
   formatUnits,
+  decodeEventLog,
   type PublicClient,
   type WalletClient,
   type Account,
@@ -774,7 +775,7 @@ export class RBSPMClient {
       data: instructions.trade.data as `0x${string}`,
     });
 
-    await this.publicClient.waitForTransactionReceipt({ hash });
+    const receipt = await this.publicClient.waitForTransactionReceipt({ hash });
 
     // Confirm trade in database (best-effort, don't fail the trade)
     try {
@@ -783,12 +784,31 @@ export class RBSPMClient {
       console.log('Trade confirmation skipped:', confirmErr);
     }
 
-    const amountInUnits = parseUnits(usdcAmount, USDC_DECIMALS);
+    // Parse SharesPurchased event to get actual shares and cost
+    let shares = parseUnits(usdcAmount, USDC_DECIMALS);
+    let cost = shares;
+    for (const log of receipt.logs) {
+      try {
+        const decoded = decodeEventLog({
+          abi: LSLMSR_ABI,
+          data: log.data,
+          topics: log.topics,
+        });
+        if (decoded.eventName === 'SharesPurchased') {
+          const args = decoded.args as unknown as { shares: bigint; cost: bigint };
+          shares = args.shares;
+          cost = args.cost;
+          break;
+        }
+      } catch {
+        // Not this event
+      }
+    }
 
     return {
       txHash: hash,
-      shares: amountInUnits, // Approximate, would need event parsing
-      cost: amountInUnits,
+      shares,
+      cost,
       isYes,
       isBuy: true,
     };
@@ -866,7 +886,7 @@ export class RBSPMClient {
       data: instructions.trade.data as `0x${string}`,
     });
 
-    await this.publicClient.waitForTransactionReceipt({ hash });
+    const receipt = await this.publicClient.waitForTransactionReceipt({ hash });
 
     // Confirm trade in database (best-effort, don't fail the trade)
     try {
@@ -875,10 +895,31 @@ export class RBSPMClient {
       // Trade confirmation is best-effort, don't fail the trade
     }
 
+    // Parse SharesSold event to get actual shares sold and payout
+    let actualShares = shares;
+    let payout = 0n;
+    for (const log of receipt.logs) {
+      try {
+        const decoded = decodeEventLog({
+          abi: LSLMSR_ABI,
+          data: log.data,
+          topics: log.topics,
+        });
+        if (decoded.eventName === 'SharesSold') {
+          const args = decoded.args as unknown as { shares: bigint; payout: bigint };
+          actualShares = args.shares;
+          payout = args.payout;
+          break;
+        }
+      } catch {
+        // Not this event
+      }
+    }
+
     return {
       txHash: hash,
-      shares,
-      cost: 0n, // Would parse from event
+      shares: actualShares,
+      cost: payout,
       isYes,
       isBuy: false,
     };
