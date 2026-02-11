@@ -321,7 +321,7 @@ export function useLSLMSR_ERC20() {
           await approveUSDC(marketAddress, usdcAmount);
         }
 
-        // Execute buy
+        // Execute buy — explicit gas limit needed for LS-LMSR's complex math
         const hash = await walletClient.writeContract({
           account: address,
           chain: monadTestnet,
@@ -329,9 +329,13 @@ export function useLSLMSR_ERC20() {
           abi: LSLMSR_ERC20_ABI,
           functionName: 'buy',
           args: [isYes, amountInUnits, minShares],
+          gas: 500_000n,
         });
 
         const receipt = await publicClient?.waitForTransactionReceipt({ hash });
+        if (receipt?.status === 'reverted') {
+          throw new Error('Transaction reverted on-chain');
+        }
 
         // Sync prices to database after trade (for frontend accuracy)
         syncPricesToDatabase(marketAddress);
@@ -382,7 +386,7 @@ export function useLSLMSR_ERC20() {
           await publicClient?.waitForTransactionReceipt({ hash: approveHash });
         }
 
-        // Execute sell
+        // Execute sell — explicit gas limit needed for LS-LMSR's complex math
         const hash = await walletClient.writeContract({
           account: address,
           chain: monadTestnet,
@@ -390,9 +394,13 @@ export function useLSLMSR_ERC20() {
           abi: LSLMSR_ERC20_ABI,
           functionName: 'sell',
           args: [isYes, shares, minPayout],
+          gas: 500_000n,
         });
 
         const receipt = await publicClient?.waitForTransactionReceipt({ hash });
+        if (receipt?.status === 'reverted') {
+          throw new Error('Transaction reverted on-chain');
+        }
 
         // Sync prices to database after trade (for frontend accuracy)
         syncPricesToDatabase(marketAddress);
@@ -419,9 +427,13 @@ export function useLSLMSR_ERC20() {
           abi: LSLMSR_ERC20_ABI,
           functionName: 'redeem',
           args: [],
+          gas: 300_000n,
         });
 
         const receipt = await publicClient?.waitForTransactionReceipt({ hash });
+        if (receipt?.status === 'reverted') {
+          throw new Error('Transaction reverted on-chain');
+        }
         return { hash, receipt };
       } finally {
         setIsLoading(false);

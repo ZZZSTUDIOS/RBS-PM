@@ -858,9 +858,13 @@ export function useLMSRBuy() {
         functionName: 'buy',
         args: [isYes, parseEther(minShares || '0')],
         value: parseEther(amount),
+        gas: 500_000n,
       });
 
       const receipt = await publicClient.waitForTransactionReceipt({ hash });
+      if (receipt.status === 'reverted') {
+        throw new Error('Transaction reverted on-chain');
+      }
 
       // Parse the SharesPurchased event to get the shares amount
       let shares = '0';
@@ -988,9 +992,13 @@ export function useLMSRSell() {
         abi: LSLMSR_ABI,
         functionName: 'sell',
         args: [isYes, sharesAmount, parseEther(minPayout || '0')],
+        gas: 500_000n,
       });
 
       const receipt = await publicClient.waitForTransactionReceipt({ hash });
+      if (receipt.status === 'reverted') {
+        throw new Error('Transaction reverted on-chain');
+      }
 
       // Parse the SharesSold event to get the actual shares sold
       let shares = sharesToSell;

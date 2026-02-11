@@ -768,14 +768,19 @@ export class RBSPMClient {
     }
 
     // Execute trade using calldata from x402 endpoint
+    // Explicit gas limit needed for LS-LMSR's complex binary search + exp/ln math
     const hash = await this.walletClient.sendTransaction({
       account: this.account,
       chain: monadTestnet,
       to: instructions.trade.to as `0x${string}`,
       data: instructions.trade.data as `0x${string}`,
+      gas: 500_000n,
     });
 
     const receipt = await this.publicClient.waitForTransactionReceipt({ hash });
+    if (receipt.status === 'reverted') {
+      throw new Error('Transaction reverted on-chain');
+    }
 
     // Confirm trade in database (best-effort, don't fail the trade)
     try {
@@ -879,14 +884,19 @@ export class RBSPMClient {
     }
 
     // Execute trade using calldata from x402 endpoint
+    // Explicit gas limit needed for LS-LMSR's complex binary search + exp/ln math
     const hash = await this.walletClient.sendTransaction({
       account: this.account,
       chain: monadTestnet,
       to: instructions.trade.to as `0x${string}`,
       data: instructions.trade.data as `0x${string}`,
+      gas: 500_000n,
     });
 
     const receipt = await this.publicClient.waitForTransactionReceipt({ hash });
+    if (receipt.status === 'reverted') {
+      throw new Error('Transaction reverted on-chain');
+    }
 
     // Confirm trade in database (best-effort, don't fail the trade)
     try {
