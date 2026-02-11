@@ -119,11 +119,29 @@ export function useMarkets(options: UseMarketsOptions = {}) {
     }
   }, [status, category, creator, orderBy, orderDirection, limit]);
 
-  // Initial fetch + polling every 30 seconds
+  // Initial fetch + Realtime subscription + 5-min fallback poll
   useEffect(() => {
     fetchMarkets();
-    const interval = setInterval(fetchMarkets, 30_000);
-    return () => clearInterval(interval);
+
+    // Subscribe to Realtime changes on markets table
+    const channel = supabase
+      .channel('markets-realtime')
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'markets' },
+        () => {
+          fetchMarkets();
+        }
+      )
+      .subscribe();
+
+    // 5-minute fallback poll as safety net
+    const interval = setInterval(fetchMarkets, 300_000);
+
+    return () => {
+      supabase.removeChannel(channel);
+      clearInterval(interval);
+    };
   }, [fetchMarkets]);
 
   // Get single market by address

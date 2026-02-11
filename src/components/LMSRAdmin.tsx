@@ -317,56 +317,30 @@ export default function LMSRAdmin() {
     }
   }, [dbTrades, userId]);
 
-  // Fetch market prices for all positions and deployed markets
+  // Load market prices from Supabase (populated by indexer) + Realtime updates
   useEffect(() => {
-    const fetchPrices = async () => {
-      if (!publicClient) return;
+    // Seed prices from Supabase markets data (no RPC needed)
+    const loadPricesFromSupabase = () => {
+      if (!supabaseMarkets || supabaseMarkets.length === 0) return;
 
-      // Combine markets from trades and deployed markets
-      const tradeMarkets = trades.map(t => t.marketAddress.toLowerCase());
-      const deployedMarkets = markets.map(m => m.address.toLowerCase());
-      const uniqueMarkets = [...new Set([...tradeMarkets, ...deployedMarkets])]
-        .filter(addr => addr && /^0x[a-f0-9]{40}$/i.test(addr) && !/^0x0+$/.test(addr));
-
-      if (uniqueMarkets.length === 0) return;
-
-      // Fetch all markets concurrently with Promise.allSettled to avoid cascading failures
-      const results = await Promise.allSettled(
-        uniqueMarkets.map(async (marketAddr) => {
-          const info = await publicClient.readContract({
-            address: marketAddr as Address,
-            abi: LSLMSR_ABI,
-            functionName: 'getMarketInfo',
-          }) as [string, bigint, Address, bigint, bigint, bigint, bigint, bigint, bigint, bigint, bigint, bigint, boolean, boolean];
-          return { marketAddr, info };
-        })
-      );
-
-      const updates: Record<string, { yesPrice: number; noPrice: number; resolved: boolean; yesWins: boolean; oracle: string }> = {};
-      for (const result of results) {
-        if (result.status === 'fulfilled') {
-          const { marketAddr, info } = result.value;
-          const [, , oracle, yesPrice, noPrice, , , , , , , , resolved, yesWins] = info;
-          updates[marketAddr] = {
-            yesPrice: Number(yesPrice) / 1e18,
-            noPrice: Number(noPrice) / 1e18,
-            resolved,
-            yesWins,
-            oracle: oracle.toLowerCase(),
-          };
-        }
+      const updates: Record<string, MarketPrices> = {};
+      for (const m of supabaseMarkets) {
+        const addr = m.address.toLowerCase();
+        updates[addr] = {
+          yesPrice: parseFloat(m.yes_price) || 0.5,
+          noPrice: parseFloat(m.no_price) || 0.5,
+          resolved: m.resolved || false,
+          yesWins: m.yes_wins || false,
+          oracle: (m.oracle_address || '').toLowerCase(),
+        };
       }
-
       if (Object.keys(updates).length > 0) {
         setMarketPrices(prev => ({ ...prev, ...updates }));
       }
     };
 
-    fetchPrices();
-    // Refresh prices every 30 seconds
-    const interval = setInterval(fetchPrices, 30000);
-    return () => clearInterval(interval);
-  }, [publicClient, trades, markets]);
+    loadPricesFromSupabase();
+  }, [supabaseMarkets]);
 
   // LS-LMSR hooks
   const { logs, addLog, clearLogs } = useTransactionLog(address);

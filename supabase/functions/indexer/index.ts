@@ -1,106 +1,299 @@
 // Edge Function: indexer
-// Syncs on-chain events to database
+// Syncs on-chain events to database using Envio HyperSync
+// Scheduled via pg_cron every minute
 
 import { serve } from "https://deno.land/std@0.177.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.39.0";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
+  "Access-Control-Allow-Headers":
+    "authorization, x-client-info, apikey, content-type",
   "Access-Control-Allow-Methods": "POST, OPTIONS",
 };
 
 // Monad Testnet configuration
 const CHAIN_ID = 10143;
 const RPC_URL = "https://testnet-rpc.monad.xyz";
-const BLOCKS_PER_BATCH = 100; // Monad RPC limit
+const HYPERSYNC_URL = "https://monad-testnet.hypersync.xyz";
 
-// LS-LMSR Event signatures (keccak256 hashes)
-const EVENT_SIGNATURES = {
-  SharesPurchased: "0x" + "e6f6b9be7d57af2f7e5c5c3e8a3d3a1e4f5b6c7d8e9f0a1b2c3d4e5f6a7b8c9d", // Placeholder
-  SharesSold: "0x" + "a1b2c3d4e5f6a7b8c9d0e1f2a3b4c5d6e7f8a9b0c1d2e3f4a5b6c7d8e9f0a1b2",
-  Redeemed: "0x" + "b2c3d4e5f6a7b8c9d0e1f2a3b4c5d6e7f8a9b0c1d2e3f4a5b6c7d8e9f0a1b2c3",
-  MarketResolved: "0x" + "c3d4e5f6a7b8c9d0e1f2a3b4c5d6e7f8a9b0c1d2e3f4a5b6c7d8e9f0a1b2c3d4",
-};
+// Event signatures (keccak256 hashes) — from LSLMSR_ERC20 contract
+const EVENT_SIGS = {
+  SharesPurchased:
+    "0x9bd054fb950acb82b978a4ba93668286e2c3fa8c43589f21061c8520068ba80c",
+  SharesSold:
+    "0xcf06b88583ec57d4cf2f6795931fe9057d95a86052efc8d8b3a4cad0e885d5e9",
+  Redeemed:
+    "0xf3a670cd3af7d64b488926880889d08a8585a138ff455227af6737339a1ec262",
+  MarketResolved:
+    "0xf528f3b02f5c2503827fc677c9d0cb54ffbf11ed32cb659f73243b70dea7cf0e",
+} as const;
 
-// Helper to make RPC calls
-async function rpcCall(method: string, params: unknown[]): Promise<unknown> {
-  const response = await fetch(RPC_URL, {
+// Fee rate: 0.5% on BUY trades
+const FEE_RATE = 0.005;
+
+// Parse hex to decimal string with proper decimals
+function hexToDecimalString(hex: string, decimals: number): string {
+  const value = BigInt(hex);
+  const divisor = BigInt(10 ** decimals);
+  const whole = value / divisor;
+  const fraction = value % divisor;
+  const fractionStr = fraction.toString().padStart(decimals, "0");
+  return `${whole}.${fractionStr}`;
+}
+
+interface HyperSyncLog {
+  address: string;
+  topics: string[];
+  data: string;
+  block_number: number;
+  transaction_hash: string;
+  log_index: number;
+}
+
+interface HyperSyncRawLog {
+  address?: string;
+  topic0?: string;
+  topic1?: string;
+  topic2?: string;
+  topic3?: string;
+  data?: string;
+  block_number?: number;
+  transaction_hash?: string;
+  log_index?: number;
+}
+
+interface HyperSyncResponse {
+  data: Array<{ logs?: HyperSyncRawLog[] }>;
+  next_block?: number;
+}
+
+interface ParsedTrade {
+  tradeType: "BUY" | "SELL" | "REDEEM";
+  trader: string;
+  outcome: "YES" | "NO";
+  shares: string;
+  amount: string;
+  txHash: string;
+  blockNumber: number;
+  marketAddress: string;
+}
+
+// Build headers for HyperSync (only include auth if token provided)
+function hyperSyncHeaders(bearerToken: string, json = false): Record<string, string> {
+  const headers: Record<string, string> = {};
+  if (bearerToken) headers["Authorization"] = `Bearer ${bearerToken}`;
+  if (json) headers["Content-Type"] = "application/json";
+  return headers;
+}
+
+// Fetch current chain height from HyperSync
+async function getChainHeight(bearerToken: string): Promise<number> {
+  const resp = await fetch(`${HYPERSYNC_URL}/height`, {
+    headers: hyperSyncHeaders(bearerToken),
+  });
+  if (!resp.ok) throw new Error(`HyperSync /height failed: ${resp.status}`);
+  const result = await resp.json();
+  // Response is either a number or { height: number }
+  return typeof result === "number" ? result : result.height;
+}
+
+// Query HyperSync for logs with pagination
+async function queryHyperSync(
+  fromBlock: number,
+  toBlock: number,
+  addresses: string[],
+  bearerToken: string
+): Promise<HyperSyncLog[]> {
+  const allLogs: HyperSyncLog[] = [];
+  let currentFrom = fromBlock;
+
+  while (currentFrom <= toBlock) {
+    const query = {
+      from_block: currentFrom,
+      to_block: toBlock + 1, // HyperSync uses exclusive upper bound
+      logs: [
+        {
+          address: addresses,
+          topics: [
+            [
+              EVENT_SIGS.SharesPurchased,
+              EVENT_SIGS.SharesSold,
+              EVENT_SIGS.Redeemed,
+              EVENT_SIGS.MarketResolved,
+            ],
+          ],
+        },
+      ],
+      field_selection: {
+        log: [
+          "address",
+          "topic0",
+          "topic1",
+          "topic2",
+          "topic3",
+          "data",
+          "block_number",
+          "transaction_hash",
+          "log_index",
+        ],
+      },
+    };
+
+    const resp = await fetch(`${HYPERSYNC_URL}/query`, {
+      method: "POST",
+      headers: hyperSyncHeaders(bearerToken, true),
+      body: JSON.stringify(query),
+    });
+
+    if (!resp.ok) {
+      const text = await resp.text();
+      throw new Error(`HyperSync /query failed: ${resp.status} - ${text}`);
+    }
+
+    const result: HyperSyncResponse = await resp.json();
+
+    // Flatten nested structure: data is array of batches, each with a logs array
+    // Normalize topics from separate fields (topic0..topic3) into topics array
+    for (const batch of result.data || []) {
+      for (const raw of batch.logs || []) {
+        allLogs.push({
+          address: raw.address || "",
+          topics: [raw.topic0, raw.topic1, raw.topic2, raw.topic3].filter(
+            Boolean
+          ) as string[],
+          data: raw.data || "0x",
+          block_number: raw.block_number || 0,
+          transaction_hash: raw.transaction_hash || "",
+          log_index: raw.log_index || 0,
+        });
+      }
+    }
+
+    // Paginate: if next_block is returned and within range, continue
+    if (result.next_block && result.next_block <= toBlock) {
+      currentFrom = result.next_block;
+    } else {
+      break;
+    }
+  }
+
+  return allLogs;
+}
+
+// Parse a single log into a trade
+function parseLog(log: HyperSyncLog): ParsedTrade | null {
+  const topic0 = log.topics[0];
+
+  if (topic0 === EVENT_SIGS.SharesPurchased) {
+    // SharesPurchased(address indexed buyer, bool isYes, uint256 shares, uint256 cost)
+    const trader = "0x" + log.topics[1].slice(26);
+    const data = log.data.slice(2);
+    const isYes = BigInt("0x" + data.slice(0, 64)) !== 0n;
+    const sharesHex = "0x" + data.slice(64, 128);
+    const costHex = "0x" + data.slice(128, 192);
+
+    return {
+      tradeType: "BUY",
+      trader,
+      outcome: isYes ? "YES" : "NO",
+      shares: hexToDecimalString(sharesHex, 18),
+      amount: hexToDecimalString(costHex, 6),
+      txHash: log.transaction_hash,
+      blockNumber: log.block_number,
+      marketAddress: log.address.toLowerCase(),
+    };
+  }
+
+  if (topic0 === EVENT_SIGS.SharesSold) {
+    // SharesSold(address indexed seller, bool isYes, uint256 shares, uint256 payout)
+    const trader = "0x" + log.topics[1].slice(26);
+    const data = log.data.slice(2);
+    const isYes = BigInt("0x" + data.slice(0, 64)) !== 0n;
+    const sharesHex = "0x" + data.slice(64, 128);
+    const payoutHex = "0x" + data.slice(128, 192);
+
+    return {
+      tradeType: "SELL",
+      trader,
+      outcome: isYes ? "YES" : "NO",
+      shares: hexToDecimalString(sharesHex, 18),
+      amount: hexToDecimalString(payoutHex, 6),
+      txHash: log.transaction_hash,
+      blockNumber: log.block_number,
+      marketAddress: log.address.toLowerCase(),
+    };
+  }
+
+  if (topic0 === EVENT_SIGS.Redeemed) {
+    // Redeemed(address indexed user, uint256 shares, uint256 payout)
+    const trader = "0x" + log.topics[1].slice(26);
+    const data = log.data.slice(2);
+    const sharesHex = "0x" + data.slice(0, 64);
+    const payoutHex = "0x" + data.slice(64, 128);
+
+    return {
+      tradeType: "REDEEM",
+      trader,
+      outcome: "YES", // Redeem doesn't specify outcome
+      shares: hexToDecimalString(sharesHex, 18),
+      amount: hexToDecimalString(payoutHex, 6),
+      txHash: log.transaction_hash,
+      blockNumber: log.block_number,
+      marketAddress: log.address.toLowerCase(),
+    };
+  }
+
+  // MarketResolved is handled separately (not a trade)
+  return null;
+}
+
+// Update market prices via RPC getMarketInfo
+async function updateMarketPrices(
+  supabase: ReturnType<typeof createClient>,
+  marketId: string,
+  marketAddress: string
+): Promise<void> {
+  const resp = await fetch(RPC_URL, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
       jsonrpc: "2.0",
       id: 1,
-      method,
-      params,
+      method: "eth_call",
+      params: [{ to: marketAddress, data: "0x23341a05" }, "latest"],
     }),
   });
 
-  const data = await response.json();
-  if (data.error) {
-    throw new Error(`RPC error: ${data.error.message}`);
-  }
-  return data.result;
-}
+  const result = await resp.json();
+  if (!result.result || result.result === "0x") return;
 
-// Get current block number
-async function getBlockNumber(): Promise<number> {
-  const result = await rpcCall("eth_blockNumber", []);
-  return parseInt(result as string, 16);
-}
+  const d = result.result.slice(2);
+  // Offsets: yesPrice at slot 3 (192), noPrice at 4 (256),
+  // yesShares at 7 (448), noShares at 8 (512), totalCollateral at 9 (576),
+  // resolved at 12 (768), yesWins at 13 (832)
+  const yesPrice = Number(BigInt("0x" + d.slice(192, 256))) / 1e18;
+  const noPrice = Number(BigInt("0x" + d.slice(256, 320))) / 1e18;
+  const resolved = BigInt("0x" + d.slice(768, 832)) !== 0n;
+  const yesWins = BigInt("0x" + d.slice(832, 896)) !== 0n;
 
-// Get logs for a block range
-async function getLogs(
-  fromBlock: number,
-  toBlock: number,
-  addresses: string[]
-): Promise<Array<{
-  address: string;
-  topics: string[];
-  data: string;
-  blockNumber: string;
-  transactionHash: string;
-  logIndex: string;
-}>> {
-  const result = await rpcCall("eth_getLogs", [
-    {
-      fromBlock: "0x" + fromBlock.toString(16),
-      toBlock: "0x" + toBlock.toString(16),
-      address: addresses.length === 1 ? addresses[0] : addresses,
-    },
-  ]);
-  return result as Array<{
-    address: string;
-    topics: string[];
-    data: string;
-    blockNumber: string;
-    transactionHash: string;
-    logIndex: string;
-  }>;
-}
-
-// Parse event data
-function parseEventData(data: string): { values: bigint[] } {
-  // Remove 0x prefix and split into 64-char chunks (32 bytes each)
-  const hex = data.slice(2);
-  const values: bigint[] = [];
-  for (let i = 0; i < hex.length; i += 64) {
-    values.push(BigInt("0x" + hex.slice(i, i + 64)));
-  }
-  return { values };
-}
-
-// Format bigint to decimal string (18 decimals)
-function formatDecimal(value: bigint): string {
-  const str = value.toString();
-  if (str.length <= 18) {
-    return "0." + "0".repeat(18 - str.length) + str;
-  }
-  return str.slice(0, -18) + "." + str.slice(-18);
+  await supabase
+    .from("markets")
+    .update({
+      yes_price: yesPrice,
+      no_price: noPrice,
+      yes_shares: hexToDecimalString("0x" + d.slice(448, 512), 18),
+      no_shares: hexToDecimalString("0x" + d.slice(512, 576), 18),
+      total_collateral: hexToDecimalString("0x" + d.slice(576, 640), 6),
+      resolved,
+      yes_wins: yesWins,
+      status: resolved ? "RESOLVED" : "ACTIVE",
+      updated_at: new Date().toISOString(),
+    })
+    .eq("id", marketId);
 }
 
 serve(async (req: Request) => {
-  // Handle CORS preflight
   if (req.method === "OPTIONS") {
     return new Response("ok", { headers: corsHeaders });
   }
@@ -112,9 +305,14 @@ serve(async (req: Request) => {
     if (!apiKey || !authHeader || authHeader !== `Bearer ${apiKey}`) {
       return new Response(
         JSON.stringify({ error: "Unauthorized" }),
-        { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        {
+          status: 401,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        }
       );
     }
+
+    const bearerToken = Deno.env.get("HYPERSYNC_BEARER_TOKEN") || "";
 
     // Initialize Supabase
     const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
@@ -132,20 +330,24 @@ serve(async (req: Request) => {
       console.error("Failed to get indexer state:", stateError);
       return new Response(
         JSON.stringify({ error: "Failed to get indexer state" }),
-        { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        {
+          status: 500,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        }
       );
     }
 
-    // Check if already syncing
+    // Check sync lock (5-min timeout)
     if (stateData.is_syncing) {
       const syncStarted = new Date(stateData.sync_started_at);
       const minutesSinceSync = (Date.now() - syncStarted.getTime()) / 1000 / 60;
-
-      // If syncing for more than 5 minutes, reset the lock
       if (minutesSinceSync < 5) {
         return new Response(
           JSON.stringify({ message: "Sync already in progress" }),
-          { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+          {
+            status: 200,
+            headers: { ...corsHeaders, "Content-Type": "application/json" },
+          }
         );
       }
     }
@@ -153,130 +355,190 @@ serve(async (req: Request) => {
     // Set syncing flag
     await supabase
       .from("indexer_state")
-      .update({ is_syncing: true, sync_started_at: new Date().toISOString() })
+      .update({
+        is_syncing: true,
+        sync_started_at: new Date().toISOString(),
+      })
       .eq("chain_id", CHAIN_ID);
 
     try {
-      // Get current block
-      const currentBlock = await getBlockNumber();
+      // Get current chain height from HyperSync
+      const currentBlock = await getChainHeight(bearerToken);
       const fromBlock = stateData.last_indexed_block + 1;
-      const toBlock = Math.min(fromBlock + BLOCKS_PER_BATCH - 1, currentBlock);
 
       if (fromBlock > currentBlock) {
-        // Already synced
         await supabase
           .from("indexer_state")
-          .update({ is_syncing: false, last_indexed_at: new Date().toISOString() })
+          .update({
+            is_syncing: false,
+            last_indexed_at: new Date().toISOString(),
+          })
           .eq("chain_id", CHAIN_ID);
 
         return new Response(
-          JSON.stringify({ message: "Already synced", current_block: currentBlock }),
-          { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+          JSON.stringify({
+            message: "Already synced",
+            current_block: currentBlock,
+          }),
+          {
+            status: 200,
+            headers: { ...corsHeaders, "Content-Type": "application/json" },
+          }
         );
       }
 
       // Get all tracked market addresses
-      const { data: markets, error: marketsError } = await supabase
+      const { data: marketsData, error: marketsError } = await supabase
         .from("markets")
-        .select("id, address")
-        .eq("status", "ACTIVE");
+        .select("id, address");
 
       if (marketsError) {
         throw new Error(`Failed to get markets: ${marketsError.message}`);
       }
 
-      const marketAddresses = markets?.map((m) => m.address) || [];
+      const marketsList = marketsData || [];
+      const marketAddresses = marketsList.map((m) => m.address.toLowerCase());
       const addressToId: Record<string, string> = {};
-      markets?.forEach((m) => {
+      for (const m of marketsList) {
         addressToId[m.address.toLowerCase()] = m.id;
-      });
+      }
 
       let processedEvents = 0;
-      let errors: string[] = [];
+      let resolvedMarkets = 0;
+      const affectedMarketIds = new Set<string>();
+      const errors: string[] = [];
 
       if (marketAddresses.length > 0) {
-        // Fetch logs
-        const logs = await getLogs(fromBlock, toBlock, marketAddresses);
+        // Query HyperSync for all events
+        const logs = await queryHyperSync(
+          fromBlock,
+          currentBlock,
+          marketAddresses,
+          bearerToken
+        );
+
+        console.log(
+          `HyperSync returned ${logs.length} logs from block ${fromBlock} to ${currentBlock}`
+        );
+
+        // Separate MarketResolved events from trade events
+        const resolveEvents: HyperSyncLog[] = [];
+        const tradeEvents: ParsedTrade[] = [];
 
         for (const log of logs) {
-          const marketId = addressToId[log.address.toLowerCase()];
+          const marketAddr = log.address.toLowerCase();
+          const marketId = addressToId[marketAddr];
           if (!marketId) continue;
 
-          const topic0 = log.topics[0];
-          const blockNumber = parseInt(log.blockNumber, 16);
-          const txHash = log.transactionHash;
-
-          try {
-            // Determine event type and process
-            // Note: In production, use proper ABI decoding
-            const eventData = parseEventData(log.data);
-
-            // For SharesPurchased: topics[1] = buyer (indexed)
-            // data = [isYes (bool as uint256), shares, cost]
-            if (log.topics.length >= 2 && eventData.values.length >= 3) {
-              const buyer = "0x" + log.topics[1].slice(26); // Extract address from topic
-              const isYes = eventData.values[0] === 1n;
-              const shares = formatDecimal(eventData.values[1]);
-              const cost = formatDecimal(eventData.values[2]);
-
-              // Get or create user
-              const { data: userData } = await supabase.rpc("get_or_create_user", {
-                p_wallet_address: buyer.toLowerCase(),
-              });
-
-              const userId = userData?.[0]?.id;
-              if (!userId) continue;
-
-              // Insert trade
-              await supabase.from("trades").upsert(
-                {
-                  market_id: marketId,
-                  user_id: userId,
-                  trade_type: "BUY", // Simplified - need proper event detection
-                  outcome: isYes ? "YES" : "NO",
-                  shares: shares,
-                  amount: cost,
-                  tx_hash: txHash,
-                  block_number: blockNumber,
-                },
-                { onConflict: "tx_hash,outcome" }
-              );
-
-              processedEvents++;
+          if (log.topics[0] === EVENT_SIGS.MarketResolved) {
+            resolveEvents.push(log);
+            affectedMarketIds.add(marketId);
+          } else {
+            const parsed = parseLog(log);
+            if (parsed) {
+              tradeEvents.push(parsed);
+              affectedMarketIds.add(marketId);
             }
-          } catch (err) {
-            errors.push(`Error processing log ${log.transactionHash}: ${err}`);
           }
         }
 
-        // Update market prices from chain
-        for (const market of markets || []) {
-          try {
-            // Call getMarketInfo on each market
-            const result = await rpcCall("eth_call", [
-              {
-                to: market.address,
-                data: "0x" + "22a62d1e", // getMarketInfo() selector
-              },
-              "latest",
-            ]);
+        // Process MarketResolved events
+        for (const log of resolveEvents) {
+          const marketAddr = log.address.toLowerCase();
+          const marketId = addressToId[marketAddr];
+          if (!marketId) continue;
 
-            // Parse result (simplified - need proper ABI decoding)
-            if (result && typeof result === "string" && result.length > 2) {
-              // In production, properly decode the tuple response
-              // For now, just create a snapshot
-              await supabase.from("market_snapshots").insert({
-                market_id: market.id,
-                yes_price: "0.5", // Placeholder
-                no_price: "0.5",
-                yes_shares: "0",
-                no_shares: "0",
-                total_collateral: "0",
-                block_number: toBlock,
-              });
+          try {
+            const data = log.data.slice(2);
+            const yesWins = BigInt("0x" + data.slice(0, 64)) !== 0n;
+
+            await supabase
+              .from("markets")
+              .update({
+                resolved: true,
+                yes_wins: yesWins,
+                status: "RESOLVED",
+                resolved_at: new Date().toISOString(),
+                updated_at: new Date().toISOString(),
+              })
+              .eq("id", marketId);
+
+            resolvedMarkets++;
+          } catch (err) {
+            errors.push(`Error processing MarketResolved for ${marketAddr}: ${err}`);
+          }
+        }
+
+        // Process trade events in batches
+        for (const trade of tradeEvents) {
+          const marketId = addressToId[trade.marketAddress];
+          if (!marketId) continue;
+
+          try {
+            // Get or create user
+            const { data: userData } = await supabase.rpc(
+              "get_or_create_user",
+              { p_wallet_address: trade.trader.toLowerCase() }
+            );
+
+            const userId = userData?.[0]?.id;
+            if (!userId) {
+              errors.push(`Failed to get/create user for ${trade.trader}`);
+              continue;
+            }
+
+            // Calculate fees
+            const amount = parseFloat(trade.amount);
+            const shares = parseFloat(trade.shares);
+            let tradingFee = 0;
+            let creatorFee = 0;
+            if (trade.tradeType === "BUY") {
+              tradingFee = amount * FEE_RATE;
+              creatorFee = tradingFee;
+            }
+
+            const priceAtTrade = shares > 0 ? amount / shares : null;
+
+            // Upsert trade (idempotent on tx_hash + outcome)
+            const { error: tradeError } = await supabase.from("trades").upsert(
+              {
+                market_id: marketId,
+                user_id: userId,
+                trade_type: trade.tradeType,
+                outcome: trade.outcome,
+                shares: trade.shares,
+                amount: trade.amount,
+                price_at_trade: priceAtTrade,
+                trading_fee: tradingFee,
+                protocol_fee: 0,
+                creator_fee: creatorFee,
+                tx_hash: trade.txHash.toLowerCase(),
+                block_number: trade.blockNumber,
+              },
+              { onConflict: "tx_hash,outcome" }
+            );
+
+            if (tradeError) {
+              errors.push(
+                `Trade upsert error for ${trade.txHash}: ${tradeError.message}`
+              );
+            } else {
+              processedEvents++;
             }
           } catch (err) {
-            errors.push(`Error updating market ${market.address}: ${err}`);
+            errors.push(`Error processing trade ${trade.txHash}: ${err}`);
+          }
+        }
+
+        // Update prices only for markets that had events
+        for (const marketId of affectedMarketIds) {
+          const market = marketsList.find((m) => m.id === marketId);
+          if (!market) continue;
+
+          try {
+            await updateMarketPrices(supabase, marketId, market.address);
+          } catch (err) {
+            errors.push(`Error updating prices for ${market.address}: ${err}`);
           }
         }
       }
@@ -285,11 +547,13 @@ serve(async (req: Request) => {
       await supabase
         .from("indexer_state")
         .update({
-          last_indexed_block: toBlock,
+          last_indexed_block: currentBlock,
           last_indexed_at: new Date().toISOString(),
           is_syncing: false,
           last_error: errors.length > 0 ? errors.join("; ") : null,
-          consecutive_errors: errors.length > 0 ? stateData.consecutive_errors + 1 : 0,
+          consecutive_errors: errors.length > 0
+            ? stateData.consecutive_errors + 1
+            : 0,
         })
         .eq("chain_id", CHAIN_ID);
 
@@ -297,14 +561,18 @@ serve(async (req: Request) => {
         JSON.stringify({
           success: true,
           from_block: fromBlock,
-          to_block: toBlock,
-          current_block: currentBlock,
-          blocks_processed: toBlock - fromBlock + 1,
+          to_block: currentBlock,
+          blocks_indexed: currentBlock - fromBlock + 1,
           events_processed: processedEvents,
+          markets_resolved: resolvedMarkets,
+          markets_price_updated: affectedMarketIds.size,
           markets_tracked: marketAddresses.length,
           errors: errors.length > 0 ? errors : undefined,
         }),
-        { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        {
+          status: 200,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        }
       );
     } catch (err) {
       // Reset sync flag on error
@@ -323,7 +591,10 @@ serve(async (req: Request) => {
     console.error("Indexer error:", err);
     return new Response(
       JSON.stringify({ error: "Indexer failed", details: String(err) }),
-      { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      {
+        status: 500,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      }
     );
   }
 });
