@@ -307,16 +307,57 @@ export function useLSLMSR_ERC20() {
       usdcAmount: string,
       minShares: bigint = 0n
     ) => {
-      if (!walletClient || !address) throw new Error('Wallet not connected');
+      if (!walletClient || !address || !publicClient) throw new Error('Wallet not connected');
 
       setIsLoading(true);
       try {
         const amountInUnits = parseUnits(usdcAmount, USDC_DECIMALS);
 
+        // Pre-flight: check USDC balance
+        const balance = await publicClient.readContract({
+          address: ADDRESSES.USDC,
+          abi: ERC20_ABI,
+          functionName: 'balanceOf',
+          args: [address],
+        }) as bigint;
+        if (balance < amountInUnits) {
+          throw new Error(`Insufficient USDC: have ${formatUnits(balance, USDC_DECIMALS)}, need ${usdcAmount}`);
+        }
+
         // Check and set approval if needed (approve max once per market)
         const allowance = await checkAllowance(marketAddress);
         if (allowance < amountInUnits) {
-          await approveUSDC(marketAddress);
+          const approveHash = await walletClient.writeContract({
+            account: address,
+            chain: monadTestnet,
+            address: ADDRESSES.USDC,
+            abi: ERC20_ABI,
+            functionName: 'approve',
+            args: [marketAddress, maxUint256],
+          });
+          const approveReceipt = await publicClient.waitForTransactionReceipt({ hash: approveHash });
+          if (approveReceipt.status === 'reverted') {
+            throw new Error('USDC approval failed on-chain');
+          }
+        }
+
+        // Pre-flight: simulate to catch reverts before paying gas
+        try {
+          await publicClient.simulateContract({
+            account: address,
+            address: marketAddress,
+            abi: LSLMSR_ERC20_ABI,
+            functionName: 'buy',
+            args: [isYes, amountInUnits, minShares],
+          });
+        } catch (simError: unknown) {
+          const msg = simError instanceof Error ? simError.message : String(simError);
+          if (msg.includes('MarketAlreadyResolved')) throw new Error('Market is already resolved — trading is closed');
+          if (msg.includes('MarketNotInitialized')) throw new Error('Market is not initialized');
+          if (msg.includes('InsufficientPayment')) throw new Error('Amount too small or slippage exceeded');
+          if (msg.includes('exceeds allowance')) throw new Error('USDC approval not confirmed yet — please retry');
+          if (msg.includes('exceeds balance')) throw new Error('Insufficient USDC balance');
+          throw new Error(`Trade simulation failed: ${msg.slice(0, 200)}`);
         }
 
         // Execute buy — explicit gas limit needed for LS-LMSR's complex math
@@ -330,9 +371,9 @@ export function useLSLMSR_ERC20() {
           gas: 3_000_000n,
         });
 
-        const receipt = await publicClient?.waitForTransactionReceipt({ hash });
-        if (receipt?.status === 'reverted') {
-          throw new Error('Transaction reverted on-chain');
+        const receipt = await publicClient.waitForTransactionReceipt({ hash });
+        if (receipt.status === 'reverted') {
+          throw new Error('Transaction reverted on-chain — state changed after simulation passed');
         }
 
         // Sync prices to database after trade (for frontend accuracy)
@@ -343,7 +384,7 @@ export function useLSLMSR_ERC20() {
         setIsLoading(false);
       }
     },
-    [walletClient, address, publicClient, checkAllowance, approveUSDC]
+    [walletClient, address, publicClient, checkAllowance]
   );
 
   // Sell shares for USDC
@@ -354,18 +395,18 @@ export function useLSLMSR_ERC20() {
       shares: bigint,
       minPayout: bigint = 0n
     ) => {
-      if (!walletClient || !address) throw new Error('Wallet not connected');
+      if (!walletClient || !address || !publicClient) throw new Error('Wallet not connected');
 
       setIsLoading(true);
       try {
         // Get token address and check approval
-        const tokenAddress = (await publicClient?.readContract({
+        const tokenAddress = (await publicClient.readContract({
           address: marketAddress,
           abi: LSLMSR_ERC20_ABI,
           functionName: isYes ? 'yesToken' : 'noToken',
         })) as Address;
 
-        const tokenAllowance = (await publicClient?.readContract({
+        const tokenAllowance = (await publicClient.readContract({
           address: tokenAddress,
           abi: ERC20_ABI,
           functionName: 'allowance',
@@ -379,9 +420,28 @@ export function useLSLMSR_ERC20() {
             address: tokenAddress,
             abi: ERC20_ABI,
             functionName: 'approve',
-            args: [marketAddress, shares],
+            args: [marketAddress, maxUint256],
           });
-          await publicClient?.waitForTransactionReceipt({ hash: approveHash });
+          const approveReceipt = await publicClient.waitForTransactionReceipt({ hash: approveHash });
+          if (approveReceipt.status === 'reverted') {
+            throw new Error('Token approval failed on-chain');
+          }
+        }
+
+        // Pre-flight: simulate to catch reverts before paying gas
+        try {
+          await publicClient.simulateContract({
+            account: address,
+            address: marketAddress,
+            abi: LSLMSR_ERC20_ABI,
+            functionName: 'sell',
+            args: [isYes, shares, minPayout],
+          });
+        } catch (simError: unknown) {
+          const msg = simError instanceof Error ? simError.message : String(simError);
+          if (msg.includes('MarketAlreadyResolved')) throw new Error('Market is already resolved — trading is closed');
+          if (msg.includes('exceeds allowance')) throw new Error('Token approval not confirmed yet — please retry');
+          throw new Error(`Sell simulation failed: ${msg.slice(0, 200)}`);
         }
 
         // Execute sell — explicit gas limit needed for LS-LMSR's complex math
@@ -395,9 +455,9 @@ export function useLSLMSR_ERC20() {
           gas: 3_000_000n,
         });
 
-        const receipt = await publicClient?.waitForTransactionReceipt({ hash });
-        if (receipt?.status === 'reverted') {
-          throw new Error('Transaction reverted on-chain');
+        const receipt = await publicClient.waitForTransactionReceipt({ hash });
+        if (receipt.status === 'reverted') {
+          throw new Error('Sell reverted on-chain — state changed after simulation passed');
         }
 
         // Sync prices to database after trade (for frontend accuracy)
@@ -430,7 +490,7 @@ export function useLSLMSR_ERC20() {
 
         const receipt = await publicClient?.waitForTransactionReceipt({ hash });
         if (receipt?.status === 'reverted') {
-          throw new Error('Transaction reverted on-chain');
+          throw new Error('Redeem reverted on-chain');
         }
         return { hash, receipt };
       } finally {
