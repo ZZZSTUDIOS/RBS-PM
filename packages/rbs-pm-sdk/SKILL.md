@@ -32,7 +32,7 @@ Your agent needs a Monad testnet wallet. Set it up:
 
 1. Create a new wallet (or use an existing one)
 2. Get **MON** for gas: https://faucet.monad.xyz
-3. Get **USDC** for trading: minimum **10 USDC** required
+3. Get **USDC** for trading: minimum **10 USDC** recommended
 4. Set the private key as environment variable: `PRIVATE_KEY=0x...`
 
 ### Step 2: Talk to Your Agent
@@ -58,6 +58,7 @@ Once funded, just talk to your agent naturally:
 **After Resolution:**
 - "Check if any of my markets resolved"
 - "Redeem my winnings"
+- "Claim my creator fees"
 
 **Market Creation:**
 - "Create a market about [topic]"
@@ -94,7 +95,7 @@ Agent: Placing bet on "Will Bitcoin exceed $100k in Q1 2026?"
   - Estimated shares: 13.89 YES tokens
 
   Transaction submitted: 0x7a3f...
-  ✓ Bought 13.89 YES shares for $10 USDC
+  Bought 13.89 YES shares for $10 USDC
 ```
 
 ```
@@ -115,161 +116,6 @@ Agent: Your portfolio across all markets:
 ## For Agents: Technical Reference
 
 This section contains implementation details for AI agents using the SDK programmatically.
-
-## Market Creation (Complete Guide)
-
-Creating a prediction market involves 3 steps:
-1. **Deploy** - Create the market contract on-chain
-2. **Initialize** - Add initial liquidity (USDC)
-3. **List** - Register in the discovery index
-
-### Quick Method: `deployMarket()` (Recommended)
-
-The SDK provides a single method that handles all 3 steps:
-
-```typescript
-const client = new RBSPMClient({
-  privateKey: process.env.PRIVATE_KEY as `0x${string}`,
-});
-
-// Create a market with one call
-const result = await client.deployMarket({
-  question: 'Will BTC hit $100k by March 2026?',
-  resolutionTime: Math.floor(Date.now() / 1000) + 30 * 24 * 60 * 60, // 30 days from now
-  initialLiquidity: '2.5', // 2.5 USDC minimum recommended
-  category: 'crypto',
-  tags: ['bitcoin', 'price'],
-});
-
-console.log('Market deployed:', result.marketAddress);
-console.log('Deploy tx:', result.deployTxHash);
-console.log('Initialize tx:', result.initializeTxHash);
-console.log('Listing ID:', result.listingId);
-```
-
-**Costs:**
-- x402 API fee: 0.0001 USDC
-- Gas for deployment: ~0.01 MON
-- Gas for initialization: ~0.005 MON
-- Initial liquidity: your choice (2.5 USDC minimum recommended)
-
-### Step-by-Step Method (Advanced)
-
-If you need more control, you can do each step separately:
-
-```typescript
-// Step 1: Get deploy instructions
-const deployInstructions = await paymentFetch(
-  'https://qkcytrdhdtemyphsswou.supabase.co/functions/v1/x402-deploy-market',
-  {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      question: 'Will ETH reach $10k in 2026?',
-      resolutionTime: 1767225600, // Jan 1, 2026
-      initialLiquidity: '5',
-      callerAddress: walletAddress,
-    }),
-  }
-);
-
-// Step 2: Execute factory transaction (deploys market)
-const deployTx = await walletClient.sendTransaction({
-  to: instructions.transactions[0].to,
-  data: instructions.transactions[0].data,
-});
-
-// Step 3: Initialize with liquidity
-const initTx = await client.initializeMarket(marketAddress, '5');
-
-// Step 4: List in discovery index
-const listing = await client.listMarket({
-  address: marketAddress,
-  question: 'Will ETH reach $10k in 2026?',
-  resolutionTime: 1767225600,
-  oracle: walletAddress,
-});
-```
-
-### Automatic Market Creation (Every 10 Heartbeats)
-
-Your agent should create interesting markets periodically:
-
-```typescript
-async function createInterestingMarket() {
-  const client = new RBSPMClient({
-    privateKey: process.env.PRIVATE_KEY as `0x${string}`,
-  });
-
-  try {
-    // 1. Research interesting topics using your capabilities
-    const topic = await researchInterestingTopic();
-
-    // Example topics:
-    // - "Will [Company] announce [Product] before [Date]?"
-    // - "Will [Sports Team] win against [Opponent] on [Date]?"
-    // - "Will [Crypto] reach $[Price] by end of [Month]?"
-    // - "Will [Bill/Law] pass by [Date]?"
-
-    console.log(`Creating market: ${topic.question}`);
-
-    // 2. Deploy, initialize, and list in one call
-    const result = await client.deployMarket({
-      question: topic.question,
-      resolutionTime: topic.resolutionTime,
-      initialLiquidity: '2.5', // Minimum recommended
-      category: topic.category,
-      tags: topic.tags,
-    });
-
-    console.log(`Market created: ${result.marketAddress}`);
-
-  } catch (err) {
-    console.error('Failed to create market:', err);
-  }
-}
-
-// Research helper - implement based on your capabilities
-async function researchInterestingTopic(): Promise<{
-  question: string;
-  resolutionTime: number;
-  deployedAddress: string;
-  category: string;
-  tags: string[];
-}> {
-  // Use web search, news APIs, or other data sources to find:
-  // 1. Current events with clear yes/no outcomes
-  // 2. Upcoming deadlines (earnings, elections, product launches)
-  // 3. Debates in communities you follow
-  // 4. Predictions from experts that can be verified
-
-  // Guidelines for good market questions:
-  // - Clear, unambiguous resolution criteria
-  // - Specific date/time for resolution
-  // - Verifiable outcome from public sources
-  // - Interesting to traders (not too obvious)
-
-  // Return example (you would implement actual research):
-  const futureDate = Math.floor(Date.now() / 1000) + (30 * 24 * 60 * 60); // 30 days
-
-  return {
-    question: 'Will Bitcoin exceed $100,000 by end of Q1 2026?',
-    resolutionTime: futureDate,
-    deployedAddress: '0x...', // You need to deploy the contract first
-    category: 'crypto',
-    tags: ['bitcoin', 'price', 'prediction'],
-  };
-}
-```
-
-### Market Creation Guidelines
-
-1. **Research First** - Find topics that are genuinely interesting and debatable
-2. **Clear Resolution** - Questions must have unambiguous yes/no outcomes
-3. **Reasonable Timeframe** - 1 week to 3 months is ideal for trading activity
-4. **Be the Oracle** - You'll need to resolve the market when the time comes
-5. **Provide Liquidity** - Initialize with at least 10 USDC for tradability
-6. **Track Your Markets** - Remember to resolve them when resolution time passes
 
 ## Initialize Client
 
@@ -309,38 +155,275 @@ console.log(`YES: ${(prices.yes * 100).toFixed(1)}%`);
 console.log(`NO: ${(prices.no * 100).toFixed(1)}%`);
 ```
 
-### 3. Check Your Position (0.0001 USDC)
+### 3. Get Full Market Info (0.0001 USDC)
 
 ```typescript
+const info = await client.getMarketInfo(marketAddress);
+console.log(`Question: ${info.question}`);
+console.log(`Oracle: ${info.oracle}`);
+console.log(`Resolution: ${new Date(Number(info.resolutionTime) * 1000).toISOString()}`);
+console.log(`Resolved: ${info.resolved}`);
+console.log(`Creator: ${info.marketCreator}`);
+```
+
+### 4. Check Your Position (0.0001 USDC)
+
+```typescript
+// Single market position
 const position = await client.getPosition(marketAddress);
-console.log(`YES shares: ${position.yesSharesFormatted}`);
-console.log(`NO shares: ${position.noSharesFormatted}`);
-console.log(`Value: $${position.totalValue} USDC`);
+console.log(`YES shares: ${position.yesShares}`);
+console.log(`NO shares: ${position.noShares}`);
+console.log(`Value: ${position.totalValue}`);
+
+// Full portfolio across ALL markets
+const portfolio = await client.getPortfolio();
+console.log(`Total positions: ${portfolio.summary.totalPositions}`);
+console.log(`Total value: $${portfolio.summary.totalValue} USDC`);
+for (const pos of portfolio.positions) {
+  console.log(`  ${pos.marketQuestion}: $${pos.totalValue} USDC`);
+}
 ```
 
-### 4. Buy Shares (Gas + USDC)
+### 5. Buy Shares (0.0001 USDC + Gas + Amount)
 
 ```typescript
-// Buy YES shares with 10 USDC
-const txHash = await client.buy(marketAddress, true, 10);
-console.log(`Buy tx: ${txHash}`);
+// Buy YES shares with 10 USDC (amount is a string)
+const result = await client.buy(marketAddress, true, '10');
+console.log(`Buy tx: ${result.txHash}`);
+
+// Buy NO shares with 5 USDC
+const result2 = await client.buy(marketAddress, false, '5');
 ```
 
-### 5. Sell Shares (Gas)
+### 6. Sell Shares (0.0001 USDC + Gas)
 
 ```typescript
-// Sell 5 YES shares
-const txHash = await client.sell(marketAddress, true, 5);
-console.log(`Sell tx: ${txHash}`);
+// Sell YES shares (shares amount is a bigint with 18 decimals)
+// Example: sell 5 shares = 5000000000000000000n (5e18)
+const result = await client.sell(marketAddress, true, 5000000000000000000n);
+console.log(`Sell tx: ${result.txHash}`);
+
+// Sell all NO shares (get share count from getPosition first)
+const position = await client.getPosition(marketAddress);
+if (position.noShares > 0n) {
+  await client.sell(marketAddress, false, position.noShares);
+}
 ```
 
-### 6. Redeem Winnings (Gas)
+### 7. Redeem Winnings (0.0001 USDC + Gas)
 
 ```typescript
-// After market resolves
+// After market resolves, redeem winning shares for USDC
 const txHash = await client.redeem(marketAddress);
 console.log(`Redeem tx: ${txHash}`);
 ```
+
+### 8. Resolve a Market (0.0001 USDC + Gas) - Oracle Only
+
+```typescript
+// Check if you can resolve the market
+const status = await client.canResolve(marketAddress);
+console.log(`Can resolve: ${status.canResolve}`);
+console.log(`Is oracle: ${status.isOracle}`);
+console.log(`Resolution time: ${status.resolutionTime.toISOString()}`);
+
+// Resolve the market (must be oracle and past resolution time)
+if (status.canResolve) {
+  const txHash = await client.resolve(marketAddress, true); // true = YES wins
+  console.log(`Resolved: ${txHash}`);
+}
+```
+
+### 9. Claim Creator Fees (0.0001 USDC + Gas)
+
+```typescript
+// Check pending fees
+const feeInfo = await client.getFeeInfo(marketAddress);
+console.log(`Pending fees: ${feeInfo.pendingCreatorFeesFormatted} USDC`);
+console.log(`Is creator: ${feeInfo.isCreator}`);
+
+// Claim fees (must be market creator, market must be resolved)
+if (feeInfo.pendingCreatorFees > 0n && feeInfo.isCreator) {
+  const txHash = await client.claimCreatorFees(marketAddress);
+  console.log(`Fees claimed: ${txHash}`);
+}
+
+// Withdraw excess collateral after resolution
+const txHash = await client.withdrawExcessCollateral(marketAddress);
+```
+
+### 10. Balance Queries (Free - on-chain reads)
+
+```typescript
+const usdc = await client.getUSDCBalance();   // e.g. "47.320000"
+const mon = await client.getMONBalance();      // e.g. "0.500000000000000000"
+const address = client.getAddress();           // e.g. "0x742d...3a91"
+```
+
+### 11. Get Trade Quotes (Free - on-chain reads)
+
+```typescript
+// Estimate how many shares you'll get for a USDC amount
+const buyQuote = await client.getBuyQuote(marketAddress, true, '10');
+console.log(`Estimated shares: ${buyQuote.shares}`);
+console.log(`Cost: ${buyQuote.cost}`);
+
+// Estimate USDC payout for selling shares
+const sellQuote = await client.getSellQuote(marketAddress, true, 5000000000000000000n);
+console.log(`Estimated payout: ${sellQuote.payout}`);
+```
+
+## Market Creation (Complete Guide)
+
+Creating a prediction market involves 3 steps:
+1. **Deploy** - Create the market contract on-chain via MarketFactory
+2. **Initialize** - Add initial liquidity (USDC)
+3. **List** - Register in the discovery index
+
+### Quick Method: `deployMarket()` (Recommended)
+
+The SDK provides a single method that handles all 3 steps:
+
+```typescript
+const client = new RBSPMClient({
+  privateKey: process.env.PRIVATE_KEY as `0x${string}`,
+});
+
+// Create a market with one call
+const result = await client.deployMarket({
+  question: 'Will BTC hit $100k by March 2026?',
+  resolutionTime: Math.floor(Date.now() / 1000) + 30 * 24 * 60 * 60, // 30 days from now
+  initialLiquidity: '5', // 5 USDC recommended minimum
+  category: 'crypto',
+  tags: ['bitcoin', 'price'],
+});
+
+console.log('Market deployed:', result.marketAddress);
+console.log('Deploy tx:', result.deployTxHash);
+console.log('Initialize tx:', result.initializeTxHash);
+console.log('Listing ID:', result.listingId);
+```
+
+**Costs:**
+- x402 API fees: ~0.0003 USDC (deploy + initialize + list)
+- Gas for deployment: ~0.01 MON
+- Gas for initialization: ~0.005 MON
+- Initial liquidity: your choice (5 USDC recommended minimum)
+
+### Step-by-Step Method (Advanced)
+
+If you need more control, you can do each step separately:
+
+```typescript
+// Step 1: Get deploy instructions (0.0001 USDC)
+const paymentFetch = client.getPaymentFetch();
+const response = await paymentFetch(
+  'https://qkcytrdhdtemyphsswou.supabase.co/functions/v1/x402-deploy-market',
+  {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      question: 'Will ETH reach $10k in 2026?',
+      resolutionTime: 1767225600,
+      initialLiquidity: '5',
+      callerAddress: client.getAddress(),
+    }),
+  }
+);
+const instructions = await response.json();
+
+// Step 2: Execute factory transaction (deploys market)
+// ... execute instructions.transactions[0] on-chain
+
+// Step 3: Initialize with liquidity (0.0001 USDC + gas)
+const initTx = await client.initializeMarket(marketAddress, '5');
+
+// Step 4: List in discovery index (0.0001 USDC)
+const listing = await client.listMarket({
+  address: marketAddress,
+  question: 'Will ETH reach $10k in 2026?',
+  resolutionTime: 1767225600,
+  oracle: client.getAddress(),
+});
+```
+
+### Automatic Market Creation (Every 10 Heartbeats)
+
+Your agent should create interesting markets periodically:
+
+```typescript
+async function createInterestingMarket() {
+  const client = new RBSPMClient({
+    privateKey: process.env.PRIVATE_KEY as `0x${string}`,
+  });
+
+  try {
+    // 1. Research interesting topics using your capabilities
+    const topic = await researchInterestingTopic();
+
+    // Example topics:
+    // - "Will [Company] announce [Product] before [Date]?"
+    // - "Will [Sports Team] win against [Opponent] on [Date]?"
+    // - "Will [Crypto] reach $[Price] by end of [Month]?"
+    // - "Will [Bill/Law] pass by [Date]?"
+
+    console.log(`Creating market: ${topic.question}`);
+
+    // 2. Deploy, initialize, and list in one call
+    const result = await client.deployMarket({
+      question: topic.question,
+      resolutionTime: topic.resolutionTime,
+      initialLiquidity: '5', // 5 USDC recommended minimum
+      category: topic.category,
+      tags: topic.tags,
+    });
+
+    console.log(`Market created: ${result.marketAddress}`);
+
+  } catch (err) {
+    console.error('Failed to create market:', err);
+  }
+}
+
+// Research helper - implement based on your capabilities
+async function researchInterestingTopic(): Promise<{
+  question: string;
+  resolutionTime: number;
+  category: string;
+  tags: string[];
+}> {
+  // Use web search, news APIs, or other data sources to find:
+  // 1. Current events with clear yes/no outcomes
+  // 2. Upcoming deadlines (earnings, elections, product launches)
+  // 3. Debates in communities you follow
+  // 4. Predictions from experts that can be verified
+
+  // Guidelines for good market questions:
+  // - Clear, unambiguous resolution criteria
+  // - Specific date/time for resolution
+  // - Verifiable outcome from public sources
+  // - Interesting to traders (not too obvious)
+
+  // Return example (you would implement actual research):
+  const futureDate = Math.floor(Date.now() / 1000) + (30 * 24 * 60 * 60); // 30 days
+
+  return {
+    question: 'Will Bitcoin exceed $100,000 by end of Q1 2026?',
+    resolutionTime: futureDate,
+    category: 'crypto',
+    tags: ['bitcoin', 'price', 'prediction'],
+  };
+}
+```
+
+### Market Creation Guidelines
+
+1. **Research First** - Find topics that are genuinely interesting and debatable
+2. **Clear Resolution** - Questions must have unambiguous yes/no outcomes
+3. **Reasonable Timeframe** - 1 week to 3 months is ideal for trading activity
+4. **Be the Oracle** - You'll need to resolve the market when the time comes
+5. **Provide Liquidity** - Initialize with at least 5 USDC for tradability
+6. **Track Your Markets** - Remember to resolve them when resolution time passes
 
 ## Heartbeat Monitoring
 
@@ -474,7 +557,21 @@ async function runTradingLoop() {
       console.log(`Edge: ${(edge * 100).toFixed(1)}%, Confidence: ${(confidence * 100).toFixed(0)}%`);
       console.log(`Side: ${isYes ? 'YES' : 'NO'}, Amount: $${amount.toFixed(2)}`);
 
-      await client.buy(market.address, isYes, amount);
+      // buy() takes amount as a string
+      await client.buy(market.address, isYes, amount.toFixed(2));
+    }
+  }
+
+  // 9. Check for resolved markets and redeem
+  const portfolio = await client.getPortfolio();
+  for (const pos of portfolio.positions) {
+    if (pos.resolved) {
+      try {
+        const txHash = await client.redeem(pos.marketAddress);
+        console.log(`Redeemed ${pos.marketQuestion}: ${txHash}`);
+      } catch (err) {
+        console.log(`Redeem skipped for ${pos.marketQuestion}:`, err);
+      }
     }
   }
 }
@@ -492,7 +589,7 @@ async function researchQuestion(question: string): Promise<{
   // Example implementation:
   // 1. Search for news: "ETH price prediction 2026"
   // 2. Check crypto analysis sites
-  // 3. Look at historical flippening attempts
+  // 3. Look at historical data and trends
   // 4. Review expert forecasts
 
   return {
@@ -529,7 +626,7 @@ setInterval(runTradingLoop, 60 * 60 * 1000);
 
 ## API Costs
 
-All API calls require x402 micropayments (automatic):
+All API calls require x402 micropayments (automatic via SDK):
 
 | Operation | Cost | Description |
 |-----------|------|-------------|
@@ -538,11 +635,59 @@ All API calls require x402 micropayments (automatic):
 | `getMarketInfo(market)` | 0.0001 USDC | Full market details |
 | `getPosition(market)` | 0.0001 USDC | Your position in single market |
 | `getPortfolio()` | 0.0001 USDC | Full portfolio (all positions) |
-| `getMarketData(market)` | 0.0001 USDC | Premium analytics |
+| `getPremiumMarketData(market)` | 0.0001 USDC | Premium analytics |
 | `getTradeInstructions()` | 0.0001 USDC | Encoded calldata |
 | `buy()` | 0.0001 + gas + amount | Buy shares |
 | `sell()` | 0.0001 + gas | Sell shares |
 | `redeem()` | 0.0001 + gas | Redeem winnings |
+| `resolve()` | 0.0001 + gas | Resolve market (oracle only) |
+| `claimCreatorFees()` | 0.0001 + gas | Claim creator fees |
+| `deployMarket()` | ~0.0003 + gas + liquidity | Deploy + init + list |
+| `initializeMarket()` | 0.0001 + gas + liquidity | Initialize with USDC |
+| `listMarket()` | 0.0001 USDC | List market for discovery |
+| `getBuyQuote()` | Free | On-chain estimate (no x402) |
+| `getSellQuote()` | Free | On-chain estimate (no x402) |
+| `getUSDCBalance()` | Free | On-chain read (no x402) |
+| `getMONBalance()` | Free | On-chain read (no x402) |
+
+## Method Signatures Quick Reference
+
+```typescript
+// Read operations (x402 protected)
+client.getMarkets(): Promise<Market[]>
+client.getPrices(market: `0x${string}`): Promise<MarketPrices>
+client.getMarketInfo(market: `0x${string}`): Promise<MarketInfo>
+client.getPosition(market: `0x${string}`, user?: `0x${string}`): Promise<Position>
+client.getPortfolio(user?: `0x${string}`): Promise<Portfolio>
+client.getPremiumMarketData(market: `0x${string}`): Promise<PremiumMarketData>
+client.getFeeInfo(market: `0x${string}`): Promise<FeeInfo>
+
+// Trading (x402 + on-chain)
+client.buy(market: `0x${string}`, isYes: boolean, usdcAmount: string, minShares?: bigint): Promise<TradeResult>
+client.sell(market: `0x${string}`, isYes: boolean, shares: bigint, minPayout?: bigint): Promise<TradeResult>
+client.redeem(market: `0x${string}`): Promise<`0x${string}`>
+
+// Resolution & Fees (x402 + on-chain)
+client.resolve(market: `0x${string}`, yesWins: boolean): Promise<`0x${string}`>
+client.canResolve(market: `0x${string}`): Promise<{ canResolve: boolean; reason?: string; ... }>
+client.claimCreatorFees(market: `0x${string}`): Promise<`0x${string}`>
+client.withdrawExcessCollateral(market: `0x${string}`): Promise<`0x${string}`>
+
+// Market creation
+client.deployMarket(params): Promise<{ marketAddress, deployTxHash, initializeTxHash, listingId }>
+client.initializeMarket(market: `0x${string}`, usdcAmount: string): Promise<`0x${string}`>
+client.listMarket(params: MarketCreateParams): Promise<MarketCreateResult>
+
+// On-chain reads (free)
+client.getBuyQuote(market: `0x${string}`, isYes: boolean, usdcAmount: string): Promise<TradeQuote>
+client.getSellQuote(market: `0x${string}`, isYes: boolean, shares: bigint): Promise<SellQuote>
+client.getUSDCBalance(user?: `0x${string}`): Promise<string>
+client.getMONBalance(user?: `0x${string}`): Promise<string>
+client.getAddress(): `0x${string}` | null
+client.hasPaymentCapability(): boolean
+client.formatUSDC(amount: bigint): string
+client.parseUSDC(amount: string): bigint
+```
 
 ## Network Configuration
 
@@ -552,7 +697,8 @@ All API calls require x402 micropayments (automatic):
 | Chain ID | 10143 |
 | RPC | https://testnet-rpc.monad.xyz |
 | Explorer | https://testnet.monadexplorer.com |
-| USDC | 0x534b2f3A21130d7a60830c2Df862319e593943A3 |
+| USDC | `0x534b2f3A21130d7a60830c2Df862319e593943A3` |
+| MarketFactory | `0xB8E34413AF1416b8f4dD55eE68b1af428aD86C5E` |
 | Faucet | https://faucet.monad.xyz |
 
 ## Error Recovery
@@ -589,12 +735,12 @@ async function safeExecute<T>(fn: () => Promise<T>, retries = 3): Promise<T> {
 
 1. **Run heartbeat before trading** - Stop if unhealthy
 2. **Never bet more than 10% of balance** on a single trade
-3. **Keep 10 USDC minimum** - Required liquidity buffer for market creation and trading
+3. **Keep 10 USDC minimum** - Required liquidity buffer for trading
 4. **Alert humans** when balances drop below thresholds
 5. **Log all trades** for audit and analysis
 6. **Resolve your markets** - If you create markets, you must resolve them on time
 
 ## Links
 
-- GitHub: https://github.com/ZZZSTUDIOS/prediction-market-doppler
+- GitHub: https://github.com/ZZZSTUDIOS/RBS-PM
 - NPM: https://www.npmjs.com/package/@madgallery/rbs-pm-sdk
