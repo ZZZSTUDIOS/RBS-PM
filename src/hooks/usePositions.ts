@@ -278,4 +278,89 @@ export function usePositions(userId?: string) {
   };
 }
 
+// Public trade type for market activity feed
+export interface MarketTrade {
+  id: string;
+  trade_type: 'BUY' | 'SELL' | 'REDEEM';
+  outcome: 'YES' | 'NO';
+  shares: string;
+  amount: string;
+  tx_hash: string;
+  created_at: string;
+}
+
+// Hook to fetch recent trades for a list of market addresses (all users, not filtered)
+export function useMarketTrades(marketAddresses: string[]) {
+  const [tradesByMarket, setTradesByMarket] = useState<Record<string, MarketTrade[]>>({});
+  const [isLoading, setIsLoading] = useState(false);
+
+  const addressesKey = marketAddresses.map(a => a.toLowerCase()).sort().join(',');
+
+  useEffect(() => {
+    if (marketAddresses.length === 0) {
+      setTradesByMarket({});
+      return;
+    }
+
+    let cancelled = false;
+
+    const fetchTrades = async () => {
+      setIsLoading(true);
+      try {
+        // Query trades joined with markets, filtered by market addresses
+        const lowerAddresses = marketAddresses.map(a => a.toLowerCase());
+
+        const { data, error } = await supabase
+          .from('trades')
+          .select(`
+            id, trade_type, outcome, shares, amount, tx_hash, created_at,
+            markets:market_id (
+              address
+            )
+          `)
+          .order('created_at', { ascending: false })
+          .limit(marketAddresses.length * 5);
+
+        if (error) throw error;
+        if (cancelled) return;
+
+        // Group by market address, keeping only 5 per market
+        const grouped: Record<string, MarketTrade[]> = {};
+        for (const addr of lowerAddresses) {
+          grouped[addr] = [];
+        }
+
+        for (const t of (data || []) as Array<Record<string, unknown>>) {
+          const market = t.markets as { address: string } | null;
+          if (!market) continue;
+          const addr = market.address.toLowerCase();
+          if (!grouped[addr]) continue;
+          if (grouped[addr].length >= 5) continue;
+          grouped[addr].push({
+            id: String(t.id),
+            trade_type: t.trade_type as 'BUY' | 'SELL' | 'REDEEM',
+            outcome: t.outcome as 'YES' | 'NO',
+            shares: String(t.shares),
+            amount: String(t.amount),
+            tx_hash: String(t.tx_hash),
+            created_at: String(t.created_at),
+          });
+        }
+
+        setTradesByMarket(grouped);
+      } catch (err) {
+        console.error('Failed to fetch market trades:', err);
+      } finally {
+        if (!cancelled) setIsLoading(false);
+      }
+    };
+
+    fetchTrades();
+    return () => { cancelled = true; };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [addressesKey]);
+
+  return { tradesByMarket, isLoading };
+}
+
 export default usePositions;

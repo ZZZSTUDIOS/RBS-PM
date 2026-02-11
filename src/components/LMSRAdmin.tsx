@@ -28,7 +28,7 @@ import { useX402 } from '../hooks/useX402';
 import { monadTestnet, ADDRESSES } from '../config/wagmi';
 import { useMarkets } from '../hooks/useMarkets';
 import { useUserSync } from '../hooks/useUserSync';
-import { usePositions } from '../hooks/usePositions';
+import { usePositions, useMarketTrades } from '../hooks/usePositions';
 import { syncMarketPrices } from '../lib/supabase';
 import { theme } from '../theme';
 
@@ -83,6 +83,19 @@ interface MarketPrices {
   resolved: boolean;
   yesWins: boolean;
   oracle: string;
+}
+
+function timeAgo(dateStr: string): string {
+  const now = Date.now();
+  const then = new Date(dateStr).getTime();
+  const seconds = Math.floor((now - then) / 1000);
+  if (seconds < 60) return `${seconds}s ago`;
+  const minutes = Math.floor(seconds / 60);
+  if (minutes < 60) return `${minutes}m ago`;
+  const hours = Math.floor(minutes / 60);
+  if (hours < 24) return `${hours}h ago`;
+  const days = Math.floor(hours / 24);
+  return `${days}d ago`;
 }
 
 export default function LMSRAdmin() {
@@ -251,6 +264,13 @@ export default function LMSRAdmin() {
       m.address.toLowerCase().includes(q)
     );
   }, [marketSearch, markets]);
+
+  // Fetch recent trades for all displayed markets
+  const marketAddressesForTrades = React.useMemo(
+    () => markets.map(m => m.address),
+    [markets]
+  );
+  const { tradesByMarket } = useMarketTrades(marketAddressesForTrades);
 
   // Load markets from Supabase (replaces localStorage markets)
   useEffect(() => {
@@ -2349,6 +2369,63 @@ export default function LMSRAdmin() {
                                     </button>
                                   )}
                                 </div>
+                                {/* RECENT TRADES */}
+                                {(() => {
+                                  const recentTrades = tradesByMarket[market.address.toLowerCase()] || [];
+                                  return (
+                                    <div style={{ marginTop: '16px', borderTop: `1px solid ${theme.colors.border}`, paddingTop: '12px' }}>
+                                      <div style={{ fontWeight: 'bold', fontSize: theme.fontSizes.xxs, letterSpacing: '1.5px', color: theme.colors.textDim, marginBottom: '8px' }}>
+                                        RECENT TRADES
+                                      </div>
+                                      {recentTrades.length === 0 ? (
+                                        <div style={{ color: theme.colors.textDisabled, fontSize: theme.fontSizes.xxs, fontStyle: 'italic' }}>
+                                          No trades yet
+                                        </div>
+                                      ) : (
+                                        <div style={{ display: 'grid', gap: '4px' }}>
+                                          {recentTrades.map(t => (
+                                            <div key={t.id} style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: theme.fontSizes.xxs }}>
+                                              <span style={{
+                                                padding: '1px 6px',
+                                                border: `1px solid ${t.trade_type === 'BUY' ? theme.colors.primary : theme.colors.warning}`,
+                                                color: t.trade_type === 'BUY' ? theme.colors.primary : theme.colors.warning,
+                                                fontWeight: 'bold',
+                                                minWidth: '32px',
+                                                textAlign: 'center',
+                                              }}>
+                                                {t.trade_type}
+                                              </span>
+                                              <span style={{
+                                                padding: '1px 6px',
+                                                border: `1px solid ${t.outcome === 'YES' ? theme.colors.primary : theme.colors.warning}`,
+                                                color: t.outcome === 'YES' ? theme.colors.primary : theme.colors.warning,
+                                                fontWeight: 'bold',
+                                                minWidth: '28px',
+                                                textAlign: 'center',
+                                              }}>
+                                                {t.outcome}
+                                              </span>
+                                              <span style={{ color: theme.colors.textWhite, fontWeight: 'bold' }}>
+                                                {parseFloat(t.amount).toFixed(2)} USDC
+                                              </span>
+                                              <span style={{ color: theme.colors.textDim, marginLeft: 'auto' }}>
+                                                {timeAgo(t.created_at)}
+                                              </span>
+                                              <a
+                                                href={`${monadTestnet.blockExplorers.default.url}/tx/${t.tx_hash}`}
+                                                target="_blank"
+                                                rel="noopener noreferrer"
+                                                style={{ color: theme.colors.textDim, textDecoration: 'none' }}
+                                              >
+                                                →
+                                              </a>
+                                            </div>
+                                          ))}
+                                        </div>
+                                      )}
+                                    </div>
+                                  );
+                                })()}
                               </div>
                             );
                           })}
@@ -2417,6 +2494,63 @@ export default function LMSRAdmin() {
                                     VIEW / REDEEM
                                   </button>
                                 </div>
+                                {/* RECENT TRADES */}
+                                {(() => {
+                                  const recentTrades = tradesByMarket[market.address.toLowerCase()] || [];
+                                  return (
+                                    <div style={{ marginTop: '16px', borderTop: `1px solid ${theme.colors.border}`, paddingTop: '12px' }}>
+                                      <div style={{ fontWeight: 'bold', fontSize: theme.fontSizes.xxs, letterSpacing: '1.5px', color: theme.colors.textDim, marginBottom: '8px' }}>
+                                        RECENT TRADES
+                                      </div>
+                                      {recentTrades.length === 0 ? (
+                                        <div style={{ color: theme.colors.textDisabled, fontSize: theme.fontSizes.xxs, fontStyle: 'italic' }}>
+                                          No trades yet
+                                        </div>
+                                      ) : (
+                                        <div style={{ display: 'grid', gap: '4px' }}>
+                                          {recentTrades.map(t => (
+                                            <div key={t.id} style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: theme.fontSizes.xxs }}>
+                                              <span style={{
+                                                padding: '1px 6px',
+                                                border: `1px solid ${t.trade_type === 'BUY' ? theme.colors.primary : theme.colors.warning}`,
+                                                color: t.trade_type === 'BUY' ? theme.colors.primary : theme.colors.warning,
+                                                fontWeight: 'bold',
+                                                minWidth: '32px',
+                                                textAlign: 'center',
+                                              }}>
+                                                {t.trade_type}
+                                              </span>
+                                              <span style={{
+                                                padding: '1px 6px',
+                                                border: `1px solid ${t.outcome === 'YES' ? theme.colors.primary : theme.colors.warning}`,
+                                                color: t.outcome === 'YES' ? theme.colors.primary : theme.colors.warning,
+                                                fontWeight: 'bold',
+                                                minWidth: '28px',
+                                                textAlign: 'center',
+                                              }}>
+                                                {t.outcome}
+                                              </span>
+                                              <span style={{ color: theme.colors.textWhite, fontWeight: 'bold' }}>
+                                                {parseFloat(t.amount).toFixed(2)} USDC
+                                              </span>
+                                              <span style={{ color: theme.colors.textDim, marginLeft: 'auto' }}>
+                                                {timeAgo(t.created_at)}
+                                              </span>
+                                              <a
+                                                href={`${monadTestnet.blockExplorers.default.url}/tx/${t.tx_hash}`}
+                                                target="_blank"
+                                                rel="noopener noreferrer"
+                                                style={{ color: theme.colors.textDim, textDecoration: 'none' }}
+                                              >
+                                                →
+                                              </a>
+                                            </div>
+                                          ))}
+                                        </div>
+                                      )}
+                                    </div>
+                                  );
+                                })()}
                               </div>
                             );
                           })}
