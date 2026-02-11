@@ -248,27 +248,62 @@ function parseLog(log: HyperSyncLog): ParsedTrade | null {
   return null;
 }
 
-// Update market prices via RPC getMarketInfo
+// RPC batch call helper
+async function rpcBatch(
+  calls: Array<{ to: string; data: string }>
+): Promise<string[]> {
+  const batch = calls.map((c, i) => ({
+    jsonrpc: "2.0",
+    id: i + 1,
+    method: "eth_call",
+    params: [{ to: c.to, data: c.data }, "latest"],
+  }));
+
+  const resp = await fetch(RPC_URL, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(batch),
+  });
+
+  const results = await resp.json();
+  // Sort by id and return results
+  const sorted = (results as Array<{ id: number; result?: string }>).sort(
+    (a, b) => a.id - b.id
+  );
+  return sorted.map((r) => r.result || "0x");
+}
+
+// Update market prices via RPC getMarketInfo + backfill token addresses
 async function updateMarketPrices(
   supabase: ReturnType<typeof createClient>,
   marketId: string,
   marketAddress: string
 ): Promise<void> {
-  const resp = await fetch(RPC_URL, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({
-      jsonrpc: "2.0",
-      id: 1,
-      method: "eth_call",
-      params: [{ to: marketAddress, data: "0x23341a05" }, "latest"],
-    }),
-  });
+  // Check if token addresses need backfilling
+  const { data: existing } = await supabase
+    .from("markets")
+    .select("yes_token_address, no_token_address")
+    .eq("id", marketId)
+    .single();
 
-  const result = await resp.json();
-  if (!result.result || result.result === "0x") return;
+  const needsTokens =
+    !existing?.yes_token_address || !existing?.no_token_address;
 
-  const d = result.result.slice(2);
+  // Batch: getMarketInfo + optionally yesToken() + noToken()
+  const calls: Array<{ to: string; data: string }> = [
+    { to: marketAddress, data: "0x23341a05" }, // getMarketInfo
+  ];
+  if (needsTokens) {
+    calls.push({ to: marketAddress, data: "0xf0d9bb20" }); // yesToken()
+    calls.push({ to: marketAddress, data: "0x11a9f10a" }); // noToken()
+  }
+
+  const results = await rpcBatch(calls);
+  const marketInfoResult = results[0];
+
+  if (!marketInfoResult || marketInfoResult === "0x") return;
+
+  const d = marketInfoResult.slice(2);
   // Offsets: yesPrice at slot 3 (192), noPrice at 4 (256),
   // yesShares at 7 (448), noShares at 8 (512), totalCollateral at 9 (576),
   // resolved at 12 (768), yesWins at 13 (832)
@@ -277,20 +312,33 @@ async function updateMarketPrices(
   const resolved = BigInt("0x" + d.slice(768, 832)) !== 0n;
   const yesWins = BigInt("0x" + d.slice(832, 896)) !== 0n;
 
-  await supabase
-    .from("markets")
-    .update({
-      yes_price: yesPrice,
-      no_price: noPrice,
-      yes_shares: hexToDecimalString("0x" + d.slice(448, 512), 18),
-      no_shares: hexToDecimalString("0x" + d.slice(512, 576), 18),
-      total_collateral: hexToDecimalString("0x" + d.slice(576, 640), 6),
-      resolved,
-      yes_wins: yesWins,
-      status: resolved ? "RESOLVED" : "ACTIVE",
-      updated_at: new Date().toISOString(),
-    })
-    .eq("id", marketId);
+  const update: Record<string, unknown> = {
+    yes_price: yesPrice,
+    no_price: noPrice,
+    yes_shares: hexToDecimalString("0x" + d.slice(448, 512), 18),
+    no_shares: hexToDecimalString("0x" + d.slice(512, 576), 18),
+    total_collateral: hexToDecimalString("0x" + d.slice(576, 640), 6),
+    resolved,
+    yes_wins: yesWins,
+    status: resolved ? "RESOLVED" : "ACTIVE",
+    updated_at: new Date().toISOString(),
+  };
+
+  // Backfill token addresses if missing
+  if (needsTokens && results.length >= 3) {
+    const yesTokenResult = results[1];
+    const noTokenResult = results[2];
+    if (yesTokenResult && yesTokenResult.length >= 66) {
+      update.yes_token_address =
+        "0x" + yesTokenResult.slice(26).toLowerCase();
+    }
+    if (noTokenResult && noTokenResult.length >= 66) {
+      update.no_token_address =
+        "0x" + noTokenResult.slice(26).toLowerCase();
+    }
+  }
+
+  await supabase.from("markets").update(update).eq("id", marketId);
 }
 
 serve(async (req: Request) => {
@@ -540,6 +588,23 @@ serve(async (req: Request) => {
           } catch (err) {
             errors.push(`Error updating prices for ${market.address}: ${err}`);
           }
+        }
+      }
+
+      // Backfill token addresses for any markets missing them
+      const { data: missingTokens } = await supabase
+        .from("markets")
+        .select("id, address")
+        .or(
+          "yes_token_address.is.null,yes_token_address.eq.,no_token_address.is.null,no_token_address.eq."
+        )
+        .limit(5); // batch 5 per run to avoid timeout
+
+      for (const m of missingTokens || []) {
+        try {
+          await updateMarketPrices(supabase, m.id, m.address);
+        } catch (err) {
+          errors.push(`Token backfill error for ${m.address}: ${err}`);
         }
       }
 
