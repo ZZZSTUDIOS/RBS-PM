@@ -473,7 +473,7 @@ for (const pos of portfolio.positions) {
             <div style={styles.linkIcon}>NPM</div>
             <div>
               <div style={styles.linkTitle}>NPM Package</div>
-              <div style={styles.linkDesc}>@madgallery/rbs-pm-sdk v1.0.8</div>
+              <div style={styles.linkDesc}>@madgallery/rbs-pm-sdk v1.0.12</div>
             </div>
           </a>
           <a
