@@ -5,7 +5,7 @@ import {
   useWalletClient,
   useReadContract,
 } from 'wagmi';
-import { parseEther, formatEther, parseUnits, decodeEventLog, type Address } from 'viem';
+import { parseEther, formatEther, parseUnits, formatUnits, decodeEventLog, type Address } from 'viem';
 
 export type LogType = 'info' | 'success' | 'error' | 'pending';
 
@@ -1169,14 +1169,15 @@ export function useLMSRRedeem() {
           if (decoded.eventName === 'Redeemed') {
             const args = decoded.args as unknown as { user: Address; shares: bigint; payout: bigint };
             shares = formatEther(args.shares);
-            payout = formatEther(args.payout);
+            // Payout is in collateral decimals (6 for USDC), not 18
+            payout = formatUnits(args.payout, 6);
           }
         } catch {
           // Not this event, continue
         }
       }
 
-      addLog(`Redeemed ${shares} shares for ${payout} MON`, 'success', hash);
+      addLog(`Redeemed ${shares} shares for ${payout} USDC`, 'success', hash);
       return { success: true, txHash: hash, shares, payout, yesWins };
     } catch (err: any) {
       addLog(`Error: ${err.shortMessage || err.message}`, 'error');
