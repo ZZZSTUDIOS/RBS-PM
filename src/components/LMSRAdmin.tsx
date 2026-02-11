@@ -325,7 +325,9 @@ export default function LMSRAdmin() {
       // Combine markets from trades and deployed markets
       const tradeMarkets = trades.map(t => t.marketAddress.toLowerCase());
       const deployedMarkets = markets.map(m => m.address.toLowerCase());
-      const uniqueMarkets = [...new Set([...tradeMarkets, ...deployedMarkets])];
+      const ZERO_ADDR = '0x0000000000000000000000000000000000000000';
+      const uniqueMarkets = [...new Set([...tradeMarkets, ...deployedMarkets])]
+        .filter(addr => addr && addr !== ZERO_ADDR && addr.length >= 42);
 
       if (uniqueMarkets.length === 0) return;
 

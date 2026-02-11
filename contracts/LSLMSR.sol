@@ -161,16 +161,37 @@ contract LSLMSR is Ownable, ReentrancyGuard, Pausable {
         uint256 b = (alpha * totalShares) / 1e18;
         if (b < minLiquidity) b = minLiquidity;
 
-        // Calculate e^(qYes/b) and e^(qNo/b)
-        uint256 expYes = _exp((_yesShares * 1e18) / b);
-        uint256 expNo = _exp((_noShares * 1e18) / b);
+        // Log-sum-exp trick: b*ln(e^(a/b)+e^(c/b)) = max(a,c) + b*ln(e^((a-max)/b)+e^((c-max)/b))
+        // This keeps exp arguments <= 0, preventing overflow/cap issues
+        uint256 maxShares = _yesShares > _noShares ? _yesShares : _noShares;
+        uint256 expYes;
+        uint256 expNo;
 
-        // Sum and take ln
+        if (_yesShares >= _noShares) {
+            expYes = 1e18; // exp(0)
+            uint256 gap = ((_yesShares - _noShares) * 1e18) / b;
+            if (gap == 0) {
+                expNo = 1e18;
+            } else {
+                uint256 expGap = _exp(gap);
+                expNo = (1e18 * 1e18) / expGap; // 1/exp(gap)
+            }
+        } else {
+            expNo = 1e18; // exp(0)
+            uint256 gap = ((_noShares - _yesShares) * 1e18) / b;
+            if (gap == 0) {
+                expYes = 1e18;
+            } else {
+                uint256 expGap = _exp(gap);
+                expYes = (1e18 * 1e18) / expGap; // 1/exp(gap)
+            }
+        }
+
         uint256 sum = expYes + expNo;
         uint256 lnSum = _ln(sum);
 
-        // Multiply by b
-        return (b * lnSum) / 1e18;
+        // result = maxShares + b * lnSum / 1e18
+        return maxShares + (b * lnSum) / 1e18;
     }
 
     /**

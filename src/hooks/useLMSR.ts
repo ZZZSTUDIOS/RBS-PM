@@ -1810,7 +1810,9 @@ function lnApprox(x: bigint): bigint {
   return result + halvings * LN2;
 }
 
-// Calculate LS-LMSR cost function: b * ln(e^(yes/b) + e^(no/b))
+// Calculate LS-LMSR cost function using log-sum-exp trick:
+// C(q) = max(yes,no) + b * ln(exp(0) + exp(-(|yes-no|)/b))
+// This avoids overflow in exp() by keeping arguments bounded to the difference.
 function costFunction(yesShares: bigint, noShares: bigint, alpha: bigint, minLiquidity: bigint): bigint {
   const totalShares = yesShares + noShares;
   if (totalShares === 0n) return 0n;
@@ -1819,16 +1821,40 @@ function costFunction(yesShares: bigint, noShares: bigint, alpha: bigint, minLiq
   if (b < minLiquidity) b = minLiquidity;
   if (b === 0n) b = SCALE; // Fallback to prevent division by zero
 
-  // Calculate e^(qYes/b) and e^(qNo/b)
-  const expYes = expApprox((yesShares * SCALE) / b);
-  const expNo = expApprox((noShares * SCALE) / b);
+  const maxShares = yesShares > noShares ? yesShares : noShares;
 
-  // Sum and take ln
+  // Log-sum-exp trick: factor out max(yes,no)/b from the exp terms
+  // C = max + b * ln(exp(0) + exp(-gap/b)) where gap = |yes - no|
+  let expYes: bigint;
+  let expNo: bigint;
+
+  if (yesShares >= noShares) {
+    expYes = SCALE; // exp(0) = 1
+    const gap = yesShares - noShares;
+    if (gap === 0n) {
+      expNo = SCALE;
+    } else {
+      const expArg = (gap * SCALE) / b;
+      const expGap = expApprox(expArg);
+      expNo = (SCALE * SCALE) / expGap; // exp(-gap/b) = 1/exp(gap/b)
+    }
+  } else {
+    expNo = SCALE; // exp(0) = 1
+    const gap = noShares - yesShares;
+    if (gap === 0n) {
+      expYes = SCALE;
+    } else {
+      const expArg = (gap * SCALE) / b;
+      const expGap = expApprox(expArg);
+      expYes = (SCALE * SCALE) / expGap; // exp(-gap/b) = 1/exp(gap/b)
+    }
+  }
+
   const sum = expYes + expNo;
   const lnSum = lnApprox(sum);
 
-  // Multiply by b
-  return (b * lnSum) / SCALE;
+  // C = maxShares + b * ln(sum)
+  return maxShares + (b * lnSum) / SCALE;
 }
 
 // Calculate cost to buy shares

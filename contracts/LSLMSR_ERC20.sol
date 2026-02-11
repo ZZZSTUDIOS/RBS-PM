@@ -169,12 +169,43 @@ contract LSLMSR_ERC20 is Ownable, ReentrancyGuard, Pausable {
         uint256 b = (alpha * totalShares) / 1e18;
         if (b < minLiquidity) b = minLiquidity;
 
-        uint256 expYes = _exp((_yesShares * 1e18) / b);
-        uint256 expNo = _exp((_noShares * 1e18) / b);
+        // Log-sum-exp trick: b*ln(e^(a/b)+e^(c/b)) = max(a,c) + b*ln(e^((a-max)/b)+e^((c-max)/b))
+        // This keeps exp arguments <= 0, preventing overflow/cap issues
+        uint256 maxShares = _yesShares > _noShares ? _yesShares : _noShares;
+        uint256 diffYes = maxShares - _yesShares; // 0 or positive
+        uint256 diffNo = maxShares - _noShares;   // 0 or positive
+
+        // exp(-(diff)/b) where diff >= 0, so argument is <= 0 → safe from cap
+        uint256 expYes = _exp(diffYes == 0 ? 0 : 0); // exp(0) = 1e18 for the max term
+        uint256 expNo;
+        if (diffYes == 0) {
+            // yesShares >= noShares: expYes = exp(0) = 1e18, expNo = exp(-(yes-no)/b)
+            // But _exp only handles positive args, so we use: exp(-x) = 1/exp(x)
+            uint256 gap = ((_yesShares - _noShares) * 1e18) / b;
+            expYes = 1e18; // exp(0)
+            if (gap == 0) {
+                expNo = 1e18;
+            } else {
+                uint256 expGap = _exp(gap);
+                expNo = (1e18 * 1e18) / expGap; // 1/exp(gap)
+            }
+        } else {
+            // noShares > yesShares
+            uint256 gap = ((_noShares - _yesShares) * 1e18) / b;
+            expNo = 1e18; // exp(0)
+            if (gap == 0) {
+                expYes = 1e18;
+            } else {
+                uint256 expGap = _exp(gap);
+                expYes = (1e18 * 1e18) / expGap; // 1/exp(gap)
+            }
+        }
+
         uint256 sum = expYes + expNo;
         uint256 lnSum = _ln(sum);
 
-        return (b * lnSum) / 1e18;
+        // result = maxShares + b * lnSum / 1e18
+        return maxShares + (b * lnSum) / 1e18;
     }
 
     /**
