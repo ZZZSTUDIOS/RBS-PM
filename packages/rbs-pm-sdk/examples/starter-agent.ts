@@ -57,12 +57,12 @@ async function discoverMarkets() {
   }
 
   for (const market of markets) {
-    const yesPercent = (market.yes_price * 100).toFixed(0);
-    const noPercent = (market.no_price * 100).toFixed(0);
+    const yesPercent = (market.yesPrice * 100).toFixed(0);
+    const noPercent = (market.noPrice * 100).toFixed(0);
     console.log(`\n📊 ${market.question}`);
     console.log(`   Address: ${market.address}`);
     console.log(`   YES: ${yesPercent}% | NO: ${noPercent}%`);
-    console.log(`   Volume: $${market.total_volume || 0} USDC`);
+    console.log(`   Volume: ${market.totalTrades} trades`);
   }
 
   return markets;

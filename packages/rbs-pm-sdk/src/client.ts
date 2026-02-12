@@ -208,25 +208,37 @@ export class RBSPMClient {
     }
 
     const data = await response.json() as { success: boolean; markets: Array<Record<string, unknown>> };
-    return (data.markets || []).map((m) => ({
-      address: (m.address as string) as `0x${string}`,
-      question: m.question as string,
-      resolutionTime: m.resolution_time ? new Date(m.resolution_time as string) : new Date(),
-      oracle: (m.oracle_address as string || '') as `0x${string}`,
-      status: (m.status as 'ACTIVE' | 'RESOLVED' | 'PAUSED') || 'ACTIVE',
-      resolved: (m.resolved as boolean) || false,
-      yesWins: (m.yes_wins as boolean | null) ?? null,
-      yesToken: (m.yes_token_address as string || '') as `0x${string}`,
-      noToken: (m.no_token_address as string || '') as `0x${string}`,
-      yesPrice: (m.yes_price as number) || 0.5,
-      noPrice: (m.no_price as number) || 0.5,
-      yesShares: BigInt(0),
-      noShares: BigInt(0),
-      totalVolume: BigInt(0),
-      totalTrades: (m.total_trades as number) || 0,
-      category: m.category as string | undefined,
-      tags: m.tags as string[] | undefined,
-    }));
+    const ZERO_ADDRESS = '0x0000000000000000000000000000000000000000';
+    const seen = new Set<string>();
+
+    return (data.markets || [])
+      .filter((m) => {
+        const addr = (m.address as string || '').toLowerCase();
+        // Filter out zero-address and duplicate markets
+        if (!addr || addr === ZERO_ADDRESS.toLowerCase()) return false;
+        if (seen.has(addr)) return false;
+        seen.add(addr);
+        return true;
+      })
+      .map((m) => ({
+        address: (m.address as string) as `0x${string}`,
+        question: m.question as string,
+        resolutionTime: m.resolution_time ? new Date(m.resolution_time as string) : new Date(),
+        oracle: (m.oracle_address as string || '') as `0x${string}`,
+        status: (m.status as 'ACTIVE' | 'RESOLVED' | 'PAUSED') || 'ACTIVE',
+        resolved: (m.resolved as boolean) || false,
+        yesWins: (m.yes_wins as boolean | null) ?? null,
+        yesToken: (m.yes_token_address as string || '') as `0x${string}`,
+        noToken: (m.no_token_address as string || '') as `0x${string}`,
+        yesPrice: Number(m.yes_price) || 0.5,
+        noPrice: Number(m.no_price) || 0.5,
+        yesShares: BigInt(0),
+        noShares: BigInt(0),
+        totalVolume: BigInt(0),
+        totalTrades: Number(m.total_trades) || 0,
+        category: m.category as string | undefined,
+        tags: m.tags as string[] | undefined,
+      }));
   }
 
   /**
@@ -782,13 +794,6 @@ export class RBSPMClient {
       throw new Error('Transaction reverted on-chain');
     }
 
-    // Confirm trade in database (best-effort, don't fail the trade)
-    try {
-      await this.confirmTrade(hash, marketAddress);
-    } catch (confirmErr) {
-      console.log('Trade confirmation skipped:', confirmErr);
-    }
-
     // Parse SharesPurchased event to get actual shares and cost
     let shares = parseUnits(usdcAmount, USDC_DECIMALS);
     let cost = shares;
@@ -896,13 +901,6 @@ export class RBSPMClient {
     const receipt = await this.publicClient.waitForTransactionReceipt({ hash });
     if (receipt.status === 'reverted') {
       throw new Error('Transaction reverted on-chain');
-    }
-
-    // Confirm trade in database (best-effort, don't fail the trade)
-    try {
-      await this.confirmTrade(hash, marketAddress);
-    } catch {
-      // Trade confirmation is best-effort, don't fail the trade
     }
 
     // Parse SharesSold event to get actual shares sold and payout
@@ -1509,32 +1507,6 @@ export class RBSPMClient {
 
     await this.publicClient.waitForTransactionReceipt({ hash });
     return hash;
-  }
-
-  // ==================== Trade Confirmation ====================
-
-  /**
-   * Confirm a trade by recording it in the database (x402 protected - 0.0001 USDC)
-   * Called automatically after buy/sell to sync trades with the frontend.
-   */
-  private async confirmTrade(txHash: `0x${string}`, marketAddress: `0x${string}`): Promise<void> {
-    const paymentFetch = this.getPaymentFetch();
-
-    const response = await paymentFetch(`${this.apiUrl}${API_ENDPOINTS.x402ConfirmTrade}`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ txHash, marketAddress }),
-    });
-
-    if (!response.ok) {
-      const data = await response.json() as { error?: string };
-      throw new Error(data.error || `Confirm trade failed: HTTP ${response.status}`);
-    }
-
-    const data = await response.json() as { success: boolean; trade?: Record<string, unknown> };
-    if (data.success) {
-      console.log(`Trade confirmed in DB: ${data.trade?.tradeType} ${data.trade?.outcome} ${data.trade?.shares} shares`);
-    }
   }
 
   // ==================== Utility ====================
