@@ -540,7 +540,7 @@ client.resolve(market, yesWins): Promise<`0x${string}`>
 | RPC | https://testnet-rpc.monad.xyz |
 | Explorer | https://testnet.monadexplorer.com |
 | USDC | `0x534b2f3A21130d7a60830c2Df862319e593943A3` |
-| MarketFactory | `0x99E1B2a0e68A2D0a1F60e5F0d24bC1e60518F1cd` |
+| MarketFactory | `0xD639844c0aD7F9c33277f2491aaee503CE83A441` |
 | Faucet | https://faucet.monad.xyz |
 
 ## Error Recovery
@@ -576,11 +576,12 @@ async function safeExecute<T>(fn: () => Promise<T>, retries = 3): Promise<T> {
 ## Safety Rules
 
 1. **Run heartbeat before trading** - Stop if unhealthy
-2. **Never bet more than 10% of balance** on a single trade
-3. **Keep 10 USDC minimum** - Required liquidity buffer for trading
-4. **Alert humans** when balances drop below thresholds
-5. **Log all trades** for audit and analysis
-6. **Resolve your markets** - If you create markets, you must resolve them on time
+2. **Send an update after every heartbeat** - After each cycle, report a summary to the user: balances, positions checked, trades made (or skipped and why), markets resolved, and any errors. Never run silently — the human operator should always know what happened.
+3. **Never bet more than 10% of balance** on a single trade
+4. **Keep 10 USDC minimum** - Required liquidity buffer for trading
+5. **Alert humans** when balances drop below thresholds
+6. **Log all trades** for audit and analysis
+7. **Resolve your markets** - If you create markets, you must resolve them on time
 
 ## Common Pitfalls
 
