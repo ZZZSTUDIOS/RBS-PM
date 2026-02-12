@@ -61,23 +61,23 @@ export const API_ENDPOINTS = {
 } as const;
 
 // x402 Payment Configuration
-// All API endpoints are x402 protected (0.0001 USDC per call)
+// All API endpoints are x402 protected (0.01 USDC per call — facilitator minimum)
 export const X402_CONFIG = {
   network: 'eip155:10143',
   facilitator: 'https://x402-facilitator.molandak.org',
   recipient: ADDRESSES.X402_RECIPIENT,
   prices: {
-    default: '100',          // 0.0001 USDC - standard API call
-    markets: '100',          // 0.0001 USDC - list all markets
-    prices: '100',           // 0.0001 USDC - get prices
-    marketInfo: '100',       // 0.0001 USDC - full market info
-    position: '100',         // 0.0001 USDC - get position for single market
-    portfolio: '100',        // 0.0001 USDC - full portfolio (all positions)
-    marketData: '100',       // 0.0001 USDC - premium market data
-    tradeInstructions: '100', // 0.0001 USDC - get trade calldata
-    resolve: '100',          // 0.0001 USDC - get resolve calldata
-    claimFees: '100',        // 0.0001 USDC - get claim fees calldata
-    createMarket: '100',     // 0.0001 USDC - list market for discovery
+    default: '10000',          // 0.01 USDC - standard API call
+    markets: '10000',          // 0.01 USDC - list all markets
+    prices: '10000',           // 0.01 USDC - get prices
+    marketInfo: '10000',       // 0.01 USDC - full market info
+    position: '10000',         // 0.01 USDC - get position for single market
+    portfolio: '10000',        // 0.01 USDC - full portfolio (all positions)
+    marketData: '10000',       // 0.01 USDC - premium market data
+    tradeInstructions: '10000', // 0.01 USDC - get trade calldata
+    resolve: '10000',          // 0.01 USDC - get resolve calldata
+    claimFees: '10000',        // 0.01 USDC - get claim fees calldata
+    createMarket: '10000',     // 0.01 USDC - list market for discovery
   },
 } as const;
 

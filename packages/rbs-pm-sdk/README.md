@@ -2,7 +2,7 @@
 
 SDK for AI agents to trade on RBS Prediction Markets on Monad Testnet.
 
-**All operations require x402 micropayments (0.0001 USDC per API call).**
+**All operations require x402 micropayments (0.01 USDC per API call).**
 
 ## Installation
 
@@ -14,7 +14,7 @@ npm install @madgallery/rbs-pm-sdk viem
 
 Your wallet needs:
 - **MON** for gas fees - Get from https://faucet.monad.xyz
-- **USDC** for trading and API calls - Each API call costs 0.0001 USDC
+- **USDC** for trading and API calls - Each API call costs 0.01 USDC
 
 ## Quick Start
 
@@ -30,14 +30,14 @@ console.log('Wallet:', client.getAddress());
 console.log('USDC:', await client.getUSDCBalance());
 console.log('MON:', await client.getMONBalance());
 
-// Get all active markets (costs 0.0001 USDC)
+// Get all active markets (costs 0.01 USDC)
 const markets = await client.getMarkets();
 
-// Get prices for a market (costs 0.0001 USDC)
+// Get prices for a market (costs 0.01 USDC)
 const prices = await client.getPrices(markets[0].address);
 console.log(`YES: ${(prices.yes * 100).toFixed(1)}%`);
 
-// Buy YES shares (costs 0.0001 USDC + gas + trade amount)
+// Buy YES shares (costs 0.01 USDC + gas + trade amount)
 const result = await client.buy(markets[0].address, true, '1');
 console.log('Trade TX:', result.txHash);
 ```
@@ -50,17 +50,17 @@ console.log('Trade TX:', result.txHash);
 
 | Method | Cost | Description |
 |--------|------|-------------|
-| `getMarkets(options?)` | 0.0001 USDC | List markets (filter by status, category, creator, etc.) |
-| `getPrices()` | 0.0001 USDC | Get current market prices |
-| `getMarketInfo()` | 0.0001 USDC | Full market details |
-| `getPremiumMarketData()` | 0.0001 USDC | Premium analytics (velocity, stress, fragility, heat) |
+| `getMarkets(options?)` | 0.01 USDC | List markets (filter by status, category, creator, etc.) |
+| `getPrices()` | 0.01 USDC | Get current market prices |
+| `getMarketInfo()` | 0.01 USDC | Full market details |
+| `getPremiumMarketData()` | 0.01 USDC | Premium analytics (velocity, stress, fragility, heat) |
 
 ### Portfolio & Positions
 
 | Method | Cost | Description |
 |--------|------|-------------|
-| `getPosition()` | 0.0001 USDC | Position in single market |
-| `getPortfolio()` | 0.0001 USDC | Full portfolio (all positions) |
+| `getPosition()` | 0.01 USDC | Position in single market |
+| `getPortfolio()` | 0.01 USDC | Full portfolio (all positions) |
 
 ### Trading
 
@@ -74,16 +74,16 @@ console.log('Trade TX:', result.txHash);
 
 | Method | Cost | Description |
 |--------|------|-------------|
-| `deployMarket()` | ~0.0003 + gas + liquidity | Deploy + initialize + list |
-| `listMarket()` | 0.0001 USDC | List a deployed market for discovery |
+| `deployMarket()` | ~0.03 + gas + liquidity | Deploy + initialize + list |
+| `listMarket()` | 0.01 USDC | List a deployed market for discovery |
 | `initializeMarket()` | 0.0001 + gas | Initialize market with liquidity |
 | `resolve()` | 0.0001 + gas | Resolve market outcome (oracle only) |
-| `canResolve()` | 0.0001 USDC | Check if market can be resolved |
-| `getFeeInfo()` | 0.0001 USDC | Get pending fees info |
+| `canResolve()` | 0.01 USDC | Check if market can be resolved |
+| `getFeeInfo()` | 0.01 USDC | Get pending fees info |
 | `claimCreatorFees()` | 0.0001 + gas | Claim accumulated creator fees |
 | `withdrawExcessCollateral()` | 0.0001 + gas | Withdraw excess collateral after resolution |
 
-> **Note:** All operations require x402 payment. Trades cost 0.0001 USDC (API) + gas (MON) + trade amount (USDC).
+> **Note:** All operations require x402 payment. Trades cost 0.01 USDC (API) + gas (MON) + trade amount (USDC).
 
 ## API Reference
 
@@ -201,7 +201,7 @@ const address = client.getAddress();
 ### Market Creation
 
 ```typescript
-// List a deployed market (costs 0.0001 USDC) — SPORTS ONLY
+// List a deployed market (costs 0.01 USDC) — SPORTS ONLY
 const result = await client.listMarket({
   address: '0x...',          // Deployed LSLMSR_ERC20 contract
   question: 'Will Manchester City win the Champions League 2026?',
@@ -234,6 +234,14 @@ const result = await client.listMarket({
 | MarketFactory | `0x99E1B2a0e68A2D0a1F60e5F0d24bC1e60518F1cd` |
 | Protocol Fee Recipient | `0x048c2c9E869594a70c6Dc7CeAC168E724425cdFE` |
 
+## Quick Tips
+
+- **Log your decisions** — Don't silently skip markets. Log WHY you skip or trade so you can debug.
+- **Null checks** — `!side === null` is always false (`!` evaluates first). Use `side === null`.
+- **Prices are probabilities** — `yesPrice` is 0.0–1.0 (not 0–100). Multiply by 100 only for display.
+- **Shares are bigints** — 18 decimal places. 5 shares = `5000000000000000000n`.
+- **One scan, all data** — `getMarkets()` returns prices + analytics. Don't loop individual endpoints.
+
 ## AI Agent Guide
 
 **Your goal: Predict correctly and win MON.**
@@ -245,6 +253,7 @@ For a detailed guide on building AI trading agents, see **[SKILL.md](./SKILL.md)
 Includes:
 - Research-based trading strategies
 - How to find mispriced markets
+- Common pitfalls and debugging tips
 - Heartbeat monitoring
 - Error recovery patterns
 - Safety rules

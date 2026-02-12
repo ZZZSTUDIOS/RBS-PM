@@ -6,7 +6,7 @@ A prediction market platform on Monad with **LS-LMSR AMM**, **USDC collateral**,
 
 - **LS-LMSR AMM** - Liquidity-sensitive market maker for accurate price discovery
 - **USDC Collateral** - Trade with stablecoins, not volatile tokens
-- **x402 Micropayments** - Pay-per-API-call access (0.0001 USDC per call)
+- **x402 Micropayments** - Pay-per-API-call access (0.01 USDC per call)
 - **AI Agent SDK** - TypeScript SDK for programmatic trading
 - **On-chain Settlement** - All trades settled on Monad blockchain
 - **Real-time Indexing** - HyperSync-powered indexer syncs trades within 60s
@@ -23,7 +23,7 @@ npm install @madgallery/rbs-pm-sdk viem
 ### Requirements
 
 - **MON** for gas fees - Get from https://faucet.monad.xyz
-- **USDC** for trading and API calls - Each API call costs 0.0001 USDC
+- **USDC** for trading and API calls - Each API call costs 0.01 USDC
 
 ### Usage
 
@@ -39,7 +39,7 @@ console.log('Wallet:', client.getAddress());
 console.log('USDC:', await client.getUSDCBalance());
 console.log('MON:', await client.getMONBalance());
 
-// Scan all markets with prices + analytics (0.0001 USDC)
+// Scan all markets with prices + analytics (0.01 USDC)
 const markets = await client.getMarkets({ status: 'ACTIVE', sort: 'heat' });
 
 for (const m of markets) {
@@ -48,7 +48,7 @@ for (const m of markets) {
   console.log(`  Heat: ${m.heatScore} | Stress: ${m.stressScore}`);
 }
 
-// Get your portfolio (0.0001 USDC)
+// Get your portfolio (0.01 USDC)
 const portfolio = await client.getPortfolio();
 console.log(`Positions: ${portfolio.summary.totalPositions}`);
 console.log(`Total value: $${portfolio.summary.totalValue} USDC`);
@@ -57,7 +57,7 @@ console.log(`Total value: $${portfolio.summary.totalValue} USDC`);
 const quote = await client.getBuyQuote(markets[0].address, true, '10');
 console.log(`Would get ${quote.shares} shares`);
 
-// Buy YES shares (0.0001 USDC + gas + trade amount)
+// Buy YES shares (0.01 USDC + gas + trade amount)
 const result = await client.buy(markets[0].address, true, '10');
 console.log('Trade TX:', result.txHash);
 ```
@@ -66,7 +66,7 @@ console.log('Trade TX:', result.txHash);
 
 All API endpoints require x402 micropayments. The SDK handles payments automatically.
 
-### Market Discovery (0.0001 USDC each)
+### Market Discovery (0.01 USDC each)
 
 | Method | Description |
 |--------|-------------|
@@ -75,14 +75,14 @@ All API endpoints require x402 micropayments. The SDK handles payments automatic
 | `getMarketInfo(market)` | Full on-chain market details (oracle, resolution time, liquidity, etc.) |
 | `getPremiumMarketData(market)` | Deep analytics: velocity breakdown (v1m, v5m, v15m), acceleration, stress, fragility |
 
-### Portfolio & Positions (0.0001 USDC each)
+### Portfolio & Positions (0.01 USDC each)
 
 | Method | Description |
 |--------|-------------|
 | `getPortfolio(user?)` | All positions across all markets with current values |
 | `getPosition(market, user?)` | Position in a single market |
 
-### Trading (0.0001 USDC + gas each)
+### Trading (0.01 USDC + gas each)
 
 | Method | Description |
 |--------|-------------|
@@ -90,11 +90,11 @@ All API endpoints require x402 micropayments. The SDK handles payments automatic
 | `sell(market, isYes, shares)` | Sell shares for USDC |
 | `redeem(market)` | Redeem winning shares after resolution |
 
-### Market Management (0.0001 USDC + gas each)
+### Market Management (0.01 USDC + gas each)
 
 | Method | Description |
 |--------|-------------|
-| `deployMarket(params)` | Deploy + initialize + list in one call (~0.0003 USDC + gas + liquidity) |
+| `deployMarket(params)` | Deploy + initialize + list in one call (~0.03 USDC + gas + liquidity) |
 | `listMarket(params)` | List a deployed market for discovery |
 | `initializeMarket(market, amount)` | Initialize market with USDC liquidity |
 | `resolve(market, yesWins)` | Resolve market outcome (oracle only) |

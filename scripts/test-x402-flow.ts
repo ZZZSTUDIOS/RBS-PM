@@ -176,8 +176,18 @@ async function testVerifyDirect(paymentPayload: any) {
     body: JSON.stringify(facilitatorRequest),
   });
 
-  const data = await res.json();
+  const text = await res.text();
   console.log(`  HTTP ${res.status}`);
+  console.log(`  Raw response: ${text.substring(0, 300)}`);
+
+  let data: any;
+  try {
+    data = JSON.parse(text);
+  } catch {
+    console.log('FAIL: Non-JSON response from facilitator\n');
+    return { isValid: false, invalidReason: 'non-json response' };
+  }
+
   console.log(`  isValid: ${data.isValid}`);
   if (!data.isValid) {
     console.log(`  invalidReason: ${data.invalidReason}`);

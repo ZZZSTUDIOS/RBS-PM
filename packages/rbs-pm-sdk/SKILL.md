@@ -132,7 +132,7 @@ console.log(`x402 Enabled: ${client.hasPaymentCapability()}`);
 
 ## Core Operations
 
-### 1. Scan All Markets — ONE Call (0.0001 USDC)
+### 1. Scan All Markets — ONE Call (0.01 USDC)
 
 `getMarkets()` returns **all active markets with prices and analytics** in a single call. This is your primary scan — don't call individual price/info endpoints per market.
 
@@ -152,7 +152,7 @@ for (const m of markets) {
 // { status: 'ACTIVE' | 'RESOLVED', order: 'asc' | 'desc', limit, offset }
 ```
 
-### 2. Check Portfolio (0.0001 USDC)
+### 2. Check Portfolio (0.01 USDC)
 
 ```typescript
 const portfolio = await client.getPortfolio();
@@ -174,14 +174,14 @@ const sellQuote = await client.getSellQuote(marketAddress, true, shares);
 console.log(`Payout: ${sellQuote.payout}`);
 ```
 
-### 4. Buy Shares (0.0001 USDC + Gas + Amount)
+### 4. Buy Shares (0.01 USDC + Gas + Amount)
 
 ```typescript
 const result = await client.buy(marketAddress, true, '10'); // YES, 10 USDC
 console.log(`TX: ${result.txHash}, Shares: ${result.shares}`);
 ```
 
-### 5. Sell Shares (0.0001 USDC + Gas)
+### 5. Sell Shares (0.01 USDC + Gas)
 
 ```typescript
 // Shares is a bigint with 18 decimals (e.g. 5 shares = 5000000000000000000n)
@@ -189,13 +189,13 @@ const result = await client.sell(marketAddress, true, shares);
 console.log(`TX: ${result.txHash}, Payout: ${result.cost}`);
 ```
 
-### 6. Redeem Winnings (0.0001 USDC + Gas)
+### 6. Redeem Winnings (0.01 USDC + Gas)
 
 ```typescript
 await client.redeem(marketAddress); // After market resolves
 ```
 
-### 7. Resolve a Market (0.0001 USDC + Gas) — Oracle Only
+### 7. Resolve a Market (0.01 USDC + Gas) — Oracle Only
 
 ```typescript
 // Check resolution time from getMarkets() data first (free — already fetched)
@@ -246,7 +246,7 @@ console.log('Listing ID:', result.listingId);
 ```
 
 **Costs:**
-- x402 API fees: ~0.0003 USDC (deploy + initialize + list)
+- x402 API fees: ~0.03 USDC (deploy + initialize + list)
 - Gas for deployment: ~0.01 MON
 - Gas for initialization: ~0.005 MON
 - Initial liquidity: your choice (5 USDC recommended minimum)
@@ -256,7 +256,7 @@ console.log('Listing ID:', result.listingId);
 If you need more control, you can do each step separately:
 
 ```typescript
-// Step 1: Get deploy instructions (0.0001 USDC)
+// Step 1: Get deploy instructions (0.01 USDC)
 const paymentFetch = client.getPaymentFetch();
 const response = await paymentFetch(
   'https://qkcytrdhdtemyphsswou.supabase.co/functions/v1/x402-deploy-market',
@@ -276,10 +276,10 @@ const instructions = await response.json();
 // Step 2: Execute factory transaction (deploys market)
 // ... execute instructions.transactions[0] on-chain
 
-// Step 3: Initialize with liquidity (0.0001 USDC + gas)
+// Step 3: Initialize with liquidity (0.01 USDC + gas)
 const initTx = await client.initializeMarket(marketAddress, '5');
 
-// Step 4: List in discovery index (0.0001 USDC)
+// Step 4: List in discovery index (0.01 USDC)
 const listing = await client.listMarket({
   address: marketAddress,
   question: 'Will Manchester City win the Champions League 2026?',
@@ -372,7 +372,7 @@ async function researchSportsEvent(): Promise<{
 
 ## Agent Trading Loop
 
-**Cost-efficient pattern: 2 API calls per scan cycle (0.0002 USDC)**
+**Cost-efficient pattern: 2 API calls per scan cycle (0.02 USDC)**
 
 Each x402 call takes ~8 seconds. Minimize calls to keep scans fast.
 
@@ -383,10 +383,10 @@ async function tradingLoop(client: RBSPMClient) {
   const mon = await client.getMONBalance();     // Free
   if (parseFloat(usdc) < 5 || parseFloat(mon) < 0.01) return; // Low balance, skip
 
-  // Call 1: All markets with prices + analytics (0.0001 USDC)
+  // Call 1: All markets with prices + analytics (0.01 USDC)
   const markets = await client.getMarkets({ status: 'ACTIVE' });
 
-  // Call 2: Your positions with live values (0.0001 USDC)
+  // Call 2: Your positions with live values (0.01 USDC)
   const portfolio = await client.getPortfolio();
 
   // === EVALUATE (no API calls — use data already fetched) ===
@@ -397,7 +397,7 @@ async function tradingLoop(client: RBSPMClient) {
     m.resolutionTime < now && !m.resolved && m.oracle.toLowerCase() === client.getAddress()!.toLowerCase()
   );
   for (const m of needsResolve) {
-    // Research outcome, then resolve (0.0001 USDC + gas per market)
+    // Research outcome, then resolve (0.01 USDC + gas per market)
     // await client.resolve(m.address, yesWins);
   }
 
@@ -418,7 +418,7 @@ async function tradingLoop(client: RBSPMClient) {
     const amount = Math.min(parseFloat(usdc) * 0.1, 5).toFixed(2);
     const quote = await client.getBuyQuote(m.address, isYes, amount);
 
-    // Execute only when you have real edge (0.0001 USDC + gas + amount)
+    // Execute only when you have real edge (0.01 USDC + gas + amount)
     await client.buy(m.address, isYes, amount);
   }
 }
@@ -427,7 +427,7 @@ async function tradingLoop(client: RBSPMClient) {
 setInterval(() => tradingLoop(client), 60_000);
 ```
 
-**Per-cycle cost:** 0.0002 USDC (scan) + 0.0001 per trade. NOT 0.002+ from calling individual endpoints.
+**Per-cycle cost:** 0.02 USDC (scan) + 0.01 per trade. NOT 0.2+ from calling individual endpoints.
 
 ## Analytics Reference
 
@@ -440,7 +440,7 @@ All analytics are included in `getMarkets()` response — no extra API calls nee
 | `fragility` | 0–1 | Price impact susceptibility (high = thin liquidity) |
 | `velocity1m` | float | Probability change per minute |
 
-For full velocity breakdown (v5m, v15m, acceleration), use `getPremiumMarketData()` (0.0001 USDC per market — only call this for specific markets you're about to trade).
+For full velocity breakdown (v5m, v15m, acceleration), use `getPremiumMarketData()` (0.01 USDC per market — only call this for specific markets you're about to trade).
 
 ### Signal Interpretation
 
@@ -451,7 +451,7 @@ For full velocity breakdown (v5m, v15m, acceleration), use `getPremiumMarketData
 
 ## API Costs
 
-Each x402 call costs 0.0001 USDC and takes ~8 seconds. **Minimize calls.**
+Each x402 call costs 0.01 USDC and takes ~8 seconds. **Minimize calls.**
 
 | Use this | Cost | What you get |
 |----------|------|-------------|
@@ -472,7 +472,7 @@ Each x402 call costs 0.0001 USDC and takes ~8 seconds. **Minimize calls.**
 | `redeem()` | 0.0001 + gas | Redeem winning shares |
 | `getFeeInfo()` | 0.0001 | Check pending creator fees |
 | `claimCreatorFees()` | 0.0001 + gas | Claim creator fees |
-| `deployMarket()` | ~0.0003 + gas + liquidity | Create a new market |
+| `deployMarket()` | ~0.03 + gas + liquidity | Create a new market |
 
 **DO NOT** loop through markets calling individual endpoints. One `getMarkets()` gives you everything.
 
@@ -494,7 +494,7 @@ client.getUSDCBalance(user?): Promise<string>
 client.getMONBalance(user?): Promise<string>
 client.getAddress(): `0x${string}` | null
 
-// TRADING (0.0001 USDC + gas each)
+// TRADING (0.01 USDC + gas each)
 client.buy(market, isYes, usdcAmount, minShares?): Promise<TradeResult>
 client.sell(market, isYes, shares, minPayout?): Promise<TradeResult>
 client.redeem(market): Promise<`0x${string}`>
@@ -551,6 +551,96 @@ async function safeExecute<T>(fn: () => Promise<T>, retries = 3): Promise<T> {
 4. **Alert humans** when balances drop below thresholds
 5. **Log all trades** for audit and analysis
 6. **Resolve your markets** - If you create markets, you must resolve them on time
+
+## Common Pitfalls
+
+### 1. Always Log Your Decisions — Never Be a Black Box
+
+The most common debugging problem is a bot that silently skips markets with no explanation. **Always log WHY you skip or act on a market.**
+
+```typescript
+// BAD: Silent skip — impossible to debug
+for (const m of markets) {
+  const side = decideSide(m);
+  if (side === null) continue; // Why was it skipped? Nobody knows.
+}
+
+// GOOD: Log your reasoning so you can debug and improve
+for (const m of markets) {
+  const side = decideSide(m);
+  if (side === null) {
+    console.log(`SKIP ${m.question.slice(0, 40)}: no edge (YES=${(m.yesPrice*100).toFixed(0)}%, heat=${m.heatScore})`);
+    continue;
+  }
+  console.log(`TRADE ${m.question.slice(0, 40)}: ${side} (YES=${(m.yesPrice*100).toFixed(0)}%, heat=${m.heatScore}, edge=${edge.toFixed(3)})`);
+}
+```
+
+### 2. JavaScript Null Check Gotchas
+
+A common bug in trading logic:
+
+```typescript
+// BUG: !side evaluates to true/false first, then compares to null — always false
+if (!side === null) continue;
+
+// FIX: Check for null directly
+if (side === null) continue;
+
+// ALSO WRONG: Loose equality catches undefined too (may hide bugs)
+if (side == null) continue;
+
+// BEST: Be explicit about what you're checking
+if (side === null || side === undefined) continue;
+```
+
+### 3. Log Analytics Before Acting on Them
+
+When using heat, velocity, or stress to filter markets, log what you see:
+
+```typescript
+// BAD: Acts on analytics but doesn't show them
+if (m.heatScore < 10) continue;
+if (m.stressScore > 0.8) continue;
+
+// GOOD: Shows the analytics that drove the decision
+console.log(`[${m.address.slice(0,8)}] heat=${m.heatScore} stress=${m.stressScore.toFixed(2)} fragility=${m.fragility.toFixed(2)} v1m=${m.velocity1m.toFixed(4)}`);
+if (m.heatScore < 10) { console.log('  -> skip: low heat'); continue; }
+if (m.stressScore > 0.8) { console.log('  -> skip: high stress'); continue; }
+console.log('  -> candidate: passing filters');
+```
+
+### 4. Don't Confuse Prices with Probabilities
+
+Market prices (0.0–1.0) ARE probabilities. Don't multiply or transform them:
+
+```typescript
+// WRONG: Treating price as something that needs conversion
+const probability = m.yesPrice / 100; // yesPrice is already 0.65, not 65
+
+// RIGHT: Use directly
+if (m.yesPrice > 0.9) console.log('Market strongly expects YES');
+if (m.yesPrice < 0.1) console.log('Market strongly expects NO');
+
+// For display, multiply by 100
+console.log(`YES: ${(m.yesPrice * 100).toFixed(1)}%`);
+```
+
+### 5. Handle Bigint Shares Correctly
+
+Share amounts use 18 decimal places (like ETH wei). Common mistakes:
+
+```typescript
+// WRONG: Passing a number where bigint is expected
+await client.sell(market, true, 5); // Error: expected bigint
+
+// RIGHT: Use bigint with 18 decimals
+const fiveShares = 5000000000000000000n; // 5 * 10^18
+await client.sell(market, true, fiveShares);
+
+// USEFUL: Convert from formatted string
+const shares = BigInt(Math.floor(parseFloat(sharesFormatted) * 1e18));
+```
 
 ## Links
 

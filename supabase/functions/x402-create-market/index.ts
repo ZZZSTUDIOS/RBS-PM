@@ -1,6 +1,6 @@
 // Edge Function: x402-create-market
 // Market creation/indexing endpoint protected by x402 micropayments
-// Costs 0.0001 USDC to list a market in the app
+// Costs 0.01 USDC to list a market in the app
 // Uses x402 v2 protocol with the Monad facilitator
 
 import { serve } from "https://deno.land/std@0.177.0/http/server.ts";
@@ -19,7 +19,7 @@ const X402_CONFIG = {
   asset: USDC_ADDRESS, // Use contract address, not symbol
   maxTimeoutSeconds: 300,
   prices: {
-    createMarket: "100", // 0.0001 USDC (6 decimals)
+    createMarket: "10000", // 0.01 USDC (6 decimals) - facilitator minimum
   },
   // Protocol fee recipient
   recipient: "0x048c2c9E869594a70c6Dc7CeAC168E724425cdFE",
@@ -189,8 +189,8 @@ serve(async (req: Request) => {
         JSON.stringify({
           ...body,
           error: "Payment required",
-          amountFormatted: "0.0001 USDC",
-          description: "Market creation requires a 0.0001 USDC listing fee",
+          amountFormatted: "0.01 USDC",
+          description: "Market creation requires a 0.01 USDC listing fee",
         }),
         {
           status: 402,
@@ -335,7 +335,7 @@ serve(async (req: Request) => {
         },
         payment: {
           amount: X402_CONFIG.prices.createMarket,
-          amountFormatted: "0.0001 USDC",
+          amountFormatted: "0.01 USDC",
           txHash: settlement.txHash,
           settled: true,
         },

@@ -9,8 +9,8 @@ export const X402_CONFIG = {
   scheme: "exact",
   asset: "0x534b2f3A21130d7a60830c2Df862319e593943A3", // USDC on Monad
   recipient: "0x048c2c9E869594a70c6Dc7CeAC168E724425cdFE",
-  price: "100", // 0.0001 USDC
-  priceFormatted: "0.0001 USDC",
+  price: "10000", // 0.01 USDC (facilitator minimum)
+  priceFormatted: "0.01 USDC",
   maxTimeoutSeconds: 300,
   // EIP-712 extra for facilitator (only name + version per API docs)
   extra: {
