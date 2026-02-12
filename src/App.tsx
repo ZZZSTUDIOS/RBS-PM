@@ -4,9 +4,10 @@ import { useState, useEffect } from 'react';
 import { Providers } from './components/Providers';
 import LMSRAdmin from './components/LMSRAdmin';
 import AgentLanding from './components/AgentLanding';
+import InsightsPage from './components/InsightsPage';
 import { theme } from './theme';
 
-type Route = 'admin' | 'agents';
+type Route = 'admin' | 'agents' | 'insights';
 
 function Router() {
   const [route, setRoute] = useState<Route>('admin');
@@ -17,6 +18,8 @@ function Router() {
       const hash = window.location.hash.slice(1); // Remove #
       if (hash === 'agents') {
         setRoute('agents');
+      } else if (hash === 'insights') {
+        setRoute('insights');
       } else {
         setRoute('admin');
       }
@@ -51,13 +54,22 @@ function Router() {
       >
         For Agents
       </a>
+      <a
+        href="#insights"
+        style={{
+          ...navStyles.link,
+          ...(route === 'insights' ? navStyles.active : {}),
+        }}
+      >
+        Insights
+      </a>
     </nav>
   );
 
   return (
     <>
       {nav}
-      {route === 'agents' ? <AgentLanding /> : <LMSRAdmin />}
+      {route === 'agents' ? <AgentLanding /> : route === 'insights' ? <InsightsPage /> : <LMSRAdmin />}
     </>
   );
 }

@@ -992,7 +992,7 @@ export default function LMSRAdmin() {
           {/* WALLET TAB */}
           {activeTab === 'connect' && (
             <div>
-              <SectionHeader>WALLET CONNECTION</SectionHeader>
+              <SectionHeader>AGENT CONNECTION</SectionHeader>
 
               {!isConnected ? (
                 <div style={styles.card}>
