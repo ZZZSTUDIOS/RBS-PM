@@ -7,17 +7,30 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2.39.0";
 import { createPublicClient, http, formatUnits } from "https://esm.sh/viem@2.0.0";
 import { corsHeaders, handlePayment, X402_CONFIG } from "../_shared/x402.ts";
 
+// Single call returns all market data — avoids 10 separate RPC calls
 const LSLMSR_ABI = [
-  { name: "getYesPrice", type: "function", inputs: [], outputs: [{ type: "uint256" }], stateMutability: "view" },
-  { name: "getNoPrice", type: "function", inputs: [], outputs: [{ type: "uint256" }], stateMutability: "view" },
-  { name: "getYesProbability", type: "function", inputs: [], outputs: [{ type: "uint256" }], stateMutability: "view" },
-  { name: "getNoProbability", type: "function", inputs: [], outputs: [{ type: "uint256" }], stateMutability: "view" },
-  { name: "yesShares", type: "function", inputs: [], outputs: [{ type: "uint256" }], stateMutability: "view" },
-  { name: "noShares", type: "function", inputs: [], outputs: [{ type: "uint256" }], stateMutability: "view" },
-  { name: "totalCollateral", type: "function", inputs: [], outputs: [{ type: "uint256" }], stateMutability: "view" },
-  { name: "collateralDecimals", type: "function", inputs: [], outputs: [{ type: "uint8" }], stateMutability: "view" },
-  { name: "resolved", type: "function", inputs: [], outputs: [{ type: "bool" }], stateMutability: "view" },
-  { name: "yesWins", type: "function", inputs: [], outputs: [{ type: "bool" }], stateMutability: "view" },
+  {
+    name: "getMarketInfo",
+    type: "function",
+    inputs: [],
+    outputs: [
+      { name: "_question", type: "string" },
+      { name: "_resolutionTime", type: "uint256" },
+      { name: "_oracle", type: "address" },
+      { name: "_yesPrice", type: "uint256" },
+      { name: "_noPrice", type: "uint256" },
+      { name: "_yesProbability", type: "uint256" },
+      { name: "_noProbability", type: "uint256" },
+      { name: "_yesShares", type: "uint256" },
+      { name: "_noShares", type: "uint256" },
+      { name: "_totalCollateral", type: "uint256" },
+      { name: "_liquidityParam", type: "uint256" },
+      { name: "_priceSum", type: "uint256" },
+      { name: "_resolved", type: "bool" },
+      { name: "_yesWins", type: "bool" },
+    ],
+    stateMutability: "view",
+  },
 ] as const;
 
 serve(async (req: Request) => {
@@ -42,27 +55,22 @@ serve(async (req: Request) => {
       return paymentResult.response;
     }
 
-    // Query blockchain
+    // Query blockchain — single call instead of 10 parallel calls
     const client = createPublicClient({
       transport: http("https://testnet-rpc.monad.xyz"),
     });
 
-    // Fetch all market data from blockchain
-    const [yesPrice, noPrice, yesProbability, noProbability, yesShares, noShares, totalCollateral, decimals, resolved, yesWins] = await Promise.all([
-      client.readContract({ address: market as `0x${string}`, abi: LSLMSR_ABI, functionName: "getYesPrice" }),
-      client.readContract({ address: market as `0x${string}`, abi: LSLMSR_ABI, functionName: "getNoPrice" }),
-      client.readContract({ address: market as `0x${string}`, abi: LSLMSR_ABI, functionName: "getYesProbability" }),
-      client.readContract({ address: market as `0x${string}`, abi: LSLMSR_ABI, functionName: "getNoProbability" }),
-      client.readContract({ address: market as `0x${string}`, abi: LSLMSR_ABI, functionName: "yesShares" }),
-      client.readContract({ address: market as `0x${string}`, abi: LSLMSR_ABI, functionName: "noShares" }),
-      client.readContract({ address: market as `0x${string}`, abi: LSLMSR_ABI, functionName: "totalCollateral" }),
-      client.readContract({ address: market as `0x${string}`, abi: LSLMSR_ABI, functionName: "collateralDecimals" }),
-      client.readContract({ address: market as `0x${string}`, abi: LSLMSR_ABI, functionName: "resolved" }),
-      client.readContract({ address: market as `0x${string}`, abi: LSLMSR_ABI, functionName: "yesWins" }),
-    ]);
+    const result = await client.readContract({
+      address: market as `0x${string}`,
+      abi: LSLMSR_ABI,
+      functionName: "getMarketInfo",
+    }) as readonly [string, bigint, string, bigint, bigint, bigint, bigint, bigint, bigint, bigint, bigint, bigint, boolean, boolean];
+
+    const [, , , yesPrice, noPrice, yesProbability, noProbability, yesShares, noShares, totalCollateral, , , resolved, yesWins] = result;
 
     const yes = Number(yesPrice) / 1e18;
     const no = Number(noPrice) / 1e18;
+    const decimals = 6; // USDC
 
     // Sync prices to database (fire and forget - don't block response)
     try {
@@ -75,9 +83,9 @@ serve(async (req: Request) => {
         .update({
           yes_price: yes,
           no_price: no,
-          yes_shares: formatUnits(yesShares as bigint, 18),
-          no_shares: formatUnits(noShares as bigint, 18),
-          total_collateral: formatUnits(totalCollateral as bigint, Number(decimals)),
+          yes_shares: formatUnits(yesShares, 18),
+          no_shares: formatUnits(noShares, 18),
+          total_collateral: formatUnits(totalCollateral, decimals),
           resolved: resolved,
           yes_wins: yesWins,
           updated_at: new Date().toISOString(),
@@ -102,10 +110,10 @@ serve(async (req: Request) => {
           no: Number(noProbability) / 1e18,
         },
         shares: {
-          yes: formatUnits(yesShares as bigint, 18),
-          no: formatUnits(noShares as bigint, 18),
+          yes: formatUnits(yesShares, 18),
+          no: formatUnits(noShares, 18),
         },
-        totalCollateral: formatUnits(totalCollateral as bigint, Number(decimals)),
+        totalCollateral: formatUnits(totalCollateral, decimals),
         resolved,
         yesWins,
         synced: true,
