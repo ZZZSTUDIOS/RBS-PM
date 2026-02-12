@@ -343,7 +343,7 @@ contract LSLMSR_ERC20 is Ownable, ReentrancyGuard, Pausable {
      */
     function buy(bool isYes, uint256 collateralAmount, uint256 minShares) external nonReentrant whenNotPaused {
         if (!initialized) revert MarketNotInitialized();
-        if (resolved) revert MarketAlreadyResolved();
+        if (resolved || block.timestamp >= resolutionTime) revert MarketAlreadyResolved();
         if (collateralAmount == 0) revert InsufficientPayment();
 
         // Transfer collateral from user
@@ -394,7 +394,7 @@ contract LSLMSR_ERC20 is Ownable, ReentrancyGuard, Pausable {
      * @notice Sell outcome shares for collateral
      */
     function sell(bool isYes, uint256 shares, uint256 minPayout) external nonReentrant whenNotPaused {
-        if (resolved) revert MarketAlreadyResolved();
+        if (resolved || block.timestamp >= resolutionTime) revert MarketAlreadyResolved();
         if (shares == 0) revert InvalidAmount();
 
         // Enforce minimum shares

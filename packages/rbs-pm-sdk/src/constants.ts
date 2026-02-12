@@ -12,7 +12,7 @@ export const MONAD_TESTNET = {
 // Contract Addresses
 export const ADDRESSES = {
   // Market Factory (deploy new markets)
-  MARKET_FACTORY: '0x99E1B2a0e68A2D0a1F60e5F0d24bC1e60518F1cd' as `0x${string}`,
+  MARKET_FACTORY: '0xD639844c0aD7F9c33277f2491aaee503CE83A441' as `0x${string}`,
 
   // Legacy Prediction Market Factory
   PREDICTION_FACTORY: '0xc4546422291F1860bbCe379075a077563B0e0777' as `0x${string}`,

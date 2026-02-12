@@ -7,7 +7,7 @@ import { encodeFunctionData, parseUnits } from "https://esm.sh/viem@2.0.0";
 import { corsHeaders, handlePayment, X402_CONFIG } from "../_shared/x402.ts";
 
 // MarketFactory address on Monad Testnet
-const MARKET_FACTORY = "0x99E1B2a0e68A2D0a1F60e5F0d24bC1e60518F1cd";
+const MARKET_FACTORY = "0xD639844c0aD7F9c33277f2491aaee503CE83A441";
 
 // USDC address
 const USDC_ADDRESS = "0x534b2f3A21130d7a60830c2Df862319e593943A3";
