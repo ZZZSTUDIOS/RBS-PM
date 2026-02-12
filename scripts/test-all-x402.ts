@@ -1,196 +1,287 @@
 /**
- * Test all x402 endpoints
+ * Test all x402 endpoints and report total fees paid
  * Usage: PRIVATE_KEY=0x... npx tsx scripts/test-all-x402.ts
  */
-const { RBSPMClient } = await import('../packages/rbs-pm-sdk/src/client.js');
+import { RBSPMClient } from '../packages/rbs-pm-sdk/dist/index.js';
 
 const PRIVATE_KEY = process.env.PRIVATE_KEY as `0x${string}`;
 if (!PRIVATE_KEY) { console.error('Set PRIVATE_KEY env'); process.exit(1); }
 
-// Active market with liquidity
-const MARKET = '0x2542019e6e8efd368A55FCb88aCDa09E8C1E2c28';
+const FEE = 0.0001; // USDC per x402 call
+
+interface TestResult {
+  name: string;
+  status: 'PASS' | 'FAIL' | 'SKIP';
+  detail: string;
+  x402Calls: number; // how many x402 calls this test made
+}
 
 async function main() {
   const client = new RBSPMClient({ privateKey: PRIVATE_KEY });
   const wallet = client.getAddress();
+  const startUsdc = await client.getUSDCBalance();
+  const startMon = await client.getMONBalance();
 
-  const results: { endpoint: string; status: string; detail: string }[] = [];
+  console.log(`Wallet: ${wallet}`);
+  console.log(`Starting USDC: ${startUsdc}`);
+  console.log(`Starting MON:  ${startMon}`);
+  console.log('');
 
-  async function test(name: string, fn: () => Promise<string>) {
+  const results: TestResult[] = [];
+
+  const DELAY_MS = 2000; // Short delay between calls — SDK handles retry/backoff internally
+
+  async function test(name: string, x402Calls: number, fn: () => Promise<string>) {
+    if (x402Calls > 0) await new Promise(r => setTimeout(r, DELAY_MS));
+    const t0 = Date.now();
     try {
       const detail = await fn();
-      results.push({ endpoint: name, status: 'PASS', detail });
+      const ms = Date.now() - t0;
+      results.push({ name, status: 'PASS', detail: `${detail} (${ms}ms)`, x402Calls });
+      console.log(`  [OK] ${name} — ${detail} (${ms}ms)`);
     } catch (err: unknown) {
+      const ms = Date.now() - t0;
       const msg = err instanceof Error ? err.message : String(err);
-      results.push({ endpoint: name, status: 'FAIL', detail: msg.slice(0, 120) });
+      results.push({ name, status: 'FAIL', detail: msg.slice(0, 150), x402Calls: 0 });
+      console.log(`  [XX] ${name} — ${msg.slice(0, 150)} (${ms}ms)`);
     }
   }
 
-  console.log(`Testing all x402 endpoints with wallet ${wallet}\n`);
+  // ============================================================
+  // FREE: On-chain reads (no x402)
+  // ============================================================
+  console.log('=== FREE: On-chain reads ===');
 
-  // 1a. getMarkets - default (x402-markets)
-  await test('x402-markets (default)', async () => {
-    const markets = await client.getMarkets();
-    return `${markets.length} markets found`;
+  await test('getUSDCBalance()', 0, async () => {
+    const bal = await client.getUSDCBalance();
+    return `${bal} USDC`;
   });
 
-  // 1b. getMarkets - filtered by status
-  await test('x402-markets (status=ACTIVE)', async () => {
-    const markets = await client.getMarkets({ status: 'ACTIVE' });
-    return `${markets.length} active markets`;
+  await test('getMONBalance()', 0, async () => {
+    const bal = await client.getMONBalance();
+    return `${bal} MON`;
   });
 
-  // 1c. getMarkets - sorted by volume, limited
-  await test('x402-markets (sort=volume, limit=3)', async () => {
-    const markets = await client.getMarkets({ sort: 'volume', order: 'desc', limit: 3 });
-    return `${markets.length} markets (max 3)`;
+  // ============================================================
+  // x402-markets: various sort/filter combos
+  // ============================================================
+  console.log('\n=== x402-markets (0.0001 USDC each) ===');
+
+  let activeMarket: `0x${string}` | null = null;
+
+  await test('getMarkets() default', 1, async () => {
+    const m = await client.getMarkets();
+    if (m.length > 0) activeMarket = m[0].address;
+    return `${m.length} markets`;
   });
 
-  // 1d. getMarkets - pagination
-  await test('x402-markets (limit=2, offset=1)', async () => {
-    const markets = await client.getMarkets({ limit: 2, offset: 1 });
-    return `${markets.length} markets (page 2, size 2)`;
+  await test('getMarkets({ sort: "heat", limit: 3 })', 1, async () => {
+    const m = await client.getMarkets({ sort: 'heat', order: 'desc', limit: 3 });
+    if (m.length > 0 && !activeMarket) activeMarket = m[0].address;
+    return `${m.length} markets, top heat: ${m[0]?.heatScore ?? 'N/A'}`;
   });
 
-  // 1e. getMarkets - resolved filter
-  await test('x402-markets (resolved=false)', async () => {
-    const markets = await client.getMarkets({ resolved: false });
-    return `${markets.length} unresolved markets`;
+  await test('getMarkets({ sort: "velocity" })', 1, async () => {
+    const m = await client.getMarkets({ sort: 'velocity', order: 'desc', limit: 3 });
+    return `${m.length} markets, top v1m: ${m[0]?.velocity1m ?? 'N/A'}`;
   });
 
-  // 2. getPrices (x402-prices)
-  await test('x402-prices', async () => {
-    const prices = await client.getPrices(MARKET);
-    return `YES: ${(prices.yes * 100).toFixed(1)}%, NO: ${(prices.no * 100).toFixed(1)}%`;
+  await test('getMarkets({ sort: "volume" })', 1, async () => {
+    const m = await client.getMarkets({ sort: 'volume', order: 'desc', limit: 3 });
+    return `${m.length} markets`;
   });
 
-  // 3. getMarketInfo (x402-market-info)
-  await test('x402-market-info', async () => {
-    const info = await client.getMarketInfo(MARKET);
-    return `"${(info.question || '').slice(0, 50)}..." resolved=${info.resolved}`;
+  await test('getMarkets({ status: "ACTIVE" })', 1, async () => {
+    const m = await client.getMarkets({ status: 'ACTIVE' });
+    if (m.length > 0 && !activeMarket) activeMarket = m[0].address;
+    return `${m.length} active markets`;
   });
 
-  // 4. getMarketData (x402-market-data) - if it exists in SDK
-  await test('x402-market-data', async () => {
-    // market-data might be accessed via getMarketInfo or a separate method
-    if (typeof (client as any).getMarketData === 'function') {
-      const data = await (client as any).getMarketData(MARKET);
-      return JSON.stringify(data).slice(0, 100);
-    }
-    // Try direct fetch
-    const resp = await fetch(`https://qkcytrdhdtemyphsswou.supabase.co/functions/v1/x402-market-data`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ marketAddress: MARKET }),
-    });
-    if (resp.status === 402) return `402 returned (x402 working, needs payment)`;
-    return `Status: ${resp.status}`;
+  await test('getMarkets({ resolved: false, limit: 2, offset: 1 })', 1, async () => {
+    const m = await client.getMarkets({ resolved: false, limit: 2, offset: 1 });
+    return `${m.length} markets (page 2)`;
   });
 
-  // 5. getPosition (x402-position)
-  await test('x402-position', async () => {
-    const pos = await client.getPosition(MARKET);
-    return `YES: ${pos.yesShares?.toString() || '0'}, NO: ${pos.noShares?.toString() || '0'}`;
+  if (!activeMarket) {
+    console.error('\nNo active market found — cannot continue');
+    process.exit(1);
+  }
+  console.log(`\nUsing market: ${activeMarket}`);
+
+  // ============================================================
+  // x402-prices
+  // ============================================================
+  console.log('\n=== x402-prices (0.0001 USDC) ===');
+
+  await test('getPrices(market)', 1, async () => {
+    const p = await client.getPrices(activeMarket!);
+    return `YES: ${(p.yes * 100).toFixed(1)}%, NO: ${(p.no * 100).toFixed(1)}%`;
   });
 
-  // 6. getPortfolio (x402-portfolio)
-  await test('x402-portfolio', async () => {
-    const portfolio = await client.getPortfolio();
-    const count = portfolio.positions?.length ?? 0;
-    return `${count} positions`;
+  // ============================================================
+  // x402-market-info
+  // ============================================================
+  console.log('\n=== x402-market-info (0.0001 USDC) ===');
+
+  await test('getMarketInfo(market)', 1, async () => {
+    const info = await client.getMarketInfo(activeMarket!);
+    return `"${(info.question || '').slice(0, 50)}" resolved=${info.resolved}`;
   });
 
-  // 7. buy (x402-agent-trade)
-  await test('x402-agent-trade (buy)', async () => {
-    const result = await client.buy(MARKET, false, '0.1');
-    return `TX: ${result.txHash?.slice(0, 18)}... shares: ${result.sharesReceived || 'confirmed'}`;
+  // ============================================================
+  // x402-market-data (premium analytics)
+  // ============================================================
+  console.log('\n=== x402-market-data (0.0001 USDC) ===');
+
+  await test('getPremiumMarketData(market)', 1, async () => {
+    const d = await client.getPremiumMarketData(activeMarket!);
+    const a = d.analytics;
+    if (!a) return 'No analytics available';
+    return `heat=${a.heatScore} stress=${a.stressScore?.toFixed(2)} frag=${a.fragility?.toFixed(2)} v1m=${a.velocity?.v1m}`;
   });
 
-  // 8. sell (x402-agent-trade)
-  await test('x402-agent-trade (sell)', async () => {
-    // Sell the NO shares we just bought
-    const pos = await client.getPosition(MARKET);
-    const noShares = pos.noShares || 0n;
-    if (noShares === 0n) return 'SKIP: no NO shares to sell';
-    const result = await client.sell(MARKET, false, noShares);
-    return `TX: ${result.txHash?.slice(0, 18)}...`;
+  // ============================================================
+  // x402-position
+  // ============================================================
+  console.log('\n=== x402-position (0.0001 USDC) ===');
+
+  await test('getPosition(market)', 1, async () => {
+    const pos = await client.getPosition(activeMarket!);
+    return `YES: ${pos.yesShares.toString()}, NO: ${pos.noShares.toString()}`;
   });
 
-  // 9. canResolve / resolve (x402-resolve) - just check, don't actually resolve
-  await test('x402-resolve (canResolve check)', async () => {
-    const status = await client.canResolve(MARKET);
-    return `canResolve: ${JSON.stringify(status)}`;
+  // ============================================================
+  // x402-portfolio
+  // ============================================================
+  console.log('\n=== x402-portfolio (0.0001 USDC) ===');
+
+  await test('getPortfolio()', 1, async () => {
+    const p = await client.getPortfolio();
+    return `${p.summary.totalPositions} positions, $${p.summary.totalValue} USDC`;
   });
 
-  // 10. getFeeInfo / claimCreatorFees (x402-claim-fees)
-  await test('x402-claim-fees (getFeeInfo)', async () => {
-    const feeInfo = await client.getFeeInfo(MARKET);
-    return `pending: ${feeInfo.pendingCreatorFeesFormatted} USDC, creator: ${feeInfo.marketCreator.slice(0, 10)}..., isCreator: ${feeInfo.isCreator}`;
+  // ============================================================
+  // FREE: getBuyQuote / getSellQuote (on-chain reads)
+  // ============================================================
+  console.log('\n=== FREE: Quote reads ===');
+
+  await test('getBuyQuote(market, YES, "1")', 0, async () => {
+    const q = await client.getBuyQuote(activeMarket!, true, '1');
+    return `shares=${q.shares.toString()}, avgPrice=${q.averagePrice.toFixed(4)}`;
   });
 
-  // 11. redeem (x402-redeem) - just check, market not resolved so should fail gracefully
-  await test('x402-redeem', async () => {
+  await test('getBuyQuote(market, NO, "0.5")', 0, async () => {
+    const q = await client.getBuyQuote(activeMarket!, false, '0.5');
+    return `shares=${q.shares.toString()}`;
+  });
+
+  await test('getSellQuote(market, YES, 1e18)', 0, async () => {
+    const q = await client.getSellQuote(activeMarket!, true, 1000000000000000000n);
+    return `payout=${q.payout.toString()}`;
+  });
+
+  // ============================================================
+  // x402-agent-trade: buy + sell
+  // ============================================================
+  console.log('\n=== x402-agent-trade (0.0001 USDC + gas each) ===');
+
+  await test('buy(market, YES, "0.1")', 1, async () => {
+    const r = await client.buy(activeMarket!, true, '0.1');
+    return `tx=${r.txHash.slice(0, 18)}... shares=${r.shares.toString()}`;
+  });
+
+  // Sell what we just bought
+  await test('sell(market, YES, shares)', 1, async () => {
+    // Need position to know how many shares (costs 0.0001)
+    const pos = await client.getPosition(activeMarket!);
+    if (pos.yesShares === 0n) return 'SKIP: no YES shares';
+    const r = await client.sell(activeMarket!, true, pos.yesShares);
+    return `tx=${r.txHash.slice(0, 18)}... payout=${r.cost.toString()}`;
+  });
+
+  // ============================================================
+  // x402-claim-fees (getFeeInfo)
+  // ============================================================
+  console.log('\n=== x402-claim-fees (0.0001 USDC) ===');
+
+  await test('getFeeInfo(market)', 1, async () => {
+    const f = await client.getFeeInfo(activeMarket!);
+    return `pending=${f.pendingCreatorFeesFormatted} USDC, isCreator=${f.isCreator}`;
+  });
+
+  // ============================================================
+  // x402-resolve (canResolve — calls getMarketInfo internally)
+  // ============================================================
+  console.log('\n=== canResolve (0.0001 USDC via getMarketInfo) ===');
+
+  await test('canResolve(market)', 1, async () => {
+    const s = await client.canResolve(activeMarket!);
+    return `canResolve=${s.canResolve}, isOracle=${s.isOracle}, reason=${s.reason || 'none'}`;
+  });
+
+  // ============================================================
+  // x402-redeem (expected to fail — market not resolved)
+  // ============================================================
+  console.log('\n=== x402-redeem (0.0001 USDC) ===');
+
+  await test('redeem(market) — expect rejection', 1, async () => {
     try {
-      await client.redeem(MARKET);
-      return 'redeemed (unexpected - market not resolved)';
+      await client.redeem(activeMarket!);
+      return 'Redeemed (unexpected)';
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : String(err);
-      if (msg.includes('not resolved') || msg.includes('revert') || msg.includes('MarketNotResolved')) {
-        return `Correctly rejected: market not resolved`;
+      if (msg.includes('revert') || msg.includes('not resolved') || msg.includes('reverted')) {
+        return `Correctly rejected: ${msg.slice(0, 80)}`;
       }
-      throw err;
+      throw err; // Unexpected error
     }
   });
 
-  // 12. deploy-market - just verify 402 response (don't actually deploy)
-  await test('x402-deploy-market (402 check)', async () => {
-    const resp = await fetch(`https://qkcytrdhdtemyphsswou.supabase.co/functions/v1/x402-deploy-market`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({}),
+  // ============================================================
+  // 402-only checks (don't pay — just verify challenge)
+  // ============================================================
+  console.log('\n=== 402 challenge checks (FREE — no payment) ===');
+
+  for (const ep of ['x402-deploy-market', 'x402-initialize', 'x402-create-market']) {
+    await test(`${ep} (402 check)`, 0, async () => {
+      const resp = await fetch(`https://qkcytrdhdtemyphsswou.supabase.co/functions/v1/${ep}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({}),
+      });
+      return resp.status === 402 ? '402 returned correctly' : `Status: ${resp.status} (expected 402)`;
     });
-    if (resp.status === 402) return `402 returned correctly`;
-    return `Status: ${resp.status} (expected 402)`;
-  });
-
-  // 13. initialize - just verify 402 response
-  await test('x402-initialize (402 check)', async () => {
-    const resp = await fetch(`https://qkcytrdhdtemyphsswou.supabase.co/functions/v1/x402-initialize`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({}),
-    });
-    if (resp.status === 402) return `402 returned correctly`;
-    return `Status: ${resp.status} (expected 402)`;
-  });
-
-  // 14. create-market (listing) - just verify 402 response
-  await test('x402-create-market (402 check)', async () => {
-    const resp = await fetch(`https://qkcytrdhdtemyphsswou.supabase.co/functions/v1/x402-create-market`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({}),
-    });
-    if (resp.status === 402) return `402 returned correctly`;
-    return `Status: ${resp.status} (expected 402)`;
-  });
-
-  // Print results
-  console.log('\n' + '='.repeat(80));
-  console.log('RESULTS');
-  console.log('='.repeat(80));
-
-  let passed = 0, failed = 0;
-  for (const r of results) {
-    const icon = r.status === 'PASS' ? 'OK' : 'XX';
-    console.log(`  [${icon}] ${r.endpoint.padEnd(42)} ${r.detail}`);
-    if (r.status === 'PASS') passed++; else failed++;
   }
 
-  console.log('='.repeat(80));
-  console.log(`${passed} passed, ${failed} failed out of ${results.length} tests`);
+  // ============================================================
+  // Summary
+  // ============================================================
+  const endUsdc = await client.getUSDCBalance();
+  const endMon = await client.getMONBalance();
+  const totalX402Calls = results.filter(r => r.status === 'PASS').reduce((sum, r) => sum + r.x402Calls, 0);
+  const totalFees = totalX402Calls * FEE;
+  const actualSpent = parseFloat(startUsdc) - parseFloat(endUsdc);
+  const gasSpent = parseFloat(startMon) - parseFloat(endMon);
 
-  if (failed > 0) process.exit(1);
+  const passed = results.filter(r => r.status === 'PASS').length;
+  const failed = results.filter(r => r.status === 'FAIL').length;
+
+  console.log('\n' + '='.repeat(80));
+  console.log('SUMMARY');
+  console.log('='.repeat(80));
+  console.log(`  Tests:        ${passed} passed, ${failed} failed, ${results.length} total`);
+  console.log(`  x402 calls:   ${totalX402Calls} (expected fee: ${totalFees.toFixed(4)} USDC)`);
+  console.log(`  USDC spent:   ${actualSpent.toFixed(6)} USDC (start: ${startUsdc}, end: ${endUsdc})`);
+  console.log(`  Gas spent:    ${gasSpent.toFixed(6)} MON (start: ${parseFloat(startMon).toFixed(6)}, end: ${parseFloat(endMon).toFixed(6)})`);
+  console.log('='.repeat(80));
+
+  if (failed > 0) {
+    console.log('\nFailed tests:');
+    for (const r of results.filter(r => r.status === 'FAIL')) {
+      console.log(`  [XX] ${r.name}: ${r.detail}`);
+    }
+    process.exit(1);
+  }
 }
 
 main().catch(err => {
