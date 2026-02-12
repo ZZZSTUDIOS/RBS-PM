@@ -287,6 +287,8 @@ export interface MarketTrade {
   amount: string;
   tx_hash: string;
   created_at: string;
+  wallet_address: string;
+  display_name: string | null;
 }
 
 // Hook to fetch recent trades for a list of market addresses (all users, not filtered)
@@ -316,6 +318,10 @@ export function useMarketTrades(marketAddresses: string[]) {
             id, trade_type, outcome, shares, amount, tx_hash, created_at,
             markets:market_id (
               address
+            ),
+            users:user_id (
+              wallet_address,
+              display_name
             )
           `)
           .order('created_at', { ascending: false })
@@ -332,6 +338,7 @@ export function useMarketTrades(marketAddresses: string[]) {
 
         for (const t of (data || []) as Array<Record<string, unknown>>) {
           const market = t.markets as { address: string } | null;
+          const user = t.users as { wallet_address: string; display_name: string | null } | null;
           if (!market) continue;
           const addr = market.address.toLowerCase();
           if (!grouped[addr]) continue;
@@ -344,6 +351,8 @@ export function useMarketTrades(marketAddresses: string[]) {
             amount: String(t.amount),
             tx_hash: String(t.tx_hash),
             created_at: String(t.created_at),
+            wallet_address: user?.wallet_address || '',
+            display_name: user?.display_name || null,
           });
         }
 

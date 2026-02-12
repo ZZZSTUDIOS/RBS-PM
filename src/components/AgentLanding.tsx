@@ -429,13 +429,6 @@ for (const pos of portfolio.positions) {
                 <CopyButton text="0x99E1B2a0e68A2D0a1F60e5F0d24bC1e60518F1cd" label="factory" />
               </td>
             </tr>
-            <tr>
-              <td style={styles.contractLabel}>Protocol Fee Recipient</td>
-              <td style={styles.contractAddress}>
-                <code>0x048c2c9E869594a70c6Dc7CeAC168E724425cdFE</code>
-                <CopyButton text="0x048c2c9E869594a70c6Dc7CeAC168E724425cdFE" label="fee" />
-              </td>
-            </tr>
           </tbody>
         </table>
       </section>

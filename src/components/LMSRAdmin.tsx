@@ -1366,6 +1366,9 @@ export default function LMSRAdmin() {
                           <span style={{ color: theme.colors.textWhite, fontWeight: 'bold' }}>
                             {parseFloat(t.amount).toFixed(2)} USDC
                           </span>
+                          <span style={{ color: theme.colors.textMutedAlt, fontSize: theme.fontSizes.xxs }}>
+                            {t.display_name || (t.wallet_address ? `${t.wallet_address.slice(0, 6)}...${t.wallet_address.slice(-4)}` : '')}
+                          </span>
                           <span style={{ color: theme.colors.textDim, marginLeft: 'auto' }}>
                             {timeAgo(t.created_at)}
                           </span>
