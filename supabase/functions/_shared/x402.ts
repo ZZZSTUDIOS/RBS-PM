@@ -11,13 +11,11 @@ export const X402_CONFIG = {
   recipient: "0x048c2c9E869594a70c6Dc7CeAC168E724425cdFE",
   price: "100", // 0.0001 USDC
   priceFormatted: "0.0001 USDC",
-  maxTimeoutSeconds: 3600,
-  // EIP-712 domain for USDC TransferWithAuthorization
-  usdcDomain: {
+  maxTimeoutSeconds: 300,
+  // EIP-712 extra for facilitator (only name + version per API docs)
+  extra: {
     name: "USDC",
     version: "2",
-    chainId: 10143,
-    verifyingContract: "0x534b2f3A21130d7a60830c2Df862319e593943A3",
   },
 };
 
@@ -38,7 +36,7 @@ export function createPaymentRequiredResponse(description: string): Response {
         asset: X402_CONFIG.asset,
         payTo: X402_CONFIG.recipient,
         maxTimeoutSeconds: X402_CONFIG.maxTimeoutSeconds,
-        extra: X402_CONFIG.usdcDomain,
+        extra: X402_CONFIG.extra,
       },
     ],
   };
@@ -71,7 +69,7 @@ function getPaymentRequirements() {
     asset: X402_CONFIG.asset,
     payTo: X402_CONFIG.recipient,
     maxTimeoutSeconds: X402_CONFIG.maxTimeoutSeconds,
-    extra: X402_CONFIG.usdcDomain,
+    extra: X402_CONFIG.extra,
   };
 }
 
@@ -102,11 +100,22 @@ export async function verifyAndSettlePayment(
 
     // Payment received (redacted for security)
 
-    // Build the facilitator request
+    // Extract the inner payload from the SDK's payment structure
+    const sdkPayload = paymentPayload as {
+      payload?: { authorization?: Record<string, unknown>; signature?: string };
+      accepted?: Record<string, unknown>;
+    };
+
+    // Build facilitator request matching Monad facilitator's expected format
     const facilitatorRequest = {
       x402Version: X402_CONFIG.version,
-      paymentPayload,
-      paymentRequirements: getPaymentRequirements(),
+      payload: sdkPayload.payload || paymentPayload, // { authorization, signature }
+      accepted: sdkPayload.accepted || getPaymentRequirements(),
+      resource: {
+        url: "https://rbs-pm.vercel.app",
+        description: "RBS Prediction Market API",
+        mimeType: "application/json",
+      },
     };
 
     // Verify the payment
@@ -155,7 +164,7 @@ export async function verifyAndSettlePayment(
         const settleResult = await settleResponse.json();
         console.log("Settle result:", settleResult);
         settled = settleResult.success !== false;
-        settlementTxHash = settleResult.txHash || settleResult.transactionHash;
+        settlementTxHash = settleResult.transaction || settleResult.txHash || settleResult.transactionHash;
       } else {
         const settleError = await settleResponse.text();
         console.warn("Settlement failed:", settleResponse.status, settleError);

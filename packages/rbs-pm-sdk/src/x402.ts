@@ -34,8 +34,6 @@ interface PaymentAccepted {
   extra?: {
     name: string;
     version: string;
-    chainId: number;
-    verifyingContract: string;
   };
 }
 
@@ -45,8 +43,8 @@ interface PaymentRequired {
 }
 
 // Retry config for facilitator rate-limiting
-const MAX_RETRIES = 4;
-const INITIAL_BACKOFF_MS = 5000;
+const MAX_RETRIES = 3;
+const RETRY_DELAY_MS = 3000;
 
 /**
  * Create a fetch wrapper that automatically handles x402 payments.
@@ -58,11 +56,9 @@ export function createX402Fetch(
 ): (input: string | URL | Request, init?: RequestInit) => Promise<Response> {
   return async (input: string | URL | Request, init?: RequestInit): Promise<Response> => {
     for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
-      // Exponential backoff with jitter before retries
+      // Fixed delay before retries (calls are already queued sequentially)
       if (attempt > 0) {
-        const baseDelay = INITIAL_BACKOFF_MS * Math.pow(2, attempt - 1);
-        const jitter = Math.floor(Math.random() * 2000);
-        await new Promise(r => setTimeout(r, baseDelay + jitter));
+        await new Promise(r => setTimeout(r, RETRY_DELAY_MS));
       }
 
       // Make the initial request
@@ -111,14 +107,18 @@ export function createX402Fetch(
       };
 
       // Sign the authorization
+      // Always use local USDC_DOMAIN for full EIP-712 domain (chainId, verifyingContract)
+      // Server extra only provides { name, version } per x402 facilitator API spec
+      const signingDomain = {
+        name: accepted.extra?.name ?? USDC_DOMAIN.name,
+        version: accepted.extra?.version ?? USDC_DOMAIN.version,
+        chainId: USDC_DOMAIN.chainId,
+        verifyingContract: USDC_DOMAIN.verifyingContract,
+      };
+
       const signature = await walletClient.signTypedData({
         account,
-        domain: accepted.extra ? {
-          name: accepted.extra.name,
-          version: accepted.extra.version,
-          chainId: accepted.extra.chainId,
-          verifyingContract: accepted.extra.verifyingContract as `0x${string}`,
-        } : USDC_DOMAIN,
+        domain: signingDomain,
         types: TRANSFER_WITH_AUTH_TYPES,
         primaryType: 'TransferWithAuthorization',
         message: authorization,

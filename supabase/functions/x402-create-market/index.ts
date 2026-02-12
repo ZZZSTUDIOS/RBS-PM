@@ -17,19 +17,16 @@ const X402_CONFIG = {
   facilitator: "https://x402-facilitator.molandak.org",
   scheme: "exact",
   asset: USDC_ADDRESS, // Use contract address, not symbol
-  maxTimeoutSeconds: 3600,
+  maxTimeoutSeconds: 300,
   prices: {
     createMarket: "100", // 0.0001 USDC (6 decimals)
   },
   // Protocol fee recipient
   recipient: "0x048c2c9E869594a70c6Dc7CeAC168E724425cdFE",
-  // EIP-712 domain for USDC TransferWithAuthorization
-  // Monad USDC uses 'USDC' (not 'USD Coin')
-  usdcDomain: {
+  // EIP-712 extra for facilitator (only name + version per API docs)
+  extra: {
     name: "USDC",
     version: "2",
-    chainId: 10143,
-    verifyingContract: USDC_ADDRESS,
   },
 };
 
@@ -73,12 +70,7 @@ function createPaymentRequiredResponse(url: string, error?: string) {
         asset: X402_CONFIG.asset,
         payTo: X402_CONFIG.recipient,
         maxTimeoutSeconds: X402_CONFIG.maxTimeoutSeconds,
-        extra: {
-          name: X402_CONFIG.usdcDomain.name,
-          version: X402_CONFIG.usdcDomain.version,
-          chainId: X402_CONFIG.usdcDomain.chainId,
-          verifyingContract: X402_CONFIG.usdcDomain.verifyingContract,
-        },
+        extra: X402_CONFIG.extra,
       },
     ],
   };
@@ -90,7 +82,7 @@ function createPaymentRequiredResponse(url: string, error?: string) {
 }
 
 // Parse x402 v2 payment signature header
-function parsePaymentSignature(header: string): { x402Version: number; accepted: unknown; payload: unknown } | null {
+function parsePaymentSignature(header: string): { x402Version: number; accepted?: unknown; payload: unknown } | null {
   try {
     const decoded = safeBase64Decode(header);
     return JSON.parse(decoded);
@@ -101,21 +93,29 @@ function parsePaymentSignature(header: string): { x402Version: number; accepted:
 
 // Verify and settle payment with facilitator
 async function verifyAndSettlePayment(
-  paymentPayload: unknown,
+  paymentData: { x402Version: number; payload: unknown; accepted?: unknown },
   paymentRequirements: unknown
 ): Promise<{ success: boolean; txHash?: string; error?: string }> {
   try {
     console.log("Verifying payment with facilitator...");
 
+    // Build facilitator request matching documented API format
+    const facilitatorRequest = {
+      x402Version: X402_CONFIG.version,
+      payload: paymentData.payload, // { authorization, signature }
+      resource: {
+        url: "https://rbs-pm.vercel.app/x402-create-market",
+        description: "Market creation listing fee",
+        mimeType: "application/json",
+      },
+      accepted: paymentData.accepted || paymentRequirements,
+    };
+
     // First verify
     const verifyResponse = await fetch(`${X402_CONFIG.facilitator}/verify`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        x402Version: X402_CONFIG.version,
-        paymentPayload,
-        paymentRequirements,
-      }),
+      body: JSON.stringify(facilitatorRequest),
     });
 
     if (!verifyResponse.ok) {
@@ -136,11 +136,7 @@ async function verifyAndSettlePayment(
     const settleResponse = await fetch(`${X402_CONFIG.facilitator}/settle`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        x402Version: X402_CONFIG.version,
-        paymentPayload,
-        paymentRequirements,
-      }),
+      body: JSON.stringify(facilitatorRequest),
     });
 
     if (!settleResponse.ok) {
@@ -153,12 +149,12 @@ async function verifyAndSettlePayment(
     console.log("Settle result:", settleResult);
 
     if (!settleResult.success) {
-      return { success: false, error: settleResult.error || "Settlement failed" };
+      return { success: false, error: settleResult.errorReason || settleResult.error || "Settlement failed" };
     }
 
     return {
       success: true,
-      txHash: settleResult.txHash || settleResult.transactionHash,
+      txHash: settleResult.transaction || settleResult.txHash || settleResult.transactionHash,
     };
   } catch (err) {
     console.error("Payment processing error:", err);
@@ -221,7 +217,7 @@ serve(async (req: Request) => {
       );
     }
 
-    // Build payment requirements for verification
+    // Build payment requirements for verification (accepted format)
     const paymentRequirements = {
       scheme: X402_CONFIG.scheme,
       network: X402_CONFIG.network,
@@ -229,12 +225,7 @@ serve(async (req: Request) => {
       asset: X402_CONFIG.asset,
       payTo: X402_CONFIG.recipient,
       maxTimeoutSeconds: X402_CONFIG.maxTimeoutSeconds,
-      extra: {
-        name: X402_CONFIG.usdcDomain.name,
-        version: X402_CONFIG.usdcDomain.version,
-        chainId: X402_CONFIG.usdcDomain.chainId,
-        verifyingContract: X402_CONFIG.usdcDomain.verifyingContract,
-      },
+      extra: X402_CONFIG.extra,
     };
 
     // Parse and validate request body BEFORE charging payment
