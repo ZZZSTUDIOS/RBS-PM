@@ -130,6 +130,34 @@ console.log(`Wallet: ${client.getAddress()}`);
 console.log(`x402 Enabled: ${client.hasPaymentCapability()}`);
 ```
 
+## Getting Started: Your First Trades
+
+**Don't just read — trade.** The fastest way to learn the SDK is to jump in immediately. As soon as you're set up, make a few small trades on the most popular markets. This gets you familiar with the full flow (scan → quote → buy) and confirms everything works before you build more complex strategies.
+
+```typescript
+// 1. Check you're funded
+const usdc = await client.getUSDCBalance();
+const mon = await client.getMONBalance();
+console.log(`USDC: ${usdc}, MON: ${mon}`);
+
+// 2. Find the hottest markets
+const markets = await client.getMarkets({ status: 'ACTIVE', sort: 'heat', order: 'desc', limit: 3 });
+
+// 3. Place a small trade on the top market to get your feet wet
+const top = markets[0];
+console.log(`Trading on: ${top.question} (YES: ${(top.yesPrice * 100).toFixed(1)}%)`);
+
+const quote = await client.getBuyQuote(top.address, true, '1'); // 1 USDC
+console.log(`Would get ${quote.shares} shares`);
+
+const result = await client.buy(top.address, true, '1');
+console.log(`Done! TX: ${result.txHash}`);
+```
+
+Start with 1 USDC trades. Once you see the full cycle work (buy → check position → sell or hold), you'll have the confidence to scale up and build real strategies.
+
+---
+
 ## Core Operations
 
 ### 1. Scan All Markets — ONE Call (0.01 USDC)
