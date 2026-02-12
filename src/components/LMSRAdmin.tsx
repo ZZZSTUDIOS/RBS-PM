@@ -361,6 +361,7 @@ export default function LMSRAdmin() {
 
   // Estimated shares state
   const [estimatedShares, setEstimatedShares] = useState<string>('0');
+  const [referenceAvgPrice, setReferenceAvgPrice] = useState<number>(0); // baseline cost per share for tiny trade
   const [isEstimating, setIsEstimating] = useState(false);
 
   // User's token balances for selling
@@ -494,15 +495,27 @@ export default function LMSRAdmin() {
 
       setIsEstimating(true);
       try {
-        const sharesBigInt = await estimateSharesOnChain(
-          tradeParams.marketAddress as Address,
-          tradeParams.isYes,
-          tradeParams.amount,
-        );
+        // Estimate shares for user's amount AND a tiny reference amount (for price impact baseline)
+        const [sharesBigInt, refSharesBigInt] = await Promise.all([
+          estimateSharesOnChain(
+            tradeParams.marketAddress as Address,
+            tradeParams.isYes,
+            tradeParams.amount,
+          ),
+          estimateSharesOnChain(
+            tradeParams.marketAddress as Address,
+            tradeParams.isYes,
+            '0.01', // 0.01 USDC reference trade
+          ),
+        ]);
         setEstimatedShares(formatUnits(sharesBigInt, 18));
+        // Reference avg price = cost / shares for tiny trade (captures entropy premium)
+        const refShares = parseFloat(formatUnits(refSharesBigInt, 18));
+        setReferenceAvgPrice(refShares > 0 ? 0.01 / refShares : 0);
       } catch (err) {
         console.error('Failed to estimate shares:', err);
         setEstimatedShares('0');
+        setReferenceAvgPrice(0);
       } finally {
         setIsEstimating(false);
       }
@@ -604,14 +617,26 @@ export default function LMSRAdmin() {
 
       try {
         const sharesToSell = parseEther(tradeParams.amount);
-        const payout = await publicClient.readContract({
-          address: tradeParams.marketAddress as Address,
-          abi: LSLMSR_ABI,
-          functionName: 'getPayoutForSell',
-          args: [tradeParams.isYes, sharesToSell],
-        }) as bigint;
+        const refShares = parseEther('0.01'); // tiny reference for price impact baseline
+        const [payout, refPayout] = await Promise.all([
+          publicClient.readContract({
+            address: tradeParams.marketAddress as Address,
+            abi: LSLMSR_ABI,
+            functionName: 'getPayoutForSell',
+            args: [tradeParams.isYes, sharesToSell],
+          }) as Promise<bigint>,
+          publicClient.readContract({
+            address: tradeParams.marketAddress as Address,
+            abi: LSLMSR_ABI,
+            functionName: 'getPayoutForSell',
+            args: [tradeParams.isYes, refShares],
+          }) as Promise<bigint>,
+        ]);
 
         setEstimatedPayout(formatEther(payout));
+        // Reference: payout per share for tiny sell
+        const refPayoutNum = parseFloat(formatEther(refPayout));
+        setReferenceAvgPrice(refPayoutNum > 0 ? refPayoutNum / 0.01 : 0);
       } catch (err) {
         console.error('Failed to estimate payout:', err);
         setEstimatedPayout('0');
@@ -1558,13 +1583,10 @@ export default function LMSRAdmin() {
                           if (!marketInfo || !tradeParams.amount || parseFloat(tradeParams.amount) <= 0 || parseFloat(estimatedShares) <= 0 || isEstimating) {
                             return <span style={{ color: theme.colors.textDim, fontSize: theme.fontSizes.nav }}>--</span>;
                           }
-                          // Use spot price (LS-LMSR price) as baseline — NOT probability (which lacks entropy premium)
-                          const spotPrice = Number(tradeParams.isYes
-                            ? marketInfo.yesPrice
-                            : marketInfo.noPrice) / 1e18;
-                          if (spotPrice <= 0) return <span style={{ color: theme.colors.textDim, fontSize: theme.fontSizes.nav }}>--</span>;
+                          // Compare avg price to reference tiny-trade avg price (captures entropy premium baseline)
+                          if (referenceAvgPrice <= 0) return <span style={{ color: theme.colors.textDim, fontSize: theme.fontSizes.nav }}>--</span>;
                           const avgPrice = parseFloat(tradeParams.amount) / parseFloat(estimatedShares);
-                          const impact = ((avgPrice - spotPrice) / spotPrice) * 100;
+                          const impact = ((avgPrice - referenceAvgPrice) / referenceAvgPrice) * 100;
                           const absImpact = Math.abs(impact);
                           const impactColor = absImpact < 1 ? theme.colors.primary : absImpact < 5 ? theme.colors.highlight : theme.colors.warning;
                           return (
@@ -1590,13 +1612,10 @@ export default function LMSRAdmin() {
                           if (!marketInfo || !tradeParams.amount || parseFloat(tradeParams.amount) <= 0 || parseFloat(estimatedPayout) <= 0) {
                             return <span style={{ color: theme.colors.textDim, fontSize: theme.fontSizes.nav }}>--</span>;
                           }
-                          // Use spot price (LS-LMSR price) as baseline — NOT probability (which lacks entropy premium)
-                          const spotPrice = Number(tradeParams.isYes
-                            ? marketInfo.yesPrice
-                            : marketInfo.noPrice) / 1e18;
-                          if (spotPrice <= 0) return <span style={{ color: theme.colors.textDim, fontSize: theme.fontSizes.nav }}>--</span>;
+                          // Compare payout per share to reference tiny-trade payout per share
+                          if (referenceAvgPrice <= 0) return <span style={{ color: theme.colors.textDim, fontSize: theme.fontSizes.nav }}>--</span>;
                           const avgPrice = parseFloat(estimatedPayout) / parseFloat(tradeParams.amount);
-                          const impact = ((spotPrice - avgPrice) / spotPrice) * 100;
+                          const impact = ((referenceAvgPrice - avgPrice) / referenceAvgPrice) * 100;
                           const absImpact = Math.abs(impact);
                           const impactColor = absImpact < 1 ? theme.colors.primary : absImpact < 5 ? theme.colors.highlight : theme.colors.warning;
                           return (
