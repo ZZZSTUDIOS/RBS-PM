@@ -1558,12 +1558,13 @@ export default function LMSRAdmin() {
                           if (!marketInfo || !tradeParams.amount || parseFloat(tradeParams.amount) <= 0 || parseFloat(estimatedShares) <= 0 || isEstimating) {
                             return <span style={{ color: theme.colors.textDim, fontSize: theme.fontSizes.nav }}>--</span>;
                           }
-                          // Use probability (softmax) as fair value — price includes entropy premium
-                          const fairValue = Number(tradeParams.isYes
-                            ? (marketInfo.yesProbability || marketInfo.yesPrice)
-                            : (marketInfo.noProbability || marketInfo.noPrice)) / 1e18;
+                          // Use spot price (LS-LMSR price) as baseline — NOT probability (which lacks entropy premium)
+                          const spotPrice = Number(tradeParams.isYes
+                            ? marketInfo.yesPrice
+                            : marketInfo.noPrice) / 1e18;
+                          if (spotPrice <= 0) return <span style={{ color: theme.colors.textDim, fontSize: theme.fontSizes.nav }}>--</span>;
                           const avgPrice = parseFloat(tradeParams.amount) / parseFloat(estimatedShares);
-                          const impact = ((avgPrice - fairValue) / fairValue) * 100;
+                          const impact = ((avgPrice - spotPrice) / spotPrice) * 100;
                           const absImpact = Math.abs(impact);
                           const impactColor = absImpact < 1 ? theme.colors.primary : absImpact < 5 ? theme.colors.highlight : theme.colors.warning;
                           return (
@@ -1589,12 +1590,13 @@ export default function LMSRAdmin() {
                           if (!marketInfo || !tradeParams.amount || parseFloat(tradeParams.amount) <= 0 || parseFloat(estimatedPayout) <= 0) {
                             return <span style={{ color: theme.colors.textDim, fontSize: theme.fontSizes.nav }}>--</span>;
                           }
-                          // Use probability (softmax) as fair value — price includes entropy premium
-                          const fairValue = Number(tradeParams.isYes
-                            ? (marketInfo.yesProbability || marketInfo.yesPrice)
-                            : (marketInfo.noProbability || marketInfo.noPrice)) / 1e18;
+                          // Use spot price (LS-LMSR price) as baseline — NOT probability (which lacks entropy premium)
+                          const spotPrice = Number(tradeParams.isYes
+                            ? marketInfo.yesPrice
+                            : marketInfo.noPrice) / 1e18;
+                          if (spotPrice <= 0) return <span style={{ color: theme.colors.textDim, fontSize: theme.fontSizes.nav }}>--</span>;
                           const avgPrice = parseFloat(estimatedPayout) / parseFloat(tradeParams.amount);
-                          const impact = ((fairValue - avgPrice) / fairValue) * 100;
+                          const impact = ((spotPrice - avgPrice) / spotPrice) * 100;
                           const absImpact = Math.abs(impact);
                           const impactColor = absImpact < 1 ? theme.colors.primary : absImpact < 5 ? theme.colors.highlight : theme.colors.warning;
                           return (
