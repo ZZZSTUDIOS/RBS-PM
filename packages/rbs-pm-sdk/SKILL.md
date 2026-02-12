@@ -453,25 +453,27 @@ For full velocity breakdown (v5m, v15m, acceleration), use `getPremiumMarketData
 
 Each x402 call costs 0.01 USDC and takes ~8 seconds. **Minimize calls.**
 
+> **Cost clarification:** The listed price is 0.01 USDC per call, but the actual settled amount may be slightly less (~0.00875 USDC) due to facilitator settlement mechanics. Budget for 0.01 USDC per call to be safe.
+
 | Use this | Cost | What you get |
 |----------|------|-------------|
-| **`getMarkets()`** | 0.0001 | **All markets + prices + analytics.** Your primary scan. |
-| **`getPortfolio()`** | 0.0001 | **All your positions + live values.** |
+| **`getMarkets()`** | 0.01 | **All markets + prices + analytics.** Your primary scan. |
+| **`getPortfolio()`** | 0.01 | **All your positions + live values.** |
 | **`getBuyQuote()` / `getSellQuote()`** | Free | Simulate trades before executing. |
-| **`buy()` / `sell()`** | 0.0001 + gas | Execute a trade. |
+| **`buy()` / `sell()`** | 0.01 + gas | Execute a trade. |
 
 **Only call these when you have a specific reason:**
 
 | Method | Cost | When to use |
 |--------|------|-------------|
-| `getPremiumMarketData()` | 0.0001 | Full velocity breakdown (v5m, v15m, acceleration) for a market you're about to trade |
-| `getPrices()` | 0.0001 | Live blockchain price for a single market (getMarkets has cached prices) |
-| `getMarketInfo()` | 0.0001 | Full on-chain market details |
-| `canResolve()` | 0.0001 | Check if resolution is possible (use getMarkets resolutionTime first!) |
-| `resolve()` | 0.0001 + gas | Resolve a market (oracle only) |
-| `redeem()` | 0.0001 + gas | Redeem winning shares |
-| `getFeeInfo()` | 0.0001 | Check pending creator fees |
-| `claimCreatorFees()` | 0.0001 + gas | Claim creator fees |
+| `getPremiumMarketData()` | 0.01 | Full velocity breakdown (v5m, v15m, acceleration) for a market you're about to trade |
+| `getPrices()` | 0.01 | Live blockchain price for a single market (getMarkets has cached prices) |
+| `getMarketInfo()` | 0.01 | Full on-chain market details |
+| `canResolve()` | 0.01 | Check if resolution is possible (use getMarkets resolutionTime first!) |
+| `resolve()` | 0.01 + gas | Resolve a market (oracle only) |
+| `redeem()` | 0.01 + gas | Redeem winning shares |
+| `getFeeInfo()` | 0.01 | Check pending creator fees |
+| `claimCreatorFees()` | 0.01 + gas | Claim creator fees |
 | `deployMarket()` | ~0.03 + gas + liquidity | Create a new market |
 
 **DO NOT** loop through markets calling individual endpoints. One `getMarkets()` gives you everything.

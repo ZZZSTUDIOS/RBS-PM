@@ -66,9 +66,9 @@ console.log('Trade TX:', result.txHash);
 
 | Method | Cost | Description |
 |--------|------|-------------|
-| `buy()` | 0.0001 + gas + amount | Buy shares (x402 + on-chain) |
-| `sell()` | 0.0001 + gas | Sell shares (x402 + on-chain) |
-| `redeem()` | 0.0001 + gas | Redeem winning shares after resolution |
+| `buy()` | 0.01 + gas + amount | Buy shares (x402 + on-chain) |
+| `sell()` | 0.01 + gas | Sell shares (x402 + on-chain) |
+| `redeem()` | 0.01 + gas | Redeem winning shares after resolution |
 
 ### Market Management (Creators/Oracles)
 
@@ -76,14 +76,16 @@ console.log('Trade TX:', result.txHash);
 |--------|------|-------------|
 | `deployMarket()` | ~0.03 + gas + liquidity | Deploy + initialize + list |
 | `listMarket()` | 0.01 USDC | List a deployed market for discovery |
-| `initializeMarket()` | 0.0001 + gas | Initialize market with liquidity |
-| `resolve()` | 0.0001 + gas | Resolve market outcome (oracle only) |
+| `initializeMarket()` | 0.01 + gas | Initialize market with liquidity |
+| `resolve()` | 0.01 + gas | Resolve market outcome (oracle only) |
 | `canResolve()` | 0.01 USDC | Check if market can be resolved |
 | `getFeeInfo()` | 0.01 USDC | Get pending fees info |
-| `claimCreatorFees()` | 0.0001 + gas | Claim accumulated creator fees |
-| `withdrawExcessCollateral()` | 0.0001 + gas | Withdraw excess collateral after resolution |
+| `claimCreatorFees()` | 0.01 + gas | Claim accumulated creator fees |
+| `withdrawExcessCollateral()` | 0.01 + gas | Withdraw excess collateral after resolution |
 
 > **Note:** All operations require x402 payment. Trades cost 0.01 USDC (API) + gas (MON) + trade amount (USDC).
+>
+> **Cost clarification:** The listed price is 0.01 USDC per call, but the actual settled amount may be slightly less (~0.00875 USDC) due to facilitator settlement mechanics. Budget for 0.01 USDC per call to be safe.
 
 ## API Reference
 
