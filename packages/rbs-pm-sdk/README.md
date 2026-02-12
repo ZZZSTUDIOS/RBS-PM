@@ -53,7 +53,7 @@ console.log('Trade TX:', result.txHash);
 | `getMarkets(options?)` | 0.0001 USDC | List markets (filter by status, category, creator, etc.) |
 | `getPrices()` | 0.0001 USDC | Get current market prices |
 | `getMarketInfo()` | 0.0001 USDC | Full market details |
-| `getPremiumMarketData()` | 0.0001 USDC | Premium analytics (volume, trades) |
+| `getPremiumMarketData()` | 0.0001 USDC | Premium analytics (velocity, stress, fragility, heat) |
 
 ### Portfolio & Positions
 
@@ -104,6 +104,12 @@ const mine = await client.getMarkets({ creator: '0x...' });
 const prices = await client.getPrices(marketAddress);
 // { yes: 0.65, no: 0.35 }
 
+// Sort by heat score (hottest markets first)
+const hot = await client.getMarkets({ sort: 'heat', order: 'desc', limit: 5 });
+
+// Sort by velocity (fastest moving markets)
+const moving = await client.getMarkets({ sort: 'velocity', order: 'desc' });
+
 // Get full market info
 const info = await client.getMarketInfo(marketAddress);
 // { question, oracle, resolutionTime, resolved, ... }
@@ -115,6 +121,21 @@ const position = await client.getPosition(marketAddress);
 // Get full portfolio (all positions across all markets)
 const portfolio = await client.getPortfolio();
 // { positions: [...], summary: { totalPositions, totalValue } }
+```
+
+### Market Analytics
+
+```typescript
+// Get analytics for a single market (included in getPremiumMarketData)
+const data = await client.getPremiumMarketData(marketAddress);
+console.log('Heat:', data.analytics.heatScore);        // 0-100
+console.log('Stress:', data.analytics.stressScore);     // 0-1
+console.log('Fragility:', data.analytics.fragility);    // 0-1
+console.log('Velocity 1m:', data.analytics.velocity.v1m);
+
+// Analytics are also on each market in getMarkets()
+const markets = await client.getMarkets({ sort: 'heat', order: 'desc' });
+markets.forEach(m => console.log(m.question, 'heat:', m.heatScore));
 ```
 
 ### Trading
@@ -136,13 +157,13 @@ await client.redeem(marketAddress);
 ### Market Creation
 
 ```typescript
-// Deploy, initialize, and list a market in one call
+// Deploy, initialize, and list a market in one call (SPORTS ONLY)
 const result = await client.deployMarket({
-  question: 'Will BTC hit $100k by March 2026?',
-  resolutionTime: Math.floor(Date.now() / 1000) + 30 * 24 * 60 * 60,
+  question: 'Will the Lakers beat the Celtics on March 15, 2026?',
+  resolutionTime: Math.floor(new Date('2026-03-16').getTime() / 1000),
   initialLiquidity: '5', // 5 USDC minimum
-  category: 'crypto',
-  tags: ['bitcoin', 'price'],
+  category: 'sports',
+  tags: ['nba', 'lakers', 'celtics'],
 });
 console.log('Market:', result.marketAddress);
 ```
@@ -178,18 +199,18 @@ const address = client.getAddress();
 ### Market Creation
 
 ```typescript
-// List a deployed market (costs 0.0001 USDC)
+// List a deployed market (costs 0.0001 USDC) — SPORTS ONLY
 const result = await client.listMarket({
   address: '0x...',          // Deployed LSLMSR_ERC20 contract
-  question: 'Will BTC hit $100k?',
+  question: 'Will Manchester City win the Champions League 2026?',
   resolutionTime: 1767225600,
   oracle: '0x...',
   yesTokenAddress: '0x...',
   noTokenAddress: '0x...',
   initialLiquidity: '10',
   alpha: '0.03',
-  category: 'crypto',
-  tags: ['bitcoin', 'price'],
+  category: 'sports',
+  tags: ['soccer', 'champions-league', 'manchester-city'],
 });
 ```
 

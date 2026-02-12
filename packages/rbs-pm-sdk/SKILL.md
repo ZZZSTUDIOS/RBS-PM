@@ -138,6 +138,17 @@ console.log(`x402 Enabled: ${client.hasPaymentCapability()}`);
 // Get all markets (default: 50, newest first)
 const markets = await client.getMarkets();
 
+// Sort by heat score (hottest markets first)
+const hot = await client.getMarkets({
+  status: 'ACTIVE',
+  sort: 'heat',
+  order: 'desc',
+  limit: 5,
+});
+
+// Sort by velocity (fastest moving markets)
+const moving = await client.getMarkets({ sort: 'velocity', order: 'desc' });
+
 // Filter server-side: only active markets, sorted by volume
 const active = await client.getMarkets({
   status: 'ACTIVE',
@@ -153,8 +164,11 @@ const page2 = await client.getMarkets({ limit: 10, offset: 10 });
 const mine = await client.getMarkets({ creator: '0x...' });
 const unresolved = await client.getMarkets({ resolved: false });
 
-console.log(`Top: ${active[0].question}`);
-console.log(`YES: ${(active[0].yesPrice * 100).toFixed(1)}%`);
+// Each market includes analytics summary fields
+console.log(`Top: ${hot[0].question}`);
+console.log(`Heat: ${hot[0].heatScore}`);
+console.log(`Stress: ${hot[0].stressScore}`);
+console.log(`YES: ${(hot[0].yesPrice * 100).toFixed(1)}%`);
 ```
 
 ### 2. Get Real-Time Prices (0.0001 USDC)
@@ -299,13 +313,13 @@ const client = new RBSPMClient({
   privateKey: process.env.PRIVATE_KEY as `0x${string}`,
 });
 
-// Create a market with one call
+// Create a market with one call (SPORTS ONLY)
 const result = await client.deployMarket({
-  question: 'Will BTC hit $100k by March 2026?',
-  resolutionTime: Math.floor(Date.now() / 1000) + 30 * 24 * 60 * 60, // 30 days from now
+  question: 'Will the Lakers beat the Celtics on March 15, 2026?',
+  resolutionTime: Math.floor(new Date('2026-03-16').getTime() / 1000), // Day after game
   initialLiquidity: '5', // 5 USDC recommended minimum
-  category: 'crypto',
-  tags: ['bitcoin', 'price'],
+  category: 'sports',
+  tags: ['nba', 'lakers', 'celtics'],
 });
 
 console.log('Market deployed:', result.marketAddress);
@@ -333,7 +347,7 @@ const response = await paymentFetch(
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
-      question: 'Will ETH reach $10k in 2026?',
+      question: 'Will Manchester City win the Champions League 2026?',
       resolutionTime: 1767225600,
       initialLiquidity: '5',
       callerAddress: client.getAddress(),
@@ -351,7 +365,7 @@ const initTx = await client.initializeMarket(marketAddress, '5');
 // Step 4: List in discovery index (0.0001 USDC)
 const listing = await client.listMarket({
   address: marketAddress,
-  question: 'Will ETH reach $10k in 2026?',
+  question: 'Will Manchester City win the Champions League 2026?',
   resolutionTime: 1767225600,
   oracle: client.getAddress(),
 });
@@ -368,14 +382,14 @@ async function createInterestingMarket() {
   });
 
   try {
-    // 1. Research interesting topics using your capabilities
-    const topic = await researchInterestingTopic();
+    // 1. Research upcoming sports events
+    const topic = await researchSportsEvent();
 
-    // Example topics:
-    // - "Will [Company] announce [Product] before [Date]?"
-    // - "Will [Sports Team] win against [Opponent] on [Date]?"
-    // - "Will [Crypto] reach $[Price] by end of [Month]?"
-    // - "Will [Bill/Law] pass by [Date]?"
+    // Example topics (SPORTS ONLY):
+    // - "Will [Team] beat [Opponent] on [Date]?"
+    // - "Will [Player] score 30+ points on [Date]?"
+    // - "Will [Team] win the [Championship/Tournament] in [Year]?"
+    // - "Will [Country] win gold in [Event] at [Competition]?"
 
     console.log(`Creating market: ${topic.question}`);
 
@@ -395,45 +409,49 @@ async function createInterestingMarket() {
   }
 }
 
-// Research helper - implement based on your capabilities
-async function researchInterestingTopic(): Promise<{
+// Research helper - SPORTS EVENTS ONLY
+async function researchSportsEvent(): Promise<{
   question: string;
   resolutionTime: number;
   category: string;
   tags: string[];
 }> {
-  // Use web search, news APIs, or other data sources to find:
-  // 1. Current events with clear yes/no outcomes
-  // 2. Upcoming deadlines (earnings, elections, product launches)
-  // 3. Debates in communities you follow
-  // 4. Predictions from experts that can be verified
+  // Use web search, sports APIs, or news sources to find:
+  // 1. Upcoming games with clear win/loss outcomes
+  // 2. Championship/tournament matchups
+  // 3. Player performance milestones
+  // 4. Season records and playoff scenarios
 
-  // Guidelines for good market questions:
-  // - Clear, unambiguous resolution criteria
-  // - Specific date/time for resolution
-  // - Verifiable outcome from public sources
-  // - Interesting to traders (not too obvious)
+  // IMPORTANT: ALL markets MUST be about sports.
+  // Categories: nba, nfl, mlb, nhl, soccer, mma, tennis, golf, olympics, esports, etc.
+
+  // Guidelines for good sports market questions:
+  // - Clear, unambiguous outcome (win/loss/over-under)
+  // - Specific game date or tournament end date for resolution
+  // - Verifiable from official league/tournament results
+  // - Interesting matchups that people want to bet on
 
   // Return example (you would implement actual research):
-  const futureDate = Math.floor(Date.now() / 1000) + (30 * 24 * 60 * 60); // 30 days
+  const gameDate = Math.floor(Date.now() / 1000) + (7 * 24 * 60 * 60); // 7 days
 
   return {
-    question: 'Will Bitcoin exceed $100,000 by end of Q1 2026?',
-    resolutionTime: futureDate,
-    category: 'crypto',
-    tags: ['bitcoin', 'price', 'prediction'],
+    question: 'Will the Warriors beat the Nuggets on their next matchup?',
+    resolutionTime: gameDate,
+    category: 'sports',
+    tags: ['nba', 'warriors', 'nuggets'],
   };
 }
 ```
 
 ### Market Creation Guidelines
 
-1. **Research First** - Find topics that are genuinely interesting and debatable
-2. **Clear Resolution** - Questions must have unambiguous yes/no outcomes
-3. **Reasonable Timeframe** - 1 week to 3 months is ideal for trading activity
-4. **Be the Oracle** - You'll need to resolve the market when the time comes
-5. **Provide Liquidity** - Initialize with at least 5 USDC for tradability
-6. **Track Your Markets** - Remember to resolve them when resolution time passes
+1. **Sports Only** - ALL markets MUST be about sports events (NBA, NFL, MLB, NHL, soccer, MMA, tennis, etc.)
+2. **No non-sports markets** - Do NOT create markets about crypto, politics, tech, or any other topic
+3. **Clear Resolution** - Questions must have unambiguous win/loss/performance outcomes
+4. **Use Game Dates** - Set resolution time to the day after the game/event ends
+5. **Be the Oracle** - You'll need to resolve the market based on official results
+6. **Provide Liquidity** - Initialize with at least 5 USDC for tradability
+7. **Track Your Markets** - Remember to resolve them when the game/event concludes
 
 ## Heartbeat Monitoring
 
@@ -530,7 +548,271 @@ setInterval(async () => {
 }, 10 * 60 * 1000);
 ```
 
-## Trading Strategy Template
+## Market Analytics Reference
+
+The SDK provides real-time analytics for every market. These metrics power intelligent trading decisions.
+
+### Metrics Overview
+
+| Metric | Range | Access | Description |
+|--------|-------|--------|-------------|
+| `heatScore` | 0–100 | `market.heatScore` | Composite ranking: volume + velocity + recency |
+| `stressScore` | 0–1 | `market.stressScore` | 24h price volatility (high = choppy) |
+| `fragility` | 0–1 | `market.fragility` | Price impact susceptibility (high = thin liquidity) |
+| `velocity.v1m` | float | `analytics.velocity.v1m` | Probability change per minute |
+| `velocity.v5m` | float | `analytics.velocity.v5m` | Probability change per 5 minutes |
+| `velocity.v15m` | float | `analytics.velocity.v15m` | Probability change per 15 minutes |
+| `velocity.acceleration` | float | `analytics.velocity.acceleration` | Rate of velocity change (v1m − v5m) |
+| `feeVelocity24h` | float | `analytics.feeVelocity24h` | Fees accumulated in last 24h |
+| `volume24h` | float | `analytics.volume24h` | Rolling 24h trade volume (USDC) |
+| `trades24h` | int | `analytics.trades24h` | Rolling 24h trade count |
+
+### How to Access Analytics
+
+```typescript
+// Quick summary fields on every market (via getMarkets)
+const markets = await client.getMarkets({ sort: 'heat', order: 'desc' });
+for (const m of markets) {
+  console.log(`${m.question}`);
+  console.log(`  Heat: ${m.heatScore}, Stress: ${m.stressScore}, Fragility: ${m.fragility}`);
+  console.log(`  Velocity 1m: ${m.velocity1m}`);
+}
+
+// Full analytics breakdown (via getPremiumMarketData)
+const data = await client.getPremiumMarketData(marketAddress);
+if (data.analytics) {
+  const a = data.analytics;
+  console.log(`Heat: ${a.heatScore}`);
+  console.log(`Stress: ${a.stressScore}`);
+  console.log(`Fragility: ${a.fragility}`);
+  console.log(`Velocity: v1m=${a.velocity.v1m}, v5m=${a.velocity.v5m}, v15m=${a.velocity.v15m}`);
+  console.log(`Acceleration: ${a.velocity.acceleration}`);
+  console.log(`24h Volume: ${a.volume24h}, Trades: ${a.trades24h}, Fees: ${a.feeVelocity24h}`);
+}
+```
+
+### Interpreting Metrics
+
+- **High heat + high velocity** → Market is actively moving, opportunity or risk
+- **High stress + low fragility** → Volatile but deep liquidity, safer to enter
+- **High fragility + low volume** → Thin market, your trade will move the price significantly
+- **Positive acceleration** → Velocity is increasing, momentum building
+- **Negative acceleration** → Velocity is decreasing, momentum fading
+
+---
+
+## Agent Operational Doctrine
+
+This is the structured 5-phase trading loop that agents should follow. Each phase has clear inputs, gates, and outputs.
+
+### Phase 1: Market Discovery (60s cycle)
+
+Scan for opportunities. Run every 60 seconds.
+
+```typescript
+async function discoverMarkets(client: RBSPMClient) {
+  // Fetch top markets by heat score
+  const markets = await client.getMarkets({
+    status: 'ACTIVE',
+    sort: 'heat',
+    order: 'desc',
+    limit: 10,
+  });
+
+  // Select top 3 candidates for evaluation
+  const candidates = markets.slice(0, 3);
+
+  console.log('=== Discovery Phase ===');
+  for (const m of candidates) {
+    console.log(`${m.question}`);
+    console.log(`  Heat: ${m.heatScore} | Stress: ${m.stressScore} | Fragility: ${m.fragility}`);
+    console.log(`  YES: ${(m.yesPrice * 100).toFixed(1)}% | Velocity: ${m.velocity1m}`);
+  }
+
+  return candidates;
+}
+```
+
+### Phase 2: Signal Evaluation
+
+For each candidate market, evaluate all 5 analytics metrics against decision gates.
+
+```typescript
+interface Signal {
+  market: Market;
+  action: 'BUY_YES' | 'BUY_NO' | 'SELL' | 'SKIP';
+  confidence: number;
+  reasoning: string;
+}
+
+async function evaluateSignals(client: RBSPMClient, candidates: Market[]): Promise<Signal[]> {
+  const signals: Signal[] = [];
+
+  for (const market of candidates) {
+    // Fetch full analytics
+    const data = await client.getPremiumMarketData(market.address);
+    const a = data.analytics;
+    if (!a) { signals.push({ market, action: 'SKIP', confidence: 0, reasoning: 'No analytics' }); continue; }
+
+    // Decision gates
+    const hasVelocity = Math.abs(a.velocity.v1m) > 0.001;
+    const isStressed = a.stressScore > 0.5;
+    const isFragile = a.fragility > 0.4;
+    const isAccelerating = a.velocity.acceleration > 0;
+    const isHot = a.heatScore > 50;
+
+    // Gate 1: Skip dead markets
+    if (!isHot && !hasVelocity) {
+      signals.push({ market, action: 'SKIP', confidence: 0, reasoning: 'No activity' });
+      continue;
+    }
+
+    // Gate 2: Research the question and form independent prediction
+    const myPrediction = await formPrediction(market.question);
+    const edge = myPrediction - market.yesPrice;
+
+    // Gate 3: Require minimum edge
+    if (Math.abs(edge) < 0.05) {
+      signals.push({ market, action: 'SKIP', confidence: 0, reasoning: `Edge too small: ${(edge * 100).toFixed(1)}%` });
+      continue;
+    }
+
+    // Scale confidence by analytics quality
+    let confidence = Math.min(Math.abs(edge) * 2, 1); // Base from edge size
+    if (isAccelerating && Math.sign(a.velocity.v1m) === Math.sign(edge)) confidence *= 1.2; // Momentum aligned
+    if (isFragile) confidence *= 0.7; // Discount for thin liquidity
+    confidence = Math.min(confidence, 1);
+
+    signals.push({
+      market,
+      action: edge > 0 ? 'BUY_YES' : 'BUY_NO',
+      confidence,
+      reasoning: `Edge: ${(edge * 100).toFixed(1)}%, Heat: ${a.heatScore}, Stress: ${a.stressScore.toFixed(2)}`,
+    });
+  }
+
+  return signals.filter(s => s.action !== 'SKIP');
+}
+```
+
+### Phase 3: Simulation (Mandatory)
+
+**Never trade without simulating first.** Use `getBuyQuote`/`getSellQuote` to preview execution.
+
+```typescript
+async function simulateTrades(client: RBSPMClient, signals: Signal[], balance: number) {
+  const plans: Array<Signal & { amount: string; quote: TradeQuote }> = [];
+
+  for (const signal of signals) {
+    // Size by confidence, capped by fragility-adjusted max
+    const maxSize = signal.market.fragility && signal.market.fragility > 0.5
+      ? Math.min(balance * 0.05, 5)   // Fragile market: max 5% of balance or $5
+      : Math.min(balance * 0.1, 10);  // Normal: max 10% of balance or $10
+
+    const amount = (maxSize * signal.confidence).toFixed(2);
+
+    // Simulate the trade
+    const isYes = signal.action === 'BUY_YES';
+    const quote = await client.getBuyQuote(signal.market.address, isYes, amount);
+
+    console.log(`Simulation: ${signal.market.question}`);
+    console.log(`  Side: ${isYes ? 'YES' : 'NO'}, Amount: $${amount}`);
+    console.log(`  Estimated shares: ${quote.shares}`);
+    console.log(`  Price impact: ${(quote.priceImpact * 100).toFixed(2)}%`);
+
+    // Reject if price impact too high
+    if (quote.priceImpact > 0.05) {
+      console.log(`  REJECTED: Price impact too high (${(quote.priceImpact * 100).toFixed(1)}%)`);
+      continue;
+    }
+
+    plans.push({ ...signal, amount, quote });
+  }
+
+  return plans;
+}
+```
+
+### Phase 4: Execution
+
+Execute approved trades, log all metrics, and re-fetch post-trade state.
+
+```typescript
+async function executeTrades(client: RBSPMClient, plans: Array<{ market: Market; action: string; amount: string; confidence: number; reasoning: string }>) {
+  for (const plan of plans) {
+    const isYes = plan.action === 'BUY_YES';
+
+    console.log(`=== Executing Trade ===`);
+    console.log(`Market: ${plan.market.question}`);
+    console.log(`Side: ${isYes ? 'YES' : 'NO'} | Amount: $${plan.amount} | Confidence: ${(plan.confidence * 100).toFixed(0)}%`);
+    console.log(`Reasoning: ${plan.reasoning}`);
+
+    try {
+      const result = await client.buy(plan.market.address, isYes, plan.amount);
+      console.log(`TX: ${result.txHash}`);
+      console.log(`Shares received: ${result.shares}`);
+
+      // Re-fetch post-trade analytics
+      const postData = await client.getPremiumMarketData(plan.market.address);
+      if (postData.analytics) {
+        console.log(`Post-trade stress: ${postData.analytics.stressScore.toFixed(3)}`);
+        console.log(`Post-trade heat: ${postData.analytics.heatScore}`);
+      }
+    } catch (err) {
+      console.error(`Trade failed: ${err}`);
+    }
+  }
+}
+```
+
+### Phase 5: Post-Trade Reaction
+
+Monitor positions after execution. Re-evaluate every 5 minutes.
+
+```typescript
+async function postTradeReaction(client: RBSPMClient) {
+  const portfolio = await client.getPortfolio();
+
+  for (const pos of portfolio.positions) {
+    if (pos.resolved) {
+      // Redeem winning positions
+      try {
+        await client.redeem(pos.marketAddress);
+        console.log(`Redeemed: ${pos.marketQuestion}`);
+      } catch (err) {
+        console.log(`Redeem skipped: ${pos.marketQuestion}`);
+      }
+      continue;
+    }
+
+    // Re-fetch analytics for active positions
+    const data = await client.getPremiumMarketData(pos.marketAddress as `0x${string}`);
+    if (!data.analytics) continue;
+
+    const a = data.analytics;
+
+    // Alert on stress spike (position at risk)
+    if (a.stressScore > 0.7) {
+      console.warn(`STRESS ALERT: ${pos.marketQuestion} stress=${a.stressScore.toFixed(2)}`);
+
+      // Simulate exit
+      const shares = pos.yesShares > 0n ? pos.yesShares : pos.noShares;
+      const isYes = pos.yesShares > 0n;
+      if (shares > 0n) {
+        const sellQuote = await client.getSellQuote(pos.marketAddress as `0x${string}`, isYes, shares);
+        console.log(`  Exit simulation: payout=${sellQuote.payout}`);
+      }
+    }
+
+    // Alert on fragility spike (position may be hard to exit)
+    if (a.fragility > 0.6) {
+      console.warn(`FRAGILITY ALERT: ${pos.marketQuestion} fragility=${a.fragility.toFixed(2)}`);
+    }
+  }
+}
+```
+
+### Full Trading Loop
 
 ```typescript
 async function runTradingLoop() {
@@ -538,121 +820,120 @@ async function runTradingLoop() {
     privateKey: process.env.PRIVATE_KEY as `0x${string}`,
   });
 
-  // 1. Heartbeat check
-  const status = await heartbeat();
-  if (!status.canTrade) {
-    console.error('Cannot trade:', status.errors);
+  // Pre-check: ensure wallet is healthy
+  const usdc = await client.getUSDCBalance();
+  const mon = await client.getMONBalance();
+  if (parseFloat(usdc) < 10 || parseFloat(mon) < 0.01) {
+    console.error(`Low balance: ${usdc} USDC, ${mon} MON`);
     return;
   }
 
-  // 2. Get active markets
-  const markets = await client.getMarkets({ status: 'ACTIVE' });
+  // Phase 1: Discover
+  const candidates = await discoverMarkets(client);
 
-  for (const market of markets) {
-    // 3. Get current prices
-    const prices = await client.getPrices(market.address);
+  // Phase 2: Evaluate signals
+  const signals = await evaluateSignals(client, candidates);
+  if (signals.length === 0) { console.log('No actionable signals'); return; }
 
-    // 4. Research the question
-    const research = await researchQuestion(market.question);
-    // Example research steps:
-    // - Search for recent news about the topic
-    // - Check historical data and trends
-    // - Analyze expert opinions and forecasts
-    // - Consider base rates for similar events
-    // - Evaluate time until resolution
+  // Phase 3: Simulate
+  const plans = await simulateTrades(client, signals, parseFloat(usdc));
+  if (plans.length === 0) { console.log('All trades rejected in simulation'); return; }
 
-    // 5. Form prediction based on research
-    const myPrediction = await formPrediction(market.question, research);
-    // Your prediction should be a probability between 0 and 1
-    // Example: 0.75 means you believe 75% chance of YES
+  // Phase 4: Execute
+  await executeTrades(client, plans);
 
-    // 6. Calculate edge (your prediction vs market price)
-    const edge = myPrediction - prices.yes;
-
-    // 7. Assess confidence based on research quality
-    const confidence = assessConfidence(research);
-    // Higher confidence = larger position size
-
-    // 8. Trade if edge exceeds threshold
-    if (Math.abs(edge) > 0.05 && confidence > 0.6) {
-      const isYes = edge > 0;
-      const amount = Math.min(
-        parseFloat(status.balances.usdc) * 0.1 * confidence, // Scale by confidence
-        10 // Max $10 per trade
-      );
-
-      console.log(`Trading: ${market.question}`);
-      console.log(`Research summary: ${research.summary}`);
-      console.log(`My prediction: ${(myPrediction * 100).toFixed(1)}%`);
-      console.log(`Market price: ${(prices.yes * 100).toFixed(1)}%`);
-      console.log(`Edge: ${(edge * 100).toFixed(1)}%, Confidence: ${(confidence * 100).toFixed(0)}%`);
-      console.log(`Side: ${isYes ? 'YES' : 'NO'}, Amount: $${amount.toFixed(2)}`);
-
-      // buy() takes amount as a string
-      await client.buy(market.address, isYes, amount.toFixed(2));
-    }
-  }
-
-  // 9. Check for resolved markets and redeem
-  const portfolio = await client.getPortfolio();
-  for (const pos of portfolio.positions) {
-    if (pos.resolved) {
-      try {
-        const txHash = await client.redeem(pos.marketAddress);
-        console.log(`Redeemed ${pos.marketQuestion}: ${txHash}`);
-      } catch (err) {
-        console.log(`Redeem skipped for ${pos.marketQuestion}:`, err);
-      }
-    }
-  }
+  // Phase 5: Post-trade reaction
+  await postTradeReaction(client);
 }
 
-// Research helper - implement based on your capabilities
-async function researchQuestion(question: string): Promise<{
-  summary: string;
-  sources: string[];
-  keyFactors: string[];
-  baseRate?: number;
-}> {
-  // Use web search, news APIs, or other data sources
-  // to gather information about the question
+// Run every 60 seconds
+setInterval(runTradingLoop, 60 * 1000);
+```
 
-  // Example implementation:
-  // 1. Search for news: "ETH price prediction 2026"
-  // 2. Check crypto analysis sites
-  // 3. Look at historical data and trends
-  // 4. Review expert forecasts
+---
 
-  return {
-    summary: 'Research findings here...',
-    sources: ['source1.com', 'source2.com'],
-    keyFactors: ['factor1', 'factor2'],
-    baseRate: 0.3, // Historical base rate if available
-  };
+## Strategic Archetypes
+
+Three modes for different market conditions. Select based on current analytics.
+
+### Momentum Mode
+
+**When to use:** Market is moving fast in one direction with confirmed momentum.
+
+**Entry conditions:**
+- `stressScore > 0.65` — significant price movement
+- Velocity and price imbalance are aligned (moving toward the same side)
+- `fragility > 0.3` — enough liquidity to absorb your trade
+
+**Strategy:** Trade in the direction of momentum. Enter early, exit when acceleration turns negative.
+
+```typescript
+function isMomentumSetup(analytics: MarketAnalytics, yesPrice: number): 'YES' | 'NO' | null {
+  if (analytics.stressScore < 0.65) return null;
+  if (analytics.fragility < 0.3) return null;
+
+  const v = analytics.velocity;
+  if (v.acceleration <= 0) return null; // Momentum must be building
+
+  // Velocity direction should align with price imbalance
+  if (v.v1m > 0 && yesPrice > 0.5) return 'YES';  // Moving toward YES + price favors YES
+  if (v.v1m < 0 && yesPrice < 0.5) return 'NO';    // Moving toward NO + price favors NO
+  return null;
+}
+```
+
+### Reversion Mode
+
+**When to use:** Market has overreacted and is likely to snap back.
+
+**Entry conditions:**
+- `stressScore > 0.70` — extreme volatility (likely overreaction)
+- `fragility < 0.25` — deep liquidity (market can absorb reversion)
+- `acceleration` is reversing (opposite sign to `v1m`)
+
+**Strategy:** Trade against the current direction. Wait for stress to confirm the overreaction, then enter the reversal.
+
+```typescript
+function isReversionSetup(analytics: MarketAnalytics): 'YES' | 'NO' | null {
+  if (analytics.stressScore < 0.70) return null;
+  if (analytics.fragility > 0.25) return null;
+
+  const v = analytics.velocity;
+  // Acceleration must oppose current velocity (momentum fading)
+  if (Math.sign(v.acceleration) === Math.sign(v.v1m)) return null;
+
+  // Trade against current velocity direction
+  if (v.v1m > 0) return 'NO';  // Price went up too fast, bet on reversion down
+  if (v.v1m < 0) return 'YES'; // Price went down too fast, bet on reversion up
+  return null;
+}
+```
+
+### Liquidity Hunter Mode
+
+**When to use:** Thin market with a sudden interest spike — your trade can move the market.
+
+**Entry conditions:**
+- `fragility > 0.6` — very thin liquidity
+- Low `volume24h` — not many traders yet
+- `heatScore` spiking — sudden interest
+
+**Strategy:** Small positions to avoid excessive price impact. Profit from being early in an emerging market.
+
+```typescript
+function isLiquidityHunt(analytics: MarketAnalytics): boolean {
+  return (
+    analytics.fragility > 0.6 &&
+    analytics.volume24h < 100 && // Less than $100 traded in 24h
+    analytics.heatScore > 40     // But heat is rising
+  );
 }
 
-// Form prediction based on research
-async function formPrediction(question: string, research: any): Promise<number> {
-  // Combine research findings into a probability estimate
-  // Consider: base rates, recent trends, expert consensus
-  return 0.5; // Return probability 0-1
+// Use smaller position sizes in fragile markets
+function liquidityHuntSize(balance: number, fragility: number): number {
+  const maxPct = Math.max(0.02, 0.1 * (1 - fragility)); // 2-10% of balance
+  return Math.min(balance * maxPct, 3); // Cap at $3 per trade
 }
-
-// Assess confidence in your research
-function assessConfidence(research: any): number {
-  // Higher confidence when:
-  // - Multiple corroborating sources
-  // - Recent, relevant data available
-  // - Clear historical precedent
-  // Lower confidence when:
-  // - Conflicting information
-  // - Limited data available
-  // - Novel/unprecedented event
-  return 0.7; // Return confidence 0-1
-}
-
-// Run every hour
-setInterval(runTradingLoop, 60 * 60 * 1000);
 ```
 
 ## API Costs
@@ -666,7 +947,7 @@ All API calls require x402 micropayments (automatic via SDK):
 | `getMarketInfo(market)` | 0.0001 USDC | Full market details |
 | `getPosition(market)` | 0.0001 USDC | Your position in single market |
 | `getPortfolio()` | 0.0001 USDC | Full portfolio (all positions) |
-| `getPremiumMarketData(market)` | 0.0001 USDC | Premium analytics |
+| `getPremiumMarketData(market)` | 0.0001 USDC | Premium analytics (velocity, stress, fragility, heat) |
 | `getTradeInstructions()` | 0.0001 USDC | Encoded calldata |
 | `buy()` | 0.0001 + gas + amount | Buy shares |
 | `sell()` | 0.0001 + gas | Sell shares |
@@ -687,11 +968,14 @@ All API calls require x402 micropayments (automatic via SDK):
 // Read operations (x402 protected)
 client.getMarkets(options?: GetMarketsOptions): Promise<Market[]>
 // options: { status?, category?, creator?, resolved?, sort?, order?, limit?, offset? }
+// sort: 'created_at' | 'volume' | 'resolution_time' | 'heat' | 'velocity'
+// Market includes: heatScore?, velocity1m?, stressScore?, fragility?
 client.getPrices(market: `0x${string}`): Promise<MarketPrices>
 client.getMarketInfo(market: `0x${string}`): Promise<MarketInfo>
 client.getPosition(market: `0x${string}`, user?: `0x${string}`): Promise<Position>
 client.getPortfolio(user?: `0x${string}`): Promise<Portfolio>
 client.getPremiumMarketData(market: `0x${string}`): Promise<PremiumMarketData>
+// PremiumMarketData.analytics?: { velocity: {v1m, v5m, v15m, acceleration}, stressScore, fragility, feeVelocity24h, heatScore, volume24h, trades24h }
 client.getFeeInfo(market: `0x${string}`): Promise<FeeInfo>
 
 // Trading (x402 + on-chain)
