@@ -95,12 +95,11 @@ console.log('Active markets:', markets.length);
                 <h3 style={styles.codeTitle}>3. Get Market Prices</h3>
                 <div style={styles.codeWrapper}>
                   <pre style={styles.codeBlock}>
-{`const marketAddress = '0x3f9498ef0a9cc5a88678d4d4a900ec16875a1f9f';
-const prices = await client.getPrices(marketAddress);
+{`// Use a market address from getMarkets()
+const prices = await client.getPrices(markets[0].address);
 
 console.log('YES price:', prices.yes);  // e.g., 0.65
-console.log('NO price:', prices.no);    // e.g., 0.35
-// Prices always sum to 1.0 (100%)`}
+console.log('NO price:', prices.no);    // e.g., 0.35`}
                   </pre>
                   <CopyButton
                     text={`const prices = await client.getPrices(marketAddress);\nconsole.log('YES:', prices.yes, 'NO:', prices.no);`}
@@ -160,9 +159,9 @@ console.log('USDC received:', sellResult.usdcReceived);`}
                   <pre style={styles.codeBlock}>
 {`// Deploy a new prediction market
 const result = await client.deployMarket({
-  question: 'Will ETH hit $5000 by March 2025?',
+  question: 'Will ETH hit $5000 by June 2026?',
   resolutionTime: Math.floor(Date.now() / 1000) + 86400 * 30, // 30 days
-  initialLiquidity: '10', // 10 USDC
+  initialLiquidity: '5', // 5 USDC minimum
 });
 
 console.log('Market deployed:', result.marketAddress);
@@ -172,7 +171,7 @@ console.log('Initialize tx:', result.initializeTxHash);
 // Your market is now live and tradeable!`}
                   </pre>
                   <CopyButton
-                    text={`const result = await client.deployMarket({\n  question: 'Will ETH hit $5000 by March 2025?',\n  resolutionTime: Math.floor(Date.now() / 1000) + 86400 * 30,\n  initialLiquidity: '10',\n});\nconsole.log('Market deployed:', result.marketAddress);`}
+                    text={`const result = await client.deployMarket({\n  question: 'Will ETH hit $5000 by June 2026?',\n  resolutionTime: Math.floor(Date.now() / 1000) + 86400 * 30,\n  initialLiquidity: '5',\n});\nconsole.log('Market deployed:', result.marketAddress);`}
                     label="deploy"
                   />
                 </div>
@@ -431,17 +430,10 @@ for (const pos of portfolio.positions) {
               </td>
             </tr>
             <tr>
-              <td style={styles.contractLabel}>Sample Market</td>
+              <td style={styles.contractLabel}>Protocol Fee Recipient</td>
               <td style={styles.contractAddress}>
-                <code>0x3f9498ef0a9cc5a88678d4d4a900ec16875a1f9f</code>
-                <CopyButton text="0x3f9498ef0a9cc5a88678d4d4a900ec16875a1f9f" label="market" />
-              </td>
-            </tr>
-            <tr>
-              <td style={styles.contractLabel}>WMON</td>
-              <td style={styles.contractAddress}>
-                <code>0xFb8bf4c1CC7a94c73D209a149eA2AbEa852BC541</code>
-                <CopyButton text="0xFb8bf4c1CC7a94c73D209a149eA2AbEa852BC541" label="wmon" />
+                <code>0x048c2c9E869594a70c6Dc7CeAC168E724425cdFE</code>
+                <CopyButton text="0x048c2c9E869594a70c6Dc7CeAC168E724425cdFE" label="fee" />
               </td>
             </tr>
           </tbody>
@@ -473,7 +465,7 @@ for (const pos of portfolio.positions) {
             <div style={styles.linkIcon}>NPM</div>
             <div>
               <div style={styles.linkTitle}>NPM Package</div>
-              <div style={styles.linkDesc}>@madgallery/rbs-pm-sdk v1.0.12</div>
+              <div style={styles.linkDesc}>@madgallery/rbs-pm-sdk v1.0.13</div>
             </div>
           </a>
           <a
