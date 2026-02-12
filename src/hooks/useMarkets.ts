@@ -9,6 +9,7 @@ const BROKEN_MARKET_ADDRESSES = new Set([
   '0x3f9498ef0a9cc5a88678d4d4a900ec16875a1f9f',
   '0x6e2f4b22042c7807a07af0801a7076d2c9f7854f',
   '0x15e9094b5db262d09439fba90ef27039c6c62900',
+  '0xc291a0d35be092871e8d08db071c8d3e54fa6e35',
 ]);
 
 // Market type (simplified for runtime use)

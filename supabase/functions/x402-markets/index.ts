@@ -24,15 +24,55 @@ serve(async (req: Request) => {
       return paymentResult.response;
     }
 
+    // Parse query parameters
+    const url = new URL(req.url);
+    const status = url.searchParams.get("status");
+    const category = url.searchParams.get("category");
+    const creator = url.searchParams.get("creator");
+    const resolved = url.searchParams.get("resolved");
+    const sort = url.searchParams.get("sort") || "created_at";
+    const order = url.searchParams.get("order") || "desc";
+    const limit = Math.min(Math.max(parseInt(url.searchParams.get("limit") || "50", 10) || 50, 1), 100);
+    const offset = Math.max(parseInt(url.searchParams.get("offset") || "0", 10) || 0, 0);
+
+    // Map sort param to DB column
+    const sortColumnMap: Record<string, string> = {
+      created_at: "created_at",
+      volume: "total_volume",
+      resolution_time: "resolution_time",
+    };
+    const sortColumn = sortColumnMap[sort] || "created_at";
+    const ascending = order === "asc";
+
     // Fetch markets from database
     const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
     const supabaseServiceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
     const supabase = createClient(supabaseUrl, supabaseServiceKey);
 
-    const { data: markets, error } = await supabase
+    let query = supabase
       .from("markets")
-      .select("*")
-      .order("created_at", { ascending: false });
+      .select("*", { count: "exact" });
+
+    // Apply filters
+    if (status) {
+      query = query.eq("status", status.toUpperCase());
+    }
+    if (category) {
+      query = query.eq("category", category);
+    }
+    if (creator) {
+      query = query.ilike("creator_address", creator);
+    }
+    if (resolved !== null) {
+      query = query.eq("resolved", resolved === "true");
+    }
+
+    // Apply sort, pagination
+    query = query
+      .order(sortColumn, { ascending })
+      .range(offset, offset + limit - 1);
+
+    const { data: markets, error, count } = await query;
 
     if (error) {
       console.error("Database error:", error);
@@ -47,6 +87,9 @@ serve(async (req: Request) => {
         success: true,
         markets: markets || [],
         count: markets?.length || 0,
+        total: count ?? 0,
+        limit,
+        offset,
         payment: {
           amount: X402_CONFIG.price,
           amountFormatted: X402_CONFIG.priceFormatted,

@@ -28,6 +28,7 @@ import type {
   PremiumMarketData,
   MarketCreateParams,
   MarketCreateResult,
+  GetMarketsOptions,
 } from './types';
 
 // USDC decimals
@@ -190,12 +191,38 @@ export class RBSPMClient {
   // ==================== Market Discovery ====================
 
   /**
-   * Get all active markets (requires x402 payment - 0.0001 USDC)
+   * Get markets with optional filtering and pagination (requires x402 payment - 0.0001 USDC)
+   *
+   * @example
+   * ```typescript
+   * // Get all markets (default)
+   * const all = await client.getMarkets();
+   *
+   * // Get active markets sorted by volume
+   * const active = await client.getMarkets({ status: 'ACTIVE', sort: 'volume' });
+   *
+   * // Paginate through results
+   * const page2 = await client.getMarkets({ limit: 10, offset: 10 });
+   * ```
    */
-  async getMarkets(): Promise<Market[]> {
+  async getMarkets(options?: GetMarketsOptions): Promise<Market[]> {
     const paymentFetch = this.getPaymentFetch();
 
-    const response = await paymentFetch(`${this.apiUrl}${API_ENDPOINTS.x402Markets}`, {
+    // Build query string from options
+    const params = new URLSearchParams();
+    if (options?.status) params.set('status', options.status);
+    if (options?.category) params.set('category', options.category);
+    if (options?.creator) params.set('creator', options.creator);
+    if (options?.resolved !== undefined) params.set('resolved', String(options.resolved));
+    if (options?.sort) params.set('sort', options.sort);
+    if (options?.order) params.set('order', options.order);
+    if (options?.limit !== undefined) params.set('limit', String(options.limit));
+    if (options?.offset !== undefined) params.set('offset', String(options.offset));
+
+    const qs = params.toString();
+    const url = `${this.apiUrl}${API_ENDPOINTS.x402Markets}${qs ? `?${qs}` : ''}`;
+
+    const response = await paymentFetch(url, {
       method: 'GET',
     });
 
@@ -209,13 +236,20 @@ export class RBSPMClient {
 
     const data = await response.json() as { success: boolean; markets: Array<Record<string, unknown>> };
     const ZERO_ADDRESS = '0x0000000000000000000000000000000000000000';
+    const BROKEN_MARKETS = new Set([
+      '0x3f9498ef0a9cc5a88678d4d4a900ec16875a1f9f',
+      '0x6e2f4b22042c7807a07af0801a7076d2c9f7854f',
+      '0x15e9094b5db262d09439fba90ef27039c6c62900',
+      '0xc291a0d35be092871e8d08db071c8d3e54fa6e35',
+    ]);
     const seen = new Set<string>();
 
     return (data.markets || [])
       .filter((m) => {
         const addr = (m.address as string || '').toLowerCase();
-        // Filter out zero-address and duplicate markets
+        // Filter out zero-address, broken, and duplicate markets
         if (!addr || addr === ZERO_ADDRESS.toLowerCase()) return false;
+        if (BROKEN_MARKETS.has(addr)) return false;
         if (seen.has(addr)) return false;
         seen.add(addr);
         return true;
@@ -947,7 +981,7 @@ export class RBSPMClient {
     // MUST go through x402 endpoint for tracking
     const paymentFetch = this.getPaymentFetch();
 
-    const response = await paymentFetch(`${this.apiUrl}/functions/v1/x402-redeem`, {
+    const response = await paymentFetch(`${this.apiUrl}${API_ENDPOINTS.x402Redeem}`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
@@ -1460,7 +1494,7 @@ export class RBSPMClient {
     // MUST go through x402 endpoint for tracking
     const paymentFetch = this.getPaymentFetch();
 
-    const response = await paymentFetch(`${this.apiUrl}/functions/v1/x402-initialize`, {
+    const response = await paymentFetch(`${this.apiUrl}${API_ENDPOINTS.x402Initialize}`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({

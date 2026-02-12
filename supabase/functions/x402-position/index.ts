@@ -11,6 +11,7 @@ const LSLMSR_ABI = [
   { name: "getYesPrice", type: "function", inputs: [], outputs: [{ type: "uint256" }], stateMutability: "view" },
   { name: "getNoPrice", type: "function", inputs: [], outputs: [{ type: "uint256" }], stateMutability: "view" },
   { name: "collateralDecimals", type: "function", inputs: [], outputs: [{ type: "uint8" }], stateMutability: "view" },
+  { name: "getPayoutForSellInCollateral", type: "function", inputs: [{ name: "isYes", type: "bool" }, { name: "shares", type: "uint256" }], outputs: [{ name: "payout", type: "uint256" }], stateMutability: "view" },
 ] as const;
 
 const ERC20_ABI = [
@@ -73,9 +74,18 @@ serve(async (req: Request) => {
     const no = Number(noPrice) / 1e18;
     const decimals = Number(collateralDecimals);
 
-    // Calculate values (shares are 1e18, prices are 1e18, result needs to be in collateral decimals)
-    const yesValue = (Number(yesShares) * yes) / 1e18;
-    const noValue = (Number(noShares) * no) / 1e18;
+    // Get actual liquidation values from the AMM (not shares × spotPrice)
+    const [yesPayout, noPayout] = await Promise.all([
+      yesShares > 0n
+        ? client.readContract({ address: marketAddress, abi: LSLMSR_ABI, functionName: "getPayoutForSellInCollateral", args: [true, yesShares] })
+        : 0n,
+      noShares > 0n
+        ? client.readContract({ address: marketAddress, abi: LSLMSR_ABI, functionName: "getPayoutForSellInCollateral", args: [false, noShares] })
+        : 0n,
+    ]);
+
+    const yesValue = Number(yesPayout) / (10 ** decimals);
+    const noValue = Number(noPayout) / (10 ** decimals);
 
     return new Response(
       JSON.stringify({

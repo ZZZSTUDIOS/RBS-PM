@@ -28,10 +28,34 @@ async function main() {
 
   console.log(`Testing all x402 endpoints with wallet ${wallet}\n`);
 
-  // 1. getMarkets (x402-markets)
-  await test('x402-markets', async () => {
+  // 1a. getMarkets - default (x402-markets)
+  await test('x402-markets (default)', async () => {
     const markets = await client.getMarkets();
     return `${markets.length} markets found`;
+  });
+
+  // 1b. getMarkets - filtered by status
+  await test('x402-markets (status=ACTIVE)', async () => {
+    const markets = await client.getMarkets({ status: 'ACTIVE' });
+    return `${markets.length} active markets`;
+  });
+
+  // 1c. getMarkets - sorted by volume, limited
+  await test('x402-markets (sort=volume, limit=3)', async () => {
+    const markets = await client.getMarkets({ sort: 'volume', order: 'desc', limit: 3 });
+    return `${markets.length} markets (max 3)`;
+  });
+
+  // 1d. getMarkets - pagination
+  await test('x402-markets (limit=2, offset=1)', async () => {
+    const markets = await client.getMarkets({ limit: 2, offset: 1 });
+    return `${markets.length} markets (page 2, size 2)`;
+  });
+
+  // 1e. getMarkets - resolved filter
+  await test('x402-markets (resolved=false)', async () => {
+    const markets = await client.getMarkets({ resolved: false });
+    return `${markets.length} unresolved markets`;
   });
 
   // 2. getPrices (x402-prices)

@@ -36,7 +36,7 @@ The SDK handles payment signing automatically when initialized with a private ke
 
 | Endpoint | SDK Method | Cost | Description |
 |----------|------------|------|-------------|
-| `x402-markets` | `getMarkets()` | 0.0001 USDC | List all active markets |
+| `x402-markets` | `getMarkets(options?)` | 0.0001 USDC | List markets (filter/paginate) |
 | `x402-prices` | `getPrices(market)` | 0.0001 USDC | Get YES/NO prices |
 | `x402-market-info` | `getMarketInfo(market)` | 0.0001 USDC | Full market details |
 | `x402-market-data` | `getPremiumMarketData(market)` | 0.0001 USDC | Premium analytics |
@@ -309,7 +309,7 @@ Facilitator: https://x402-facilitator.molandak.org
 
 | Endpoint | Status | Notes |
 |----------|--------|-------|
-| getMarkets() | ✅ | Returns all active markets |
+| getMarkets(options?) | ✅ | Returns markets (supports filter/paginate) |
 | getPrices() | ✅ | Returns YES/NO prices |
 | getMarketInfo() | ✅ | Full market details |
 | getPremiumMarketData() | ✅ | Volume, trades, analytics |

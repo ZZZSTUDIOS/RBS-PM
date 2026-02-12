@@ -50,7 +50,7 @@ console.log('Trade TX:', result.txHash);
 
 | Method | Cost | Description |
 |--------|------|-------------|
-| `getMarkets()` | 0.0001 USDC | List all active markets |
+| `getMarkets(options?)` | 0.0001 USDC | List markets (filter by status, category, creator, etc.) |
 | `getPrices()` | 0.0001 USDC | Get current market prices |
 | `getMarketInfo()` | 0.0001 USDC | Full market details |
 | `getPremiumMarketData()` | 0.0001 USDC | Premium analytics (volume, trades) |
@@ -88,8 +88,17 @@ console.log('Trade TX:', result.txHash);
 ### Market Discovery
 
 ```typescript
-// Get all markets
+// Get all markets (default: 50, newest first)
 const markets = await client.getMarkets();
+
+// Filter by status, sort by volume
+const active = await client.getMarkets({ status: 'ACTIVE', sort: 'volume' });
+
+// Paginate
+const page2 = await client.getMarkets({ limit: 10, offset: 10 });
+
+// Filter by creator
+const mine = await client.getMarkets({ creator: '0x...' });
 
 // Get prices
 const prices = await client.getPrices(marketAddress);

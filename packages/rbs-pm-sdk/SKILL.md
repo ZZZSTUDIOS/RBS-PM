@@ -135,16 +135,26 @@ console.log(`x402 Enabled: ${client.hasPaymentCapability()}`);
 ### 1. Discover Markets (0.0001 USDC)
 
 ```typescript
+// Get all markets (default: 50, newest first)
 const markets = await client.getMarkets();
 
-// Find highest volume market
-const topMarket = markets.sort((a, b) =>
-  (b.totalVolume || 0) - (a.totalVolume || 0)
-)[0];
+// Filter server-side: only active markets, sorted by volume
+const active = await client.getMarkets({
+  status: 'ACTIVE',
+  sort: 'volume',
+  order: 'desc',
+  limit: 10,
+});
 
-console.log(`Top: ${topMarket.question}`);
-console.log(`Volume: $${topMarket.totalVolume} USDC`);
-console.log(`YES: ${(topMarket.yesPrice * 100).toFixed(1)}%`);
+// Paginate through results
+const page2 = await client.getMarkets({ limit: 10, offset: 10 });
+
+// Filter by creator or resolved state
+const mine = await client.getMarkets({ creator: '0x...' });
+const unresolved = await client.getMarkets({ resolved: false });
+
+console.log(`Top: ${active[0].question}`);
+console.log(`YES: ${(active[0].yesPrice * 100).toFixed(1)}%`);
 ```
 
 ### 2. Get Real-Time Prices (0.0001 USDC)
@@ -464,8 +474,8 @@ async function heartbeat(): Promise<HeartbeatStatus> {
   // Check portfolio (0.0001 USDC)
   const portfolio = await client.getPortfolio();
 
-  // Discover new markets (0.0001 USDC)
-  const allMarkets = await client.getMarkets();
+  // Discover new active markets (0.0001 USDC)
+  const allMarkets = await client.getMarkets({ status: 'ACTIVE' });
   const newMarkets = allMarkets
     .filter(m => !knownMarkets.has(m.address))
     .map(m => {
@@ -535,8 +545,8 @@ async function runTradingLoop() {
     return;
   }
 
-  // 2. Get markets
-  const markets = await client.getMarkets();
+  // 2. Get active markets
+  const markets = await client.getMarkets({ status: 'ACTIVE' });
 
   for (const market of markets) {
     // 3. Get current prices
@@ -651,7 +661,7 @@ All API calls require x402 micropayments (automatic via SDK):
 
 | Operation | Cost | Description |
 |-----------|------|-------------|
-| `getMarkets()` | 0.0001 USDC | List all markets with stats |
+| `getMarkets(options?)` | 0.0001 USDC | List markets (filter/paginate) |
 | `getPrices(market)` | 0.0001 USDC | On-chain prices |
 | `getMarketInfo(market)` | 0.0001 USDC | Full market details |
 | `getPosition(market)` | 0.0001 USDC | Your position in single market |
@@ -675,7 +685,8 @@ All API calls require x402 micropayments (automatic via SDK):
 
 ```typescript
 // Read operations (x402 protected)
-client.getMarkets(): Promise<Market[]>
+client.getMarkets(options?: GetMarketsOptions): Promise<Market[]>
+// options: { status?, category?, creator?, resolved?, sort?, order?, limit?, offset? }
 client.getPrices(market: `0x${string}`): Promise<MarketPrices>
 client.getMarketInfo(market: `0x${string}`): Promise<MarketInfo>
 client.getPosition(market: `0x${string}`, user?: `0x${string}`): Promise<Position>

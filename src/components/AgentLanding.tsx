@@ -75,17 +75,18 @@ const client = new RBSPMClient({
                 <h3 style={styles.codeTitle}>2. Get Available Markets</h3>
                 <div style={styles.codeWrapper}>
                   <pre style={styles.codeBlock}>
-{`const markets = await client.getMarkets();
-console.log('Active markets:', markets.length);
+{`// Get all markets
+const markets = await client.getMarkets();
 
-// Each market contains:
-// - address: Contract address
-// - question: Market question
-// - resolutionTime: When market resolves
-// - status: 'active' | 'resolved'`}
+// Filter by status, sort by volume, paginate
+const active = await client.getMarkets({
+  status: 'ACTIVE',
+  sort: 'volume',
+  limit: 10,
+});`}
                   </pre>
                   <CopyButton
-                    text={`const markets = await client.getMarkets();\nconsole.log('Active markets:', markets.length);`}
+                    text={`const markets = await client.getMarkets();\n\n// Filter active markets sorted by volume\nconst active = await client.getMarkets({ status: 'ACTIVE', sort: 'volume', limit: 10 });`}
                     label="markets"
                   />
                 </div>
@@ -275,9 +276,9 @@ for (const pos of portfolio.positions) {
               <td style={styles.costTdCategory} colSpan={3}>Market Discovery</td>
             </tr>
             <tr>
-              <td style={styles.costTd}><code>getMarkets()</code></td>
+              <td style={styles.costTd}><code>getMarkets(options?)</code></td>
               <td style={styles.costTdPrice}>0.0001</td>
-              <td style={styles.costTd}>List all active markets</td>
+              <td style={styles.costTd}>List markets (filter/paginate)</td>
             </tr>
             <tr>
               <td style={styles.costTd}><code>getPrices()</code></td>

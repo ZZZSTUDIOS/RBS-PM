@@ -192,6 +192,26 @@ export interface MarketCreateResult {
   paymentAmount: string;
 }
 
+/** Options for filtering and paginating markets */
+export interface GetMarketsOptions {
+  /** Filter by market status */
+  status?: 'ACTIVE' | 'RESOLVED' | 'PAUSED';
+  /** Filter by category */
+  category?: string;
+  /** Filter by creator address */
+  creator?: `0x${string}`;
+  /** Filter by resolved state */
+  resolved?: boolean;
+  /** Sort field (default: created_at) */
+  sort?: 'created_at' | 'volume' | 'resolution_time';
+  /** Sort order (default: desc) */
+  order?: 'asc' | 'desc';
+  /** Max results to return, 1-100 (default: 50) */
+  limit?: number;
+  /** Number of results to skip (default: 0) */
+  offset?: number;
+}
+
 /** x402 price configuration */
 export interface X402Prices {
   marketData: { raw: string; formatted: string };

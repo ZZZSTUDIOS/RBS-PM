@@ -50,7 +50,7 @@ All API endpoints require x402 micropayments:
 
 | Method | Cost | Description |
 |--------|------|-------------|
-| `getMarkets()` | 0.0001 USDC | List all active markets |
+| `getMarkets(options?)` | 0.0001 USDC | List markets (filter by status, category, creator; paginate) |
 | `getPrices()` | 0.0001 USDC | Get current market prices |
 | `getMarketInfo()` | 0.0001 USDC | Full market details |
 | `getPosition()` | 0.0001 USDC | Check your share balance |

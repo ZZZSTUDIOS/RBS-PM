@@ -22,7 +22,7 @@ import {
   LSLMSR_ABI,
   type LSLMSRMarketConfig,
 } from '../hooks/useLMSR';
-import { useLSLMSR_ERC20 } from '../hooks/useLMSR_ERC20';
+import { useLSLMSR_ERC20, LSLMSR_ERC20_ABI } from '../hooks/useLMSR_ERC20';
 import { useX402 } from '../hooks/useX402';
 import { monadTestnet, ADDRESSES } from '../config/wagmi';
 import { useMarkets } from '../hooks/useMarkets';
@@ -129,6 +129,9 @@ export default function LMSRAdmin() {
   // Market prices cache for PnL calculation
   const [marketPrices, setMarketPrices] = useState<Record<string, MarketPrices>>({});
 
+  // Liquidation values from AMM (getPayoutForSellInCollateral) - keyed by lowercase market address
+  const [liquidationValues, setLiquidationValues] = useState<Record<string, { yesValue: number; noValue: number }>>({});
+
   // Calculate positions from trades
   const positions = React.useMemo((): Position[] => {
     const positionMap: Record<string, Position> = {};
@@ -224,7 +227,12 @@ export default function LMSRAdmin() {
       const noValue = prices.yesWins ? 0 : pos.noShares;
       return (yesValue + noValue) - pos.yesCostBasis - pos.noCostBasis;
     } else {
-      // Mark to market using current prices
+      // Use AMM liquidation values (getPayoutForSellInCollateral) if available
+      const liqValues = liquidationValues[pos.marketAddress.toLowerCase()];
+      if (liqValues) {
+        return (liqValues.yesValue + liqValues.noValue) - pos.yesCostBasis - pos.noCostBasis;
+      }
+      // Fallback to spot price estimate while liquidation values load
       const yesValue = pos.yesShares * prices.yesPrice;
       const noValue = pos.noShares * prices.noPrice;
       return (yesValue + noValue) - pos.yesCostBasis - pos.noCostBasis;
@@ -340,6 +348,61 @@ export default function LMSRAdmin() {
 
     loadPricesFromSupabase();
   }, [supabaseMarkets]);
+
+  // Fetch actual liquidation values from AMM (getPayoutForSellInCollateral)
+  // This replaces the inaccurate shares × spotPrice calculation
+  useEffect(() => {
+    if (!publicClient || positions.length === 0) return;
+
+    const fetchLiquidationValues = async () => {
+      const updates: Record<string, { yesValue: number; noValue: number }> = {};
+
+      for (const pos of positions) {
+        if (pos.yesShares < 0.0001 && pos.noShares < 0.0001) continue;
+
+        const prices = marketPrices[pos.marketAddress.toLowerCase()];
+        if (prices?.resolved) continue; // Resolved markets use fixed 1/0 values
+
+        try {
+          const marketAddress = pos.marketAddress as `0x${string}`;
+          const yesSharesRaw = parseEther(pos.yesShares.toString());
+          const noSharesRaw = parseEther(pos.noShares.toString());
+
+          const [yesPayout, noPayout] = await Promise.all([
+            yesSharesRaw > 0n
+              ? publicClient.readContract({
+                  address: marketAddress,
+                  abi: LSLMSR_ERC20_ABI,
+                  functionName: 'getPayoutForSellInCollateral',
+                  args: [true, yesSharesRaw],
+                })
+              : 0n,
+            noSharesRaw > 0n
+              ? publicClient.readContract({
+                  address: marketAddress,
+                  abi: LSLMSR_ERC20_ABI,
+                  functionName: 'getPayoutForSellInCollateral',
+                  args: [false, noSharesRaw],
+                })
+              : 0n,
+          ]);
+
+          updates[pos.marketAddress.toLowerCase()] = {
+            yesValue: Number(yesPayout) / 1e6, // USDC has 6 decimals
+            noValue: Number(noPayout) / 1e6,
+          };
+        } catch (err) {
+          console.warn(`Failed to fetch liquidation values for ${pos.marketAddress}:`, err);
+        }
+      }
+
+      if (Object.keys(updates).length > 0) {
+        setLiquidationValues(prev => ({ ...prev, ...updates }));
+      }
+    };
+
+    fetchLiquidationValues();
+  }, [publicClient, positions, marketPrices]);
 
   // LS-LMSR hooks
   const { logs, addLog, clearLogs } = useTransactionLog(address);
@@ -1751,8 +1814,9 @@ export default function LMSRAdmin() {
                     {positions.map(pos => {
                       const unrealizedPnL = getUnrealizedPnL(pos);
                       const prices = marketPrices[pos.marketAddress.toLowerCase()];
-                      const yesValue = prices ? pos.yesShares * prices.yesPrice : 0;
-                      const noValue = prices ? pos.noShares * prices.noPrice : 0;
+                      const liqValues = liquidationValues[pos.marketAddress.toLowerCase()];
+                      const yesValue = liqValues ? liqValues.yesValue : (prices ? pos.yesShares * prices.yesPrice : 0);
+                      const noValue = liqValues ? liqValues.noValue : (prices ? pos.noShares * prices.noPrice : 0);
                       const totalValue = yesValue + noValue;
                       const totalCost = pos.yesCostBasis + pos.noCostBasis;
 
