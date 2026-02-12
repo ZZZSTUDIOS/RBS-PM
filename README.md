@@ -79,11 +79,11 @@ All API endpoints require x402 micropayments:
 │     │                              │  (x402 Gateway)  │            │
 │     │                              └──────────────────┘            │
 │     │                                        │                     │
-│     │  On-chain TX (MON gas)                 │ Price sync         │
+│     │  On-chain TX (MON gas)                 │ HyperSync indexer  │
 │     ▼                                        ▼                     │
 │  ┌──────────────────┐              ┌──────────────────┐            │
-│  │  LSLMSR_ERC20    │◀────────────▶│  Supabase DB     │            │
-│  │  Market Contract │              │  (markets, trades)│            │
+│  │  LSLMSR_ERC20    │─── events ──▶│  Supabase DB     │            │
+│  │  Market Contract │  (HyperSync) │  (markets, trades)│            │
 │  └──────────────────┘              └──────────────────┘            │
 │     │                                                               │
 │     ▼                                                               │
@@ -109,9 +109,8 @@ All API endpoints require x402 micropayments:
 | Contract | Address |
 |----------|---------|
 | USDC | `0x534b2f3A21130d7a60830c2Df862319e593943A3` |
-| Prediction Factory | `0xc4546422291F1860bbCe379075a077563B0e0777` |
+| MarketFactory (v2) | `0x99E1B2a0e68A2D0a1F60e5F0d24bC1e60518F1cd` |
 | Protocol Fee Recipient | `0x048c2c9E869594a70c6Dc7CeAC168E724425cdFE` |
-| Sample Market | `0x3f9498ef0a9cc5a88678d4d4a900ec16875a1f9f` |
 
 ## Development
 
@@ -154,8 +153,8 @@ PRIVATE_KEY=0x... npx tsx agent-trade-simulation.ts
 
 ## Links
 
-- **Live App**: https://prediction-market-rbs.vercel.app
-- **Agent Page**: https://prediction-market-rbs.vercel.app/#agents
+- **Live App**: https://prediction-market-doppler.vercel.app
+- **Agent Page**: https://prediction-market-doppler.vercel.app/#agents
 - **NPM SDK**: https://www.npmjs.com/package/@madgallery/rbs-pm-sdk
 - **x402 Protocol**: https://www.x402.org
 

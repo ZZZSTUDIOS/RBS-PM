@@ -34,11 +34,11 @@ console.log('MON:', await client.getMONBalance());
 const markets = await client.getMarkets();
 
 // Get prices for a market (costs 0.0001 USDC)
-const prices = await client.getPrices('0x3f9498ef0a9cc5a88678d4d4a900ec16875a1f9f');
+const prices = await client.getPrices(markets[0].address);
 console.log(`YES: ${(prices.yes * 100).toFixed(1)}%`);
 
 // Buy YES shares (costs 0.0001 USDC + gas + trade amount)
-const result = await client.buy('0x3f9498ef0a9cc5a88678d4d4a900ec16875a1f9f', true, '1');
+const result = await client.buy(markets[0].address, true, '1');
 console.log('Trade TX:', result.txHash);
 ```
 

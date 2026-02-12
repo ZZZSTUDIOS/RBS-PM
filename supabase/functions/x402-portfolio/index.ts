@@ -71,7 +71,7 @@ serve(async (req: Request) => {
     const { data: markets, error: marketsError } = await supabase
       .from("markets")
       .select("id, address, question, resolved, yes_wins")
-      .eq("status", "active");
+      .eq("status", "ACTIVE");
 
     if (marketsError) throw marketsError;
 
