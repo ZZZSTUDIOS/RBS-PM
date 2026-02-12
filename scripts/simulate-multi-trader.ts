@@ -4,10 +4,9 @@
  * This script:
  * 1. Creates a new market with a short resolution time
  * 2. Has 3 traders buy/sell different outcomes
- * 3. Confirms all trades via x402-confirm-trade
- * 4. Resolves the market
- * 5. Redeems winning shares for each trader
- * 6. Confirms redemptions via x402-confirm-trade
+ * 3. Resolves the market
+ * 4. Redeems winning shares for each trader
+ * (Indexer handles trade/redemption recording automatically)
  *
  * Usage: PRIVATE_KEY=0x... npx tsx scripts/simulate-multi-trader.ts
  */
@@ -159,24 +158,6 @@ async function x402Fetch(url: string, init?: RequestInit): Promise<Response> {
 }
 
 // ============ Helpers ============
-
-async function confirmTrade(txHash: string, marketAddress: string): Promise<void> {
-  console.log(`  Confirming trade ${txHash.slice(0, 14)}...`);
-  const res = await x402Fetch(`${API_BASE}/functions/v1/x402-confirm-trade`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ txHash, marketAddress }),
-  });
-  if (!res.ok) {
-    const err = await res.json() as { error?: string };
-    console.log(`  Confirm failed: ${err.error || res.status}`);
-    return;
-  }
-  const data = await res.json() as { success: boolean; trade?: { tradeType: string; outcome: string; shares: string; amount: string } };
-  if (data.success && data.trade) {
-    console.log(`  Confirmed: ${data.trade.tradeType} ${data.trade.outcome} ${parseFloat(data.trade.shares).toFixed(4)} shares, ${data.trade.amount} USDC`);
-  }
-}
 
 async function listMarket(marketAddress: string, question: string, resolutionTime: number, yesToken: string, noToken: string): Promise<void> {
   console.log('  Listing market in discovery index...');
@@ -351,9 +332,6 @@ async function main() {
     const receipt = await publicClient.waitForTransactionReceipt({ hash: buyHash });
     console.log(`  tx: ${buyHash.slice(0, 14)}... (gas: ${receipt.gasUsed})`);
 
-    // Confirm trade
-    await confirmTrade(buyHash, marketAddress);
-
     // Show prices after trade
     info = await publicClient.readContract({ address: marketAddress, abi: LSLMSR_ABI, functionName: 'getMarketInfo' }) as any[];
     printPrices(info);
@@ -382,7 +360,6 @@ async function main() {
   });
   const sellReceipt = await publicClient.waitForTransactionReceipt({ hash: sellHash });
   console.log(`  tx: ${sellHash.slice(0, 14)}... (gas: ${sellReceipt.gasUsed})`);
-  await confirmTrade(sellHash, marketAddress);
 
   info = await publicClient.readContract({ address: marketAddress, abi: LSLMSR_ABI, functionName: 'getMarketInfo' }) as any[];
   console.log('  After all trades:');
@@ -431,9 +408,6 @@ async function main() {
       });
       const redeemReceipt = await publicClient.waitForTransactionReceipt({ hash: redeemHash });
       console.log(`  tx: ${redeemHash.slice(0, 14)}... (gas: ${redeemReceipt.gasUsed})`);
-
-      // Confirm redemption
-      await confirmTrade(redeemHash, marketAddress);
     } else {
       console.log(`  ${trader.name}: No YES shares to redeem`);
     }
@@ -459,7 +433,6 @@ async function main() {
       });
       const redeemReceipt = await publicClient.waitForTransactionReceipt({ hash: redeemHash });
       console.log(`  tx: ${redeemHash.slice(0, 14)}... (gas: ${redeemReceipt.gasUsed})`);
-      await confirmTrade(redeemHash, marketAddress);
     } catch (err: any) {
       console.log(`  Redeem reverted (expected for losing side): ${err.message?.slice(0, 80)}`);
     }

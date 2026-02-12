@@ -100,14 +100,14 @@ async function main() {
     return `${count} positions`;
   });
 
-  // 7. buy (x402-agent-trade + x402-confirm-trade)
-  await test('x402-agent-trade + confirm-trade (buy)', async () => {
+  // 7. buy (x402-agent-trade)
+  await test('x402-agent-trade (buy)', async () => {
     const result = await client.buy(MARKET, false, '0.1');
     return `TX: ${result.txHash?.slice(0, 18)}... shares: ${result.sharesReceived || 'confirmed'}`;
   });
 
-  // 8. sell (x402-agent-trade + x402-confirm-trade)
-  await test('x402-agent-trade + confirm-trade (sell)', async () => {
+  // 8. sell (x402-agent-trade)
+  await test('x402-agent-trade (sell)', async () => {
     // Sell the NO shares we just bought
     const pos = await client.getPosition(MARKET);
     const noShares = pos.noShares || 0n;
