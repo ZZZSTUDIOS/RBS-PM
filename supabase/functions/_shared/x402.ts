@@ -245,17 +245,14 @@ export async function handlePayment(
     };
   }
 
+  // Log the payment (don't block response — settle can be retried later)
+  // If verification passed, the authorization is valid and claimable even if
+  // settlement was slow. This prevents batch x402 calls from failing when the
+  // facilitator can't keep up with rapid sequential settlements.
   if (!verification.settled) {
-    return {
-      success: false,
-      response: new Response(
-        JSON.stringify({ error: "Payment settlement failed. You were not charged." }),
-        { status: 402, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-      ),
-    };
+    console.warn(`Settlement pending for ${endpoint} from ${verification.payerAddress} — proceeding with verified payment`);
   }
 
-  // Log the payment (don't await - run async to not slow down response)
   logPayment(
     endpoint,
     verification.payerAddress || "unknown",

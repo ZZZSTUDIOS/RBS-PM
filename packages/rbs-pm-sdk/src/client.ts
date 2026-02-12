@@ -69,6 +69,7 @@ export class RBSPMClient {
   private accessToken: string | null = null;
   private apiUrl: string;
   private x402PaymentFetch: typeof fetch | null = null;
+  private x402Queue: Promise<unknown> = Promise.resolve();
 
   constructor(config: RBSPMConfig = {}) {
     const rpcUrl = config.rpcUrl || MONAD_TESTNET.rpcUrl;
@@ -95,13 +96,21 @@ export class RBSPMClient {
   }
 
   /**
-   * Initialize x402 client for automatic payment handling
+   * Initialize x402 client for automatic payment handling.
+   * Wraps fetch in a sequential queue to prevent parallel x402 calls
+   * from overwhelming the facilitator.
    */
   private initX402Client(): void {
     if (!this.walletClient || !this.account) return;
 
-    // Create fetch wrapper that automatically handles x402 payments
-    this.x402PaymentFetch = createX402Fetch(this.walletClient, this.account);
+    const rawFetch = createX402Fetch(this.walletClient, this.account);
+
+    // Wrap in sequential queue — each call waits for the previous one to finish
+    this.x402PaymentFetch = ((...args: Parameters<typeof fetch>) => {
+      const call = this.x402Queue.then(() => rawFetch(...args));
+      this.x402Queue = call.then(() => {}, () => {}); // swallow errors to keep queue moving
+      return call;
+    }) as typeof fetch;
   }
 
   // ==================== Authentication ====================
@@ -272,6 +281,10 @@ export class RBSPMClient {
         totalTrades: Number(m.total_trades) || 0,
         category: m.category as string | undefined,
         tags: m.tags as string[] | undefined,
+        heatScore: Number(m.heat_score) || 0,
+        velocity1m: Number(m.velocity_1m) || 0,
+        stressScore: Number(m.stress_score) || 0,
+        fragility: Number(m.fragility) || 0,
       }));
   }
 
@@ -687,7 +700,7 @@ export class RBSPMClient {
   }
 
   /**
-   * Get quote for buying shares with USDC
+   * Get quote for buying shares with USDC (free — on-chain reads only)
    */
   async getBuyQuote(
     marketAddress: `0x${string}`,
@@ -696,21 +709,32 @@ export class RBSPMClient {
   ): Promise<TradeQuote> {
     const amountInUnits = parseUnits(usdcAmount, USDC_DECIMALS);
 
-    // Estimate shares for USDC amount
-    const shares = await this.publicClient.readContract({
-      address: marketAddress,
-      abi: LSLMSR_ABI,
-      functionName: 'estimateSharesForPayment',
-      args: [isYes, amountInUnits],
-    }) as bigint;
+    // All on-chain reads — no x402 payment needed
+    const [shares, yesPrice, noPrice] = await Promise.all([
+      this.publicClient.readContract({
+        address: marketAddress,
+        abi: LSLMSR_ABI,
+        functionName: 'estimateSharesForPayment',
+        args: [isYes, amountInUnits],
+      }) as Promise<bigint>,
+      this.publicClient.readContract({
+        address: marketAddress,
+        abi: LSLMSR_ABI,
+        functionName: 'getYesPrice',
+      }) as Promise<bigint>,
+      this.publicClient.readContract({
+        address: marketAddress,
+        abi: LSLMSR_ABI,
+        functionName: 'getNoPrice',
+      }) as Promise<bigint>,
+    ]);
 
-    const prices = await this.getPrices(marketAddress);
-    const currentPrice = isYes ? prices.yes : prices.no;
+    const currentPrice = Number(isYes ? yesPrice : noPrice) / 1e18;
 
     return {
       shares,
       cost: amountInUnits,
-      priceImpact: 0, // Would need more complex calculation
+      priceImpact: 0,
       averagePrice: currentPrice,
     };
   }

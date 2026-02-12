@@ -953,7 +953,10 @@ All API calls require x402 micropayments (automatic via SDK):
 | `sell()` | 0.0001 + gas | Sell shares |
 | `redeem()` | 0.0001 + gas | Redeem winnings |
 | `resolve()` | 0.0001 + gas | Resolve market (oracle only) |
+| `getFeeInfo()` | 0.0001 USDC | Get pending fees info |
 | `claimCreatorFees()` | 0.0001 + gas | Claim creator fees |
+| `withdrawExcessCollateral()` | 0.0001 + gas | Withdraw excess collateral after resolution |
+| `canResolve()` | 0.0001 USDC | Check if market can be resolved (calls getMarketInfo) |
 | `deployMarket()` | ~0.0003 + gas + liquidity | Deploy + init + list |
 | `initializeMarket()` | 0.0001 + gas + liquidity | Initialize with USDC |
 | `listMarket()` | 0.0001 USDC | List market for discovery |

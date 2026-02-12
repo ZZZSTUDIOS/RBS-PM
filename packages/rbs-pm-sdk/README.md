@@ -78,8 +78,10 @@ console.log('Trade TX:', result.txHash);
 | `listMarket()` | 0.0001 USDC | List a deployed market for discovery |
 | `initializeMarket()` | 0.0001 + gas | Initialize market with liquidity |
 | `resolve()` | 0.0001 + gas | Resolve market outcome (oracle only) |
+| `canResolve()` | 0.0001 USDC | Check if market can be resolved |
 | `getFeeInfo()` | 0.0001 USDC | Get pending fees info |
 | `claimCreatorFees()` | 0.0001 + gas | Claim accumulated creator fees |
+| `withdrawExcessCollateral()` | 0.0001 + gas | Withdraw excess collateral after resolution |
 
 > **Note:** All operations require x402 payment. Trades cost 0.0001 USDC (API) + gas (MON) + trade amount (USDC).
 
