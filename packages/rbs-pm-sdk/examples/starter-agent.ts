@@ -98,7 +98,7 @@ async function checkPortfolio() {
 // ============================================
 // STEP 4: Make a trade (example)
 // ============================================
-async function exampleTrade(marketAddress: `0x${string}`, betYes: boolean, amountUsdc: number) {
+async function exampleTrade(marketAddress: `0x${string}`, betYes: boolean, amountUsdc: string) {
   console.log('\n=== PLACING TRADE ===');
   console.log(`Market: ${marketAddress}`);
   console.log(`Side: ${betYes ? 'YES' : 'NO'}`);
@@ -108,12 +108,12 @@ async function exampleTrade(marketAddress: `0x${string}`, betYes: boolean, amoun
   const prices = await client.getPrices(marketAddress);
   console.log(`Current price: ${(prices.yes * 100).toFixed(1)}% YES / ${(prices.no * 100).toFixed(1)}% NO`);
 
-  // Execute trade
-  const txHash = await client.buy(marketAddress, betYes, amountUsdc);
-  console.log(`✅ Trade submitted: ${txHash}`);
-  console.log(`   View: https://testnet.monadexplorer.com/tx/${txHash}`);
+  // Execute trade (amount is a string)
+  const result = await client.buy(marketAddress, betYes, amountUsdc);
+  console.log(`✅ Trade submitted: ${result.txHash}`);
+  console.log(`   View: https://testnet.monadexplorer.com/tx/${result.txHash}`);
 
-  return txHash;
+  return result;
 }
 
 // ============================================
@@ -141,7 +141,7 @@ async function main() {
 
   // Step 4: Example trade (uncomment to execute)
   // const firstMarket = markets[0].address as `0x${string}`;
-  // await exampleTrade(firstMarket, true, 1); // Buy $1 of YES
+  // await exampleTrade(firstMarket, true, '1'); // Buy $1 of YES
 
   console.log('\n✅ Agent ready. Modify this script to implement your trading strategy.');
 }

@@ -56,6 +56,7 @@ console.log('Trade TX:', result.txHash);
 | `buy()` | 0.0001 + gas + amount | Buy shares (x402 + on-chain) |
 | `sell()` | 0.0001 + gas | Sell shares (x402 + on-chain) |
 | `redeem()` | 0.0001 + gas | Redeem winnings (x402 + on-chain) |
+| `deployMarket()` | ~0.0003 + gas + liquidity | Deploy + initialize + list |
 | `listMarket()` | 0.0001 USDC | List a new market |
 
 ## API Reference
@@ -97,6 +98,20 @@ await client.sell(marketAddress, true, 100000000000000000000n);
 
 // Redeem winning shares after resolution
 await client.redeem(marketAddress);
+```
+
+### Market Creation
+
+```typescript
+// Deploy, initialize, and list a market in one call
+const result = await client.deployMarket({
+  question: 'Will BTC hit $100k by March 2026?',
+  resolutionTime: Math.floor(Date.now() / 1000) + 30 * 24 * 60 * 60,
+  initialLiquidity: '5', // 5 USDC minimum
+  category: 'crypto',
+  tags: ['bitcoin', 'price'],
+});
+console.log('Market:', result.marketAddress);
 ```
 
 ### Resolution & Fees
@@ -161,7 +176,6 @@ const result = await client.listMarket({
 |----------|---------|
 | USDC | `0x534b2f3A21130d7a60830c2Df862319e593943A3` |
 | MarketFactory | `0x99E1B2a0e68A2D0a1F60e5F0d24bC1e60518F1cd` |
-| Sample Market | `0x3f9498ef0a9cc5a88678d4d4a900ec16875a1f9f` |
 | Protocol Fee Recipient | `0x048c2c9E869594a70c6Dc7CeAC168E724425cdFE` |
 
 ## AI Agent Guide
@@ -182,8 +196,8 @@ Includes:
 ## Links
 
 - [GitHub](https://github.com/ZZZSTUDIOS/RBS-PM)
-- [Live App](https://prediction-market-rbs.vercel.app)
-- [Agent Page](https://prediction-market-rbs.vercel.app/#agents)
+- [Live App](https://prediction-market-doppler.vercel.app)
+- [Agent Page](https://prediction-market-doppler.vercel.app/#agents)
 - [NPM](https://www.npmjs.com/package/@madgallery/rbs-pm-sdk)
 
 ## License
