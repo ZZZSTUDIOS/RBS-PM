@@ -110,7 +110,27 @@ console.log('NO price:', prices.no);    // e.g., 0.35`}
               </div>
 
               <div style={styles.codeSection}>
-                <h3 style={styles.codeTitle}>4. Buy Shares</h3>
+                <h3 style={styles.codeTitle}>4. Get Quotes Before Trading</h3>
+                <div style={styles.codeWrapper}>
+                  <pre style={styles.codeBlock}>
+{`// Get a buy quote (FREE - direct contract read)
+const buyQuote = await client.getBuyQuote(marketAddress, true, '10');
+console.log('Expected shares:', buyQuote.expectedShares);
+console.log('Price per share:', buyQuote.pricePerShare);
+
+// Get a sell quote (FREE - direct contract read)
+const sellQuote = await client.getSellQuote(marketAddress, true, 50000000000000000000n);
+console.log('Expected payout:', sellQuote.expectedPayout, 'USDC');`}
+                  </pre>
+                  <CopyButton
+                    text={`const buyQuote = await client.getBuyQuote(marketAddress, true, '10');\nconst sellQuote = await client.getSellQuote(marketAddress, true, 50000000000000000000n);`}
+                    label="quotes"
+                  />
+                </div>
+              </div>
+
+              <div style={styles.codeSection}>
+                <h3 style={styles.codeTitle}>5. Buy Shares</h3>
                 <div style={styles.codeWrapper}>
                   <pre style={styles.codeBlock}>
 {`// Buy 10 USDC worth of YES shares
@@ -119,7 +139,7 @@ const result = await client.buy(marketAddress, true, '10');
 console.log('Transaction:', result.txHash);
 console.log('Shares received:', result.sharesReceived);
 
-// Check your USDC balance
+// Check your USDC balance (FREE)
 const balance = await client.getUSDCBalance();
 console.log('USDC Balance:', balance);`}
                   </pre>
@@ -131,7 +151,7 @@ console.log('USDC Balance:', balance);`}
               </div>
 
               <div style={styles.codeSection}>
-                <h3 style={styles.codeTitle}>5. Sell Shares</h3>
+                <h3 style={styles.codeTitle}>6. Sell Shares</h3>
                 <div style={styles.codeWrapper}>
                   <pre style={styles.codeBlock}>
 {`// Check your position first
@@ -155,7 +175,7 @@ console.log('USDC received:', sellResult.usdcReceived);`}
               </div>
 
               <div style={styles.codeSection}>
-                <h3 style={styles.codeTitle}>6. Deploy Your Own Market</h3>
+                <h3 style={styles.codeTitle}>7. Deploy Your Own Market</h3>
                 <div style={styles.codeWrapper}>
                   <pre style={styles.codeBlock}>
 {`// Deploy a new prediction market
@@ -179,7 +199,7 @@ console.log('Initialize tx:', result.initializeTxHash);
               </div>
 
               <div style={styles.codeSection}>
-                <h3 style={styles.codeTitle}>7. Check Full Portfolio</h3>
+                <h3 style={styles.codeTitle}>8. Check Full Portfolio</h3>
                 <div style={styles.codeWrapper}>
                   <pre style={styles.codeBlock}>
 {`// Get all positions across all markets
@@ -199,6 +219,50 @@ for (const pos of portfolio.positions) {
                   <CopyButton
                     text={`const portfolio = await client.getPortfolio();\nconsole.log('Total value:', portfolio.summary.totalValue, 'USDC');`}
                     label="portfolio"
+                  />
+                </div>
+              </div>
+
+              <div style={styles.codeSection}>
+                <h3 style={styles.codeTitle}>9. Resolve & Redeem</h3>
+                <div style={styles.codeWrapper}>
+                  <pre style={styles.codeBlock}>
+{`// Check if market can be resolved (oracle only)
+const status = await client.canResolve(marketAddress);
+console.log('Can resolve:', status.canResolve);
+console.log('Reason:', status.reason);
+
+// Resolve the market (oracle only, after resolution time)
+const resolveTx = await client.resolve(marketAddress, true); // YES wins
+
+// Redeem winning shares for USDC
+const redeemTx = await client.redeem(marketAddress);
+console.log('Redeemed:', redeemTx.txHash);`}
+                  </pre>
+                  <CopyButton
+                    text={`const status = await client.canResolve(marketAddress);\nconst resolveTx = await client.resolve(marketAddress, true);\nconst redeemTx = await client.redeem(marketAddress);`}
+                    label="resolve"
+                  />
+                </div>
+              </div>
+
+              <div style={styles.codeSection}>
+                <h3 style={styles.codeTitle}>10. Claim Creator Fees</h3>
+                <div style={styles.codeWrapper}>
+                  <pre style={styles.codeBlock}>
+{`// Check pending fees (market creator only)
+const fees = await client.getFeeInfo(marketAddress);
+console.log('Pending fees:', fees.pendingCreatorFees, 'USDC');
+
+// Claim accumulated trading fees
+const claimTx = await client.claimCreatorFees(marketAddress);
+
+// Withdraw excess collateral after resolution
+const withdrawTx = await client.withdrawExcessCollateral(marketAddress);`}
+                  </pre>
+                  <CopyButton
+                    text={`const fees = await client.getFeeInfo(marketAddress);\nconst claimTx = await client.claimCreatorFees(marketAddress);\nconst withdrawTx = await client.withdrawExcessCollateral(marketAddress);`}
+                    label="fees"
                   />
                 </div>
               </div>
@@ -241,7 +305,7 @@ for (const pos of portfolio.positions) {
             <div style={styles.prerequisiteIcon}>USDC</div>
             <h3 style={styles.prerequisiteTitle}>USDC (Trading + API)</h3>
             <p style={styles.prerequisiteText}>
-              Used for trading and x402 API micropayments (0.0001 USDC per call).
+              Used for trading and x402 API micropayments (0.01 USDC per call).
               Minimum: 1 USDC to start trading.
             </p>
             <a
@@ -271,28 +335,53 @@ for (const pos of portfolio.positions) {
             </tr>
           </thead>
           <tbody>
+            {/* Free Operations */}
+            <tr>
+              <td style={styles.costTdCategory} colSpan={3}>Free (Direct Contract Reads)</td>
+            </tr>
+            <tr>
+              <td style={styles.costTd}><code>getBuyQuote()</code></td>
+              <td style={styles.costTdFree}>FREE</td>
+              <td style={styles.costTd}>Estimate shares for a given USDC amount</td>
+            </tr>
+            <tr>
+              <td style={styles.costTd}><code>getSellQuote()</code></td>
+              <td style={styles.costTdFree}>FREE</td>
+              <td style={styles.costTd}>Estimate USDC payout for selling shares</td>
+            </tr>
+            <tr>
+              <td style={styles.costTd}><code>getUSDCBalance()</code></td>
+              <td style={styles.costTdFree}>FREE</td>
+              <td style={styles.costTd}>Get USDC balance for any address</td>
+            </tr>
+            <tr>
+              <td style={styles.costTd}><code>getMONBalance()</code></td>
+              <td style={styles.costTdFree}>FREE</td>
+              <td style={styles.costTd}>Get MON (gas token) balance</td>
+            </tr>
+
             {/* Market Discovery */}
             <tr>
               <td style={styles.costTdCategory} colSpan={3}>Market Discovery</td>
             </tr>
             <tr>
               <td style={styles.costTd}><code>getMarkets(options?)</code></td>
-              <td style={styles.costTdPrice}>0.0001</td>
+              <td style={styles.costTdPrice}>0.01</td>
               <td style={styles.costTd}>List markets (filter/paginate)</td>
             </tr>
             <tr>
               <td style={styles.costTd}><code>getPrices()</code></td>
-              <td style={styles.costTdPrice}>0.0001</td>
+              <td style={styles.costTdPrice}>0.01</td>
               <td style={styles.costTd}>Get current market prices</td>
             </tr>
             <tr>
               <td style={styles.costTd}><code>getMarketInfo()</code></td>
-              <td style={styles.costTdPrice}>0.0001</td>
+              <td style={styles.costTdPrice}>0.01</td>
               <td style={styles.costTd}>Full market details</td>
             </tr>
             <tr>
               <td style={styles.costTd}><code>getPremiumMarketData()</code></td>
-              <td style={styles.costTdPrice}>0.0001</td>
+              <td style={styles.costTdPrice}>0.01</td>
               <td style={styles.costTd}>Premium analytics (volume, trades)</td>
             </tr>
 
@@ -302,12 +391,12 @@ for (const pos of portfolio.positions) {
             </tr>
             <tr>
               <td style={styles.costTd}><code>getPosition()</code></td>
-              <td style={styles.costTdPrice}>0.0001</td>
+              <td style={styles.costTdPrice}>0.01</td>
               <td style={styles.costTd}>Position in single market</td>
             </tr>
             <tr>
               <td style={styles.costTd}><code>getPortfolio()</code></td>
-              <td style={styles.costTdPrice}>0.0001</td>
+              <td style={styles.costTdPrice}>0.01</td>
               <td style={styles.costTd}>Full portfolio (all positions)</td>
             </tr>
 
@@ -317,22 +406,22 @@ for (const pos of portfolio.positions) {
             </tr>
             <tr>
               <td style={styles.costTd}><code>getTradeInstructions()</code></td>
-              <td style={styles.costTdPrice}>0.0001</td>
+              <td style={styles.costTdPrice}>0.01</td>
               <td style={styles.costTd}>Get encoded calldata for trades</td>
             </tr>
             <tr>
               <td style={styles.costTd}><code>buy()</code></td>
-              <td style={styles.costTdPrice}>0.0001 + gas + amount</td>
+              <td style={styles.costTdPrice}>0.01 + gas + amount</td>
               <td style={styles.costTd}>Buy shares (x402 + on-chain)</td>
             </tr>
             <tr>
               <td style={styles.costTd}><code>sell()</code></td>
-              <td style={styles.costTdPrice}>0.0001 + gas</td>
+              <td style={styles.costTdPrice}>0.01 + gas</td>
               <td style={styles.costTd}>Sell shares (x402 + on-chain)</td>
             </tr>
             <tr>
               <td style={styles.costTd}><code>redeem()</code></td>
-              <td style={styles.costTdPrice}>0.0001 + gas</td>
+              <td style={styles.costTdPrice}>0.01 + gas</td>
               <td style={styles.costTd}>Redeem winning shares after resolution</td>
             </tr>
 
@@ -342,38 +431,48 @@ for (const pos of portfolio.positions) {
             </tr>
             <tr>
               <td style={styles.costTd}><code>deployMarket()</code></td>
-              <td style={styles.costTdPrice}>~0.0003 + gas + liquidity</td>
+              <td style={styles.costTdPrice}>~0.03 + gas + liquidity</td>
               <td style={styles.costTd}>Deploy + initialize + list</td>
             </tr>
             <tr>
               <td style={styles.costTd}><code>listMarket()</code></td>
-              <td style={styles.costTdPrice}>0.0001</td>
+              <td style={styles.costTdPrice}>0.01</td>
               <td style={styles.costTd}>List a deployed market for discovery</td>
             </tr>
             <tr>
               <td style={styles.costTd}><code>initializeMarket()</code></td>
-              <td style={styles.costTdPrice}>0.0001 + gas</td>
+              <td style={styles.costTdPrice}>0.01 + gas</td>
               <td style={styles.costTd}>Initialize market with liquidity</td>
             </tr>
             <tr>
+              <td style={styles.costTd}><code>canResolve()</code></td>
+              <td style={styles.costTdPrice}>0.01</td>
+              <td style={styles.costTd}>Check if market can be resolved</td>
+            </tr>
+            <tr>
               <td style={styles.costTd}><code>resolve()</code></td>
-              <td style={styles.costTdPrice}>0.0001 + gas</td>
+              <td style={styles.costTdPrice}>0.01 + gas</td>
               <td style={styles.costTd}>Resolve market outcome (oracle only)</td>
             </tr>
             <tr>
               <td style={styles.costTd}><code>getFeeInfo()</code></td>
-              <td style={styles.costTdPrice}>0.0001</td>
+              <td style={styles.costTdPrice}>0.01</td>
               <td style={styles.costTd}>Get pending fees info</td>
             </tr>
             <tr>
               <td style={styles.costTd}><code>claimCreatorFees()</code></td>
-              <td style={styles.costTdPrice}>0.0001 + gas</td>
+              <td style={styles.costTdPrice}>0.01 + gas</td>
               <td style={styles.costTd}>Claim accumulated creator fees</td>
+            </tr>
+            <tr>
+              <td style={styles.costTd}><code>withdrawExcessCollateral()</code></td>
+              <td style={styles.costTdPrice}>0.01 + gas</td>
+              <td style={styles.costTd}>Withdraw excess collateral after resolution</td>
             </tr>
           </tbody>
         </table>
         <div style={styles.costNote}>
-          <strong>Note:</strong> All operations require x402 payment. Trades cost 0.0001 USDC (API) + gas (MON) + trade amount (USDC).
+          <strong>Note:</strong> x402 API calls cost 0.01 USDC each. Trades also require gas (MON) + trade amount (USDC). Quotes and balance checks are free.
         </div>
 
         {/* x402 How It Works */}
@@ -382,7 +481,7 @@ for (const pos of portfolio.positions) {
           <ol style={styles.x402List}>
             <li>Your agent makes an API request (e.g., <code>getMarkets()</code>)</li>
             <li>The SDK signs a USDC <code>TransferWithAuthorization</code> using your private key</li>
-            <li>Payment (0.0001 USDC) is verified and settled by the x402 facilitator</li>
+            <li>Payment (0.01 USDC) is verified and settled by the x402 facilitator</li>
             <li>You receive the API response</li>
           </ol>
           <p style={styles.x402Note}>
@@ -426,8 +525,8 @@ for (const pos of portfolio.positions) {
             <tr>
               <td style={styles.contractLabel}>MarketFactory</td>
               <td style={styles.contractAddress}>
-                <code>0x99E1B2a0e68A2D0a1F60e5F0d24bC1e60518F1cd</code>
-                <CopyButton text="0x99E1B2a0e68A2D0a1F60e5F0d24bC1e60518F1cd" label="factory" />
+                <code>0xD639844c0aD7F9c33277f2491aaee503CE83A441</code>
+                <CopyButton text="0xD639844c0aD7F9c33277f2491aaee503CE83A441" label="factory" />
               </td>
             </tr>
           </tbody>
@@ -459,7 +558,7 @@ for (const pos of portfolio.positions) {
             <div style={styles.linkIcon}>NPM</div>
             <div>
               <div style={styles.linkTitle}>NPM Package</div>
-              <div style={styles.linkDesc}>@madgallery/rbs-pm-sdk v1.0.13</div>
+              <div style={styles.linkDesc}>@madgallery/rbs-pm-sdk v1.0.35</div>
             </div>
           </a>
           <a
@@ -709,6 +808,14 @@ const styles: Record<string, React.CSSProperties> = {
     padding: '14px 20px',
     borderBottom: `1px solid ${theme.colors.borderLight}`,
     color: theme.colors.primary,
+    fontSize: theme.fontSizes.nav,
+    fontWeight: 600,
+    textAlign: 'center',
+  },
+  costTdFree: {
+    padding: '14px 20px',
+    borderBottom: `1px solid ${theme.colors.borderLight}`,
+    color: theme.colors.textWhite,
     fontSize: theme.fontSizes.nav,
     fontWeight: 600,
     textAlign: 'center',
