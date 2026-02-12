@@ -116,7 +116,7 @@ serve(async (req: Request) => {
     const supabaseServiceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
     const supabase = createClient(supabaseUrl, supabaseServiceKey);
 
-    // Fetch trade history and metadata from Supabase (non-blocking)
+    // Fetch trade history, metadata, and analytics from Supabase (non-blocking)
     const { data: market } = await supabase
       .from("markets")
       .select(`
@@ -126,6 +126,16 @@ serve(async (req: Request) => {
         total_trades,
         unique_traders,
         created_at,
+        velocity_1m,
+        velocity_5m,
+        velocity_15m,
+        acceleration,
+        stress_score,
+        fragility,
+        fee_velocity_24h,
+        heat_score,
+        volume_24h,
+        trades_24h,
         recent_trades:trades(
           id,
           trade_type,
@@ -179,6 +189,20 @@ serve(async (req: Request) => {
       fees: {
         // Note: 0.5% trading fee goes 100% to market creator (no protocol fee)
         pendingCreatorFees: formatUnits(pendingCreatorFees as bigint, 6),
+      },
+      analytics: {
+        velocity: {
+          v1m: parseFloat(market?.velocity_1m || "0"),
+          v5m: parseFloat(market?.velocity_5m || "0"),
+          v15m: parseFloat(market?.velocity_15m || "0"),
+          acceleration: parseFloat(market?.acceleration || "0"),
+        },
+        stressScore: parseFloat(market?.stress_score || "0"),
+        fragility: parseFloat(market?.fragility || "0"),
+        feeVelocity24h: parseFloat(market?.fee_velocity_24h || "0"),
+        heatScore: parseFloat(market?.heat_score || "0"),
+        volume24h: parseFloat(market?.volume_24h || "0"),
+        trades24h: parseInt(market?.trades_24h || "0"),
       },
       metadata: {
         category: market?.category || null,

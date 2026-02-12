@@ -18,6 +18,20 @@ export interface Market {
   totalTrades: number;
   category?: string;
   tags?: string[];
+  heatScore?: number;
+  velocity1m?: number;
+  stressScore?: number;
+  fragility?: number;
+}
+
+export interface MarketAnalytics {
+  velocity: { v1m: number; v5m: number; v15m: number; acceleration: number };
+  stressScore: number;
+  fragility: number;
+  feeVelocity24h: number;
+  heatScore: number;
+  volume24h: number;
+  trades24h: number;
 }
 
 export interface MarketPrices {
@@ -153,6 +167,7 @@ export interface PremiumMarketData {
     totalProtocolFees: string;
     totalCreatorFees: string;
   };
+  analytics?: MarketAnalytics;
 }
 
 /** Parameters for creating a new market */
@@ -203,7 +218,7 @@ export interface GetMarketsOptions {
   /** Filter by resolved state */
   resolved?: boolean;
   /** Sort field (default: created_at) */
-  sort?: 'created_at' | 'volume' | 'resolution_time';
+  sort?: 'created_at' | 'volume' | 'resolution_time' | 'heat' | 'velocity';
   /** Sort order (default: desc) */
   order?: 'asc' | 'desc';
   /** Max results to return, 1-100 (default: 50) */

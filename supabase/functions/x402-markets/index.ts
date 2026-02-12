@@ -40,6 +40,8 @@ serve(async (req: Request) => {
       created_at: "created_at",
       volume: "total_volume",
       resolution_time: "resolution_time",
+      heat: "heat_score",
+      velocity: "velocity_1m",
     };
     const sortColumn = sortColumnMap[sort] || "created_at";
     const ascending = order === "asc";

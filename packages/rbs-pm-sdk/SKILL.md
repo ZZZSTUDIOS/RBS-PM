@@ -132,169 +132,86 @@ console.log(`x402 Enabled: ${client.hasPaymentCapability()}`);
 
 ## Core Operations
 
-### 1. Discover Markets (0.0001 USDC)
+### 1. Scan All Markets — ONE Call (0.0001 USDC)
+
+`getMarkets()` returns **all active markets with prices and analytics** in a single call. This is your primary scan — don't call individual price/info endpoints per market.
 
 ```typescript
-// Get all markets (default: 50, newest first)
-const markets = await client.getMarkets();
+// ONE call = all prices, analytics, and market data you need
+const markets = await client.getMarkets({ status: 'ACTIVE' });
 
-// Sort by heat score (hottest markets first)
-const hot = await client.getMarkets({
-  status: 'ACTIVE',
-  sort: 'heat',
-  order: 'desc',
-  limit: 5,
-});
+for (const m of markets) {
+  console.log(`${m.question}`);
+  console.log(`  YES: ${(m.yesPrice * 100).toFixed(1)}% | NO: ${(m.noPrice * 100).toFixed(1)}%`);
+  console.log(`  Heat: ${m.heatScore} | Stress: ${m.stressScore} | Fragility: ${m.fragility}`);
+  console.log(`  Resolution: ${m.resolutionTime.toISOString()}`);
+}
 
-// Sort by velocity (fastest moving markets)
-const moving = await client.getMarkets({ sort: 'velocity', order: 'desc' });
-
-// Filter server-side: only active markets, sorted by volume
-const active = await client.getMarkets({
-  status: 'ACTIVE',
-  sort: 'volume',
-  order: 'desc',
-  limit: 10,
-});
-
-// Paginate through results
-const page2 = await client.getMarkets({ limit: 10, offset: 10 });
-
-// Filter by creator or resolved state
-const mine = await client.getMarkets({ creator: '0x...' });
-const unresolved = await client.getMarkets({ resolved: false });
-
-// Each market includes analytics summary fields
-console.log(`Top: ${hot[0].question}`);
-console.log(`Heat: ${hot[0].heatScore}`);
-console.log(`Stress: ${hot[0].stressScore}`);
-console.log(`YES: ${(hot[0].yesPrice * 100).toFixed(1)}%`);
+// Sort/filter options (still just 1 call each):
+// { sort: 'heat' | 'volume' | 'velocity' | 'created_at' | 'resolution_time' }
+// { status: 'ACTIVE' | 'RESOLVED', order: 'asc' | 'desc', limit, offset }
 ```
 
-### 2. Get Real-Time Prices (0.0001 USDC)
+### 2. Check Portfolio (0.0001 USDC)
 
 ```typescript
-const prices = await client.getPrices(marketAddress);
-console.log(`YES: ${(prices.yes * 100).toFixed(1)}%`);
-console.log(`NO: ${(prices.no * 100).toFixed(1)}%`);
-```
-
-### 3. Get Full Market Info (0.0001 USDC)
-
-```typescript
-const info = await client.getMarketInfo(marketAddress);
-console.log(`Question: ${info.question}`);
-console.log(`Oracle: ${info.oracle}`);
-console.log(`Resolution: ${new Date(Number(info.resolutionTime) * 1000).toISOString()}`);
-console.log(`Resolved: ${info.resolved}`);
-console.log(`Creator: ${info.marketCreator}`);
-```
-
-### 4. Check Your Position (0.0001 USDC)
-
-```typescript
-// Single market position
-const position = await client.getPosition(marketAddress);
-console.log(`YES shares: ${position.yesShares}`);
-console.log(`NO shares: ${position.noShares}`);
-console.log(`Value: ${position.totalValue}`);
-
-// Full portfolio across ALL markets
 const portfolio = await client.getPortfolio();
-console.log(`Total positions: ${portfolio.summary.totalPositions}`);
-console.log(`Total value: $${portfolio.summary.totalValue} USDC`);
+console.log(`Positions: ${portfolio.summary.totalPositions}`);
+console.log(`Value: $${portfolio.summary.totalValue} USDC`);
 for (const pos of portfolio.positions) {
   console.log(`  ${pos.marketQuestion}: $${pos.totalValue} USDC`);
 }
 ```
 
-### 5. Buy Shares (0.0001 USDC + Gas + Amount)
+### 3. Get Trade Quotes (Free)
 
 ```typescript
-// Buy YES shares with 10 USDC (amount is a string)
-const result = await client.buy(marketAddress, true, '10');
-console.log(`Buy tx: ${result.txHash}`);
-
-// Buy NO shares with 5 USDC
-const result2 = await client.buy(marketAddress, false, '5');
-```
-
-### 6. Sell Shares (0.0001 USDC + Gas)
-
-```typescript
-// Sell YES shares (shares amount is a bigint with 18 decimals)
-// Example: sell 5 shares = 5000000000000000000n (5e18)
-const result = await client.sell(marketAddress, true, 5000000000000000000n);
-console.log(`Sell tx: ${result.txHash}`);
-
-// Sell all NO shares (get share count from getPosition first)
-const position = await client.getPosition(marketAddress);
-if (position.noShares > 0n) {
-  await client.sell(marketAddress, false, position.noShares);
-}
-```
-
-### 7. Redeem Winnings (0.0001 USDC + Gas)
-
-```typescript
-// After market resolves, redeem winning shares for USDC
-const txHash = await client.redeem(marketAddress);
-console.log(`Redeem tx: ${txHash}`);
-```
-
-### 8. Resolve a Market (0.0001 USDC + Gas) - Oracle Only
-
-```typescript
-// Check if you can resolve the market
-const status = await client.canResolve(marketAddress);
-console.log(`Can resolve: ${status.canResolve}`);
-console.log(`Is oracle: ${status.isOracle}`);
-console.log(`Resolution time: ${status.resolutionTime.toISOString()}`);
-
-// Resolve the market (must be oracle and past resolution time)
-if (status.canResolve) {
-  const txHash = await client.resolve(marketAddress, true); // true = YES wins
-  console.log(`Resolved: ${txHash}`);
-}
-```
-
-### 9. Claim Creator Fees (0.0001 USDC + Gas)
-
-```typescript
-// Check pending fees
-const feeInfo = await client.getFeeInfo(marketAddress);
-console.log(`Pending fees: ${feeInfo.pendingCreatorFeesFormatted} USDC`);
-console.log(`Is creator: ${feeInfo.isCreator}`);
-
-// Claim fees (must be market creator, market must be resolved)
-if (feeInfo.pendingCreatorFees > 0n && feeInfo.isCreator) {
-  const txHash = await client.claimCreatorFees(marketAddress);
-  console.log(`Fees claimed: ${txHash}`);
-}
-
-// Withdraw excess collateral after resolution
-const txHash = await client.withdrawExcessCollateral(marketAddress);
-```
-
-### 10. Balance Queries (Free - on-chain reads)
-
-```typescript
-const usdc = await client.getUSDCBalance();   // e.g. "47.320000"
-const mon = await client.getMONBalance();      // e.g. "0.500000000000000000"
-const address = client.getAddress();           // e.g. "0x742d...3a91"
-```
-
-### 11. Get Trade Quotes (Free - on-chain reads)
-
-```typescript
-// Estimate how many shares you'll get for a USDC amount
+// Always simulate before trading — these are free on-chain reads
 const buyQuote = await client.getBuyQuote(marketAddress, true, '10');
-console.log(`Estimated shares: ${buyQuote.shares}`);
-console.log(`Cost: ${buyQuote.cost}`);
+console.log(`Shares: ${buyQuote.shares}, Avg price: ${buyQuote.averagePrice}`);
 
-// Estimate USDC payout for selling shares
-const sellQuote = await client.getSellQuote(marketAddress, true, 5000000000000000000n);
-console.log(`Estimated payout: ${sellQuote.payout}`);
+const sellQuote = await client.getSellQuote(marketAddress, true, shares);
+console.log(`Payout: ${sellQuote.payout}`);
+```
+
+### 4. Buy Shares (0.0001 USDC + Gas + Amount)
+
+```typescript
+const result = await client.buy(marketAddress, true, '10'); // YES, 10 USDC
+console.log(`TX: ${result.txHash}, Shares: ${result.shares}`);
+```
+
+### 5. Sell Shares (0.0001 USDC + Gas)
+
+```typescript
+// Shares is a bigint with 18 decimals (e.g. 5 shares = 5000000000000000000n)
+const result = await client.sell(marketAddress, true, shares);
+console.log(`TX: ${result.txHash}, Payout: ${result.cost}`);
+```
+
+### 6. Redeem Winnings (0.0001 USDC + Gas)
+
+```typescript
+await client.redeem(marketAddress); // After market resolves
+```
+
+### 7. Resolve a Market (0.0001 USDC + Gas) — Oracle Only
+
+```typescript
+// Check resolution time from getMarkets() data first (free — already fetched)
+// Only call canResolve() when you know it's past resolution time
+const status = await client.canResolve(marketAddress);
+if (status.canResolve) {
+  await client.resolve(marketAddress, true); // true = YES wins
+}
+```
+
+### 8. Balance Queries (Free)
+
+```typescript
+const usdc = await client.getUSDCBalance();  // "47.320000"
+const mon = await client.getMONBalance();     // "0.500000000000000000"
+const address = client.getAddress();          // "0x742d...3a91"
 ```
 
 ## Market Creation (Complete Guide)
@@ -453,559 +370,135 @@ async function researchSportsEvent(): Promise<{
 6. **Provide Liquidity** - Initialize with at least 5 USDC for tradability
 7. **Track Your Markets** - Remember to resolve them when the game/event concludes
 
-## Heartbeat Monitoring
+## Agent Trading Loop
 
-Run this heartbeat check regularly to monitor wallet health, portfolio status, and discover new markets:
+**Cost-efficient pattern: 2 API calls per scan cycle (0.0002 USDC)**
+
+Each x402 call takes ~8 seconds. Minimize calls to keep scans fast.
 
 ```typescript
-import { RBSPMClient } from '@madgallery/rbs-pm-sdk';
+async function tradingLoop(client: RBSPMClient) {
+  // === SCAN (2 x402 calls, ~16s) ===
+  const usdc = await client.getUSDCBalance();  // Free
+  const mon = await client.getMONBalance();     // Free
+  if (parseFloat(usdc) < 5 || parseFloat(mon) < 0.01) return; // Low balance, skip
 
-interface HeartbeatStatus {
-  healthy: boolean;
-  wallet: string;
-  balances: { mon: string; usdc: string };
-  portfolio: { totalPositions: number; totalValue: string };
-  newMarkets: Array<{ address: string; question: string; yesPrice: number }>;
-  marketsToResolve: Array<{ address: string; question: string }>;
-  canTrade: boolean;
-  errors: string[];
-}
+  // Call 1: All markets with prices + analytics (0.0001 USDC)
+  const markets = await client.getMarkets({ status: 'ACTIVE' });
 
-const knownMarkets = new Set<string>();
-
-async function heartbeat(): Promise<HeartbeatStatus> {
-  const errors: string[] = [];
-  const client = new RBSPMClient({
-    privateKey: process.env.PRIVATE_KEY as `0x${string}`,
-  });
-
-  const wallet = client.getAddress();
-  const usdc = await client.getUSDCBalance();
-  const mon = await client.getMONBalance();
-
-  const hasGas = parseFloat(mon) >= 0.01;
-  const hasUsdc = parseFloat(usdc) >= 10;  // 10 USDC minimum
-
-  if (!hasGas) errors.push(`LOW GAS: ${mon} MON`);
-  if (!hasUsdc) errors.push(`LOW USDC: ${usdc} - need 10 minimum`);
-
-  // Check portfolio (0.0001 USDC)
+  // Call 2: Your positions with live values (0.0001 USDC)
   const portfolio = await client.getPortfolio();
 
-  // Discover new active markets (0.0001 USDC)
-  const allMarkets = await client.getMarkets({ status: 'ACTIVE' });
-  const newMarkets = allMarkets
-    .filter(m => !knownMarkets.has(m.address))
-    .map(m => {
-      knownMarkets.add(m.address);
-      return { address: m.address, question: m.question, yesPrice: m.yesPrice };
-    });
+  // === EVALUATE (no API calls — use data already fetched) ===
 
-  // Check for markets you need to resolve (you are oracle + past resolution time)
-  const marketsToResolve: Array<{ address: string; question: string }> = [];
-  for (const market of allMarkets) {
-    const status = await client.canResolve(market.address);
-    if (status.canResolve) {
-      marketsToResolve.push({ address: market.address, question: market.question });
-      errors.push(`RESOLVE NEEDED: "${market.question}"`);
-    }
+  // Check for markets needing resolution (use resolutionTime from getMarkets, no extra API call)
+  const now = new Date();
+  const needsResolve = markets.filter(m =>
+    m.resolutionTime < now && !m.resolved && m.oracle.toLowerCase() === client.getAddress()!.toLowerCase()
+  );
+  for (const m of needsResolve) {
+    // Research outcome, then resolve (0.0001 USDC + gas per market)
+    // await client.resolve(m.address, yesWins);
   }
 
-  return {
-    healthy: errors.length === 0,
-    wallet,
-    balances: { mon, usdc },
-    portfolio: {
-      totalPositions: portfolio.summary.totalPositions,
-      totalValue: portfolio.summary.totalValue,
-    },
-    newMarkets,
-    marketsToResolve,
-    canTrade: hasGas && hasUsdc,
-    errors,
-  };
-}
-
-// Run every 10 minutes, create market every 10 cycles
-let heartbeatCount = 0;
-setInterval(async () => {
-  heartbeatCount++;
-  const status = await heartbeat();
-  console.log(`Heartbeat #${heartbeatCount}:`, status);
-
-  // Resolve any markets that need it — research the outcome first!
-  for (const market of status.marketsToResolve) {
-    console.log(`Market needs resolution: "${market.question}"`);
-    // IMPORTANT: Research the actual outcome before resolving.
-    // Use web search, news, data sources to determine if YES or NO won.
-    // const yesWins = await researchOutcome(market.question);
-    // await client.resolve(market.address, yesWins);
-  }
-
-  if (heartbeatCount % 10 === 0 && status.canTrade) {
-    await createInterestingMarket();
-  }
-}, 10 * 60 * 1000);
-```
-
-## Market Analytics Reference
-
-The SDK provides real-time analytics for every market. These metrics power intelligent trading decisions.
-
-### Metrics Overview
-
-| Metric | Range | Access | Description |
-|--------|-------|--------|-------------|
-| `heatScore` | 0–100 | `market.heatScore` | Composite ranking: volume + velocity + recency |
-| `stressScore` | 0–1 | `market.stressScore` | 24h price volatility (high = choppy) |
-| `fragility` | 0–1 | `market.fragility` | Price impact susceptibility (high = thin liquidity) |
-| `velocity.v1m` | float | `analytics.velocity.v1m` | Probability change per minute |
-| `velocity.v5m` | float | `analytics.velocity.v5m` | Probability change per 5 minutes |
-| `velocity.v15m` | float | `analytics.velocity.v15m` | Probability change per 15 minutes |
-| `velocity.acceleration` | float | `analytics.velocity.acceleration` | Rate of velocity change (v1m − v5m) |
-| `feeVelocity24h` | float | `analytics.feeVelocity24h` | Fees accumulated in last 24h |
-| `volume24h` | float | `analytics.volume24h` | Rolling 24h trade volume (USDC) |
-| `trades24h` | int | `analytics.trades24h` | Rolling 24h trade count |
-
-### How to Access Analytics
-
-```typescript
-// Quick summary fields on every market (via getMarkets)
-const markets = await client.getMarkets({ sort: 'heat', order: 'desc' });
-for (const m of markets) {
-  console.log(`${m.question}`);
-  console.log(`  Heat: ${m.heatScore}, Stress: ${m.stressScore}, Fragility: ${m.fragility}`);
-  console.log(`  Velocity 1m: ${m.velocity1m}`);
-}
-
-// Full analytics breakdown (via getPremiumMarketData)
-const data = await client.getPremiumMarketData(marketAddress);
-if (data.analytics) {
-  const a = data.analytics;
-  console.log(`Heat: ${a.heatScore}`);
-  console.log(`Stress: ${a.stressScore}`);
-  console.log(`Fragility: ${a.fragility}`);
-  console.log(`Velocity: v1m=${a.velocity.v1m}, v5m=${a.velocity.v5m}, v15m=${a.velocity.v15m}`);
-  console.log(`Acceleration: ${a.velocity.acceleration}`);
-  console.log(`24h Volume: ${a.volume24h}, Trades: ${a.trades24h}, Fees: ${a.feeVelocity24h}`);
-}
-```
-
-### Interpreting Metrics
-
-- **High heat + high velocity** → Market is actively moving, opportunity or risk
-- **High stress + low fragility** → Volatile but deep liquidity, safer to enter
-- **High fragility + low volume** → Thin market, your trade will move the price significantly
-- **Positive acceleration** → Velocity is increasing, momentum building
-- **Negative acceleration** → Velocity is decreasing, momentum fading
-
----
-
-## Agent Operational Doctrine
-
-This is the structured 5-phase trading loop that agents should follow. Each phase has clear inputs, gates, and outputs.
-
-### Phase 1: Market Discovery (60s cycle)
-
-Scan for opportunities. Run every 60 seconds.
-
-```typescript
-async function discoverMarkets(client: RBSPMClient) {
-  // Fetch top markets by heat score
-  const markets = await client.getMarkets({
-    status: 'ACTIVE',
-    sort: 'heat',
-    order: 'desc',
-    limit: 10,
-  });
-
-  // Select top 3 candidates for evaluation
-  const candidates = markets.slice(0, 3);
-
-  console.log('=== Discovery Phase ===');
-  for (const m of candidates) {
-    console.log(`${m.question}`);
-    console.log(`  Heat: ${m.heatScore} | Stress: ${m.stressScore} | Fragility: ${m.fragility}`);
-    console.log(`  YES: ${(m.yesPrice * 100).toFixed(1)}% | Velocity: ${m.velocity1m}`);
-  }
-
-  return candidates;
-}
-```
-
-### Phase 2: Signal Evaluation
-
-For each candidate market, evaluate all 5 analytics metrics against decision gates.
-
-```typescript
-interface Signal {
-  market: Market;
-  action: 'BUY_YES' | 'BUY_NO' | 'SELL' | 'SKIP';
-  confidence: number;
-  reasoning: string;
-}
-
-async function evaluateSignals(client: RBSPMClient, candidates: Market[]): Promise<Signal[]> {
-  const signals: Signal[] = [];
-
-  for (const market of candidates) {
-    // Fetch full analytics
-    const data = await client.getPremiumMarketData(market.address);
-    const a = data.analytics;
-    if (!a) { signals.push({ market, action: 'SKIP', confidence: 0, reasoning: 'No analytics' }); continue; }
-
-    // Decision gates
-    const hasVelocity = Math.abs(a.velocity.v1m) > 0.001;
-    const isStressed = a.stressScore > 0.5;
-    const isFragile = a.fragility > 0.4;
-    const isAccelerating = a.velocity.acceleration > 0;
-    const isHot = a.heatScore > 50;
-
-    // Gate 1: Skip dead markets
-    if (!isHot && !hasVelocity) {
-      signals.push({ market, action: 'SKIP', confidence: 0, reasoning: 'No activity' });
-      continue;
-    }
-
-    // Gate 2: Research the question and form independent prediction
-    const myPrediction = await formPrediction(market.question);
-    const edge = myPrediction - market.yesPrice;
-
-    // Gate 3: Require minimum edge
-    if (Math.abs(edge) < 0.05) {
-      signals.push({ market, action: 'SKIP', confidence: 0, reasoning: `Edge too small: ${(edge * 100).toFixed(1)}%` });
-      continue;
-    }
-
-    // Scale confidence by analytics quality
-    let confidence = Math.min(Math.abs(edge) * 2, 1); // Base from edge size
-    if (isAccelerating && Math.sign(a.velocity.v1m) === Math.sign(edge)) confidence *= 1.2; // Momentum aligned
-    if (isFragile) confidence *= 0.7; // Discount for thin liquidity
-    confidence = Math.min(confidence, 1);
-
-    signals.push({
-      market,
-      action: edge > 0 ? 'BUY_YES' : 'BUY_NO',
-      confidence,
-      reasoning: `Edge: ${(edge * 100).toFixed(1)}%, Heat: ${a.heatScore}, Stress: ${a.stressScore.toFixed(2)}`,
-    });
-  }
-
-  return signals.filter(s => s.action !== 'SKIP');
-}
-```
-
-### Phase 3: Simulation (Mandatory)
-
-**Never trade without simulating first.** Use `getBuyQuote`/`getSellQuote` to preview execution.
-
-```typescript
-async function simulateTrades(client: RBSPMClient, signals: Signal[], balance: number) {
-  const plans: Array<Signal & { amount: string; quote: TradeQuote }> = [];
-
-  for (const signal of signals) {
-    // Size by confidence, capped by fragility-adjusted max
-    const maxSize = signal.market.fragility && signal.market.fragility > 0.5
-      ? Math.min(balance * 0.05, 5)   // Fragile market: max 5% of balance or $5
-      : Math.min(balance * 0.1, 10);  // Normal: max 10% of balance or $10
-
-    const amount = (maxSize * signal.confidence).toFixed(2);
-
-    // Simulate the trade
-    const isYes = signal.action === 'BUY_YES';
-    const quote = await client.getBuyQuote(signal.market.address, isYes, amount);
-
-    console.log(`Simulation: ${signal.market.question}`);
-    console.log(`  Side: ${isYes ? 'YES' : 'NO'}, Amount: $${amount}`);
-    console.log(`  Estimated shares: ${quote.shares}`);
-    console.log(`  Price impact: ${(quote.priceImpact * 100).toFixed(2)}%`);
-
-    // Reject if price impact too high
-    if (quote.priceImpact > 0.05) {
-      console.log(`  REJECTED: Price impact too high (${(quote.priceImpact * 100).toFixed(1)}%)`);
-      continue;
-    }
-
-    plans.push({ ...signal, amount, quote });
-  }
-
-  return plans;
-}
-```
-
-### Phase 4: Execution
-
-Execute approved trades, log all metrics, and re-fetch post-trade state.
-
-```typescript
-async function executeTrades(client: RBSPMClient, plans: Array<{ market: Market; action: string; amount: string; confidence: number; reasoning: string }>) {
-  for (const plan of plans) {
-    const isYes = plan.action === 'BUY_YES';
-
-    console.log(`=== Executing Trade ===`);
-    console.log(`Market: ${plan.market.question}`);
-    console.log(`Side: ${isYes ? 'YES' : 'NO'} | Amount: $${plan.amount} | Confidence: ${(plan.confidence * 100).toFixed(0)}%`);
-    console.log(`Reasoning: ${plan.reasoning}`);
-
-    try {
-      const result = await client.buy(plan.market.address, isYes, plan.amount);
-      console.log(`TX: ${result.txHash}`);
-      console.log(`Shares received: ${result.shares}`);
-
-      // Re-fetch post-trade analytics
-      const postData = await client.getPremiumMarketData(plan.market.address);
-      if (postData.analytics) {
-        console.log(`Post-trade stress: ${postData.analytics.stressScore.toFixed(3)}`);
-        console.log(`Post-trade heat: ${postData.analytics.heatScore}`);
-      }
-    } catch (err) {
-      console.error(`Trade failed: ${err}`);
-    }
-  }
-}
-```
-
-### Phase 5: Post-Trade Reaction
-
-Monitor positions after execution. Re-evaluate every 5 minutes.
-
-```typescript
-async function postTradeReaction(client: RBSPMClient) {
-  const portfolio = await client.getPortfolio();
-
+  // Redeem any resolved positions
   for (const pos of portfolio.positions) {
     if (pos.resolved) {
-      // Redeem winning positions
-      try {
-        await client.redeem(pos.marketAddress);
-        console.log(`Redeemed: ${pos.marketQuestion}`);
-      } catch (err) {
-        console.log(`Redeem skipped: ${pos.marketQuestion}`);
-      }
-      continue;
-    }
-
-    // Re-fetch analytics for active positions
-    const data = await client.getPremiumMarketData(pos.marketAddress as `0x${string}`);
-    if (!data.analytics) continue;
-
-    const a = data.analytics;
-
-    // Alert on stress spike (position at risk)
-    if (a.stressScore > 0.7) {
-      console.warn(`STRESS ALERT: ${pos.marketQuestion} stress=${a.stressScore.toFixed(2)}`);
-
-      // Simulate exit
-      const shares = pos.yesShares > 0n ? pos.yesShares : pos.noShares;
-      const isYes = pos.yesShares > 0n;
-      if (shares > 0n) {
-        const sellQuote = await client.getSellQuote(pos.marketAddress as `0x${string}`, isYes, shares);
-        console.log(`  Exit simulation: payout=${sellQuote.payout}`);
-      }
-    }
-
-    // Alert on fragility spike (position may be hard to exit)
-    if (a.fragility > 0.6) {
-      console.warn(`FRAGILITY ALERT: ${pos.marketQuestion} fragility=${a.fragility.toFixed(2)}`);
+      try { await client.redeem(pos.marketAddress as `0x${string}`); } catch {}
     }
   }
-}
-```
 
-### Full Trading Loop
+  // Find trading opportunities using analytics from getMarkets() response
+  for (const m of markets) {
+    const edge = estimateEdge(m); // Your research/prediction logic
+    if (Math.abs(edge) < 0.05) continue; // Skip if no edge
 
-```typescript
-async function runTradingLoop() {
-  const client = new RBSPMClient({
-    privateKey: process.env.PRIVATE_KEY as `0x${string}`,
-  });
+    // Simulate (FREE — on-chain reads)
+    const isYes = edge > 0;
+    const amount = Math.min(parseFloat(usdc) * 0.1, 5).toFixed(2);
+    const quote = await client.getBuyQuote(m.address, isYes, amount);
 
-  // Pre-check: ensure wallet is healthy
-  const usdc = await client.getUSDCBalance();
-  const mon = await client.getMONBalance();
-  if (parseFloat(usdc) < 10 || parseFloat(mon) < 0.01) {
-    console.error(`Low balance: ${usdc} USDC, ${mon} MON`);
-    return;
+    // Execute only when you have real edge (0.0001 USDC + gas + amount)
+    await client.buy(m.address, isYes, amount);
   }
-
-  // Phase 1: Discover
-  const candidates = await discoverMarkets(client);
-
-  // Phase 2: Evaluate signals
-  const signals = await evaluateSignals(client, candidates);
-  if (signals.length === 0) { console.log('No actionable signals'); return; }
-
-  // Phase 3: Simulate
-  const plans = await simulateTrades(client, signals, parseFloat(usdc));
-  if (plans.length === 0) { console.log('All trades rejected in simulation'); return; }
-
-  // Phase 4: Execute
-  await executeTrades(client, plans);
-
-  // Phase 5: Post-trade reaction
-  await postTradeReaction(client);
 }
 
 // Run every 60 seconds
-setInterval(runTradingLoop, 60 * 1000);
+setInterval(() => tradingLoop(client), 60_000);
 ```
 
----
+**Per-cycle cost:** 0.0002 USDC (scan) + 0.0001 per trade. NOT 0.002+ from calling individual endpoints.
 
-## Strategic Archetypes
+## Analytics Reference
 
-Three modes for different market conditions. Select based on current analytics.
+All analytics are included in `getMarkets()` response — no extra API calls needed.
 
-### Momentum Mode
+| Metric | Range | What it means |
+|--------|-------|---------------|
+| `heatScore` | 0–100 | Composite ranking (volume + velocity + recency) |
+| `stressScore` | 0–1 | 24h price volatility |
+| `fragility` | 0–1 | Price impact susceptibility (high = thin liquidity) |
+| `velocity1m` | float | Probability change per minute |
 
-**When to use:** Market is moving fast in one direction with confirmed momentum.
+For full velocity breakdown (v5m, v15m, acceleration), use `getPremiumMarketData()` (0.0001 USDC per market — only call this for specific markets you're about to trade).
 
-**Entry conditions:**
-- `stressScore > 0.65` — significant price movement
-- Velocity and price imbalance are aligned (moving toward the same side)
-- `fragility > 0.3` — enough liquidity to absorb your trade
+### Signal Interpretation
 
-**Strategy:** Trade in the direction of momentum. Enter early, exit when acceleration turns negative.
-
-```typescript
-function isMomentumSetup(analytics: MarketAnalytics, yesPrice: number): 'YES' | 'NO' | null {
-  if (analytics.stressScore < 0.65) return null;
-  if (analytics.fragility < 0.3) return null;
-
-  const v = analytics.velocity;
-  if (v.acceleration <= 0) return null; // Momentum must be building
-
-  // Velocity direction should align with price imbalance
-  if (v.v1m > 0 && yesPrice > 0.5) return 'YES';  // Moving toward YES + price favors YES
-  if (v.v1m < 0 && yesPrice < 0.5) return 'NO';    // Moving toward NO + price favors NO
-  return null;
-}
-```
-
-### Reversion Mode
-
-**When to use:** Market has overreacted and is likely to snap back.
-
-**Entry conditions:**
-- `stressScore > 0.70` — extreme volatility (likely overreaction)
-- `fragility < 0.25` — deep liquidity (market can absorb reversion)
-- `acceleration` is reversing (opposite sign to `v1m`)
-
-**Strategy:** Trade against the current direction. Wait for stress to confirm the overreaction, then enter the reversal.
-
-```typescript
-function isReversionSetup(analytics: MarketAnalytics): 'YES' | 'NO' | null {
-  if (analytics.stressScore < 0.70) return null;
-  if (analytics.fragility > 0.25) return null;
-
-  const v = analytics.velocity;
-  // Acceleration must oppose current velocity (momentum fading)
-  if (Math.sign(v.acceleration) === Math.sign(v.v1m)) return null;
-
-  // Trade against current velocity direction
-  if (v.v1m > 0) return 'NO';  // Price went up too fast, bet on reversion down
-  if (v.v1m < 0) return 'YES'; // Price went down too fast, bet on reversion up
-  return null;
-}
-```
-
-### Liquidity Hunter Mode
-
-**When to use:** Thin market with a sudden interest spike — your trade can move the market.
-
-**Entry conditions:**
-- `fragility > 0.6` — very thin liquidity
-- Low `volume24h` — not many traders yet
-- `heatScore` spiking — sudden interest
-
-**Strategy:** Small positions to avoid excessive price impact. Profit from being early in an emerging market.
-
-```typescript
-function isLiquidityHunt(analytics: MarketAnalytics): boolean {
-  return (
-    analytics.fragility > 0.6 &&
-    analytics.volume24h < 100 && // Less than $100 traded in 24h
-    analytics.heatScore > 40     // But heat is rising
-  );
-}
-
-// Use smaller position sizes in fragile markets
-function liquidityHuntSize(balance: number, fragility: number): number {
-  const maxPct = Math.max(0.02, 0.1 * (1 - fragility)); // 2-10% of balance
-  return Math.min(balance * maxPct, 3); // Cap at $3 per trade
-}
-```
+- **High heat + velocity** → Market moving, opportunity or risk
+- **High stress + low fragility** → Volatile but deep liquidity, safer to enter
+- **High fragility** → Your trade will move price significantly, use small sizes
+- **Research > analytics** → Analytics tell you WHEN to look, research tells you WHAT to bet
 
 ## API Costs
 
-All API calls require x402 micropayments (automatic via SDK):
+Each x402 call costs 0.0001 USDC and takes ~8 seconds. **Minimize calls.**
 
-| Operation | Cost | Description |
-|-----------|------|-------------|
-| `getMarkets(options?)` | 0.0001 USDC | List markets (filter/paginate) |
-| `getPrices(market)` | 0.0001 USDC | On-chain prices |
-| `getMarketInfo(market)` | 0.0001 USDC | Full market details |
-| `getPosition(market)` | 0.0001 USDC | Your position in single market |
-| `getPortfolio()` | 0.0001 USDC | Full portfolio (all positions) |
-| `getPremiumMarketData(market)` | 0.0001 USDC | Premium analytics (velocity, stress, fragility, heat) |
-| `getTradeInstructions()` | 0.0001 USDC | Encoded calldata |
-| `buy()` | 0.0001 + gas + amount | Buy shares |
-| `sell()` | 0.0001 + gas | Sell shares |
-| `redeem()` | 0.0001 + gas | Redeem winnings |
-| `resolve()` | 0.0001 + gas | Resolve market (oracle only) |
-| `getFeeInfo()` | 0.0001 USDC | Get pending fees info |
+| Use this | Cost | What you get |
+|----------|------|-------------|
+| **`getMarkets()`** | 0.0001 | **All markets + prices + analytics.** Your primary scan. |
+| **`getPortfolio()`** | 0.0001 | **All your positions + live values.** |
+| **`getBuyQuote()` / `getSellQuote()`** | Free | Simulate trades before executing. |
+| **`buy()` / `sell()`** | 0.0001 + gas | Execute a trade. |
+
+**Only call these when you have a specific reason:**
+
+| Method | Cost | When to use |
+|--------|------|-------------|
+| `getPremiumMarketData()` | 0.0001 | Full velocity breakdown (v5m, v15m, acceleration) for a market you're about to trade |
+| `getPrices()` | 0.0001 | Live blockchain price for a single market (getMarkets has cached prices) |
+| `getMarketInfo()` | 0.0001 | Full on-chain market details |
+| `canResolve()` | 0.0001 | Check if resolution is possible (use getMarkets resolutionTime first!) |
+| `resolve()` | 0.0001 + gas | Resolve a market (oracle only) |
+| `redeem()` | 0.0001 + gas | Redeem winning shares |
+| `getFeeInfo()` | 0.0001 | Check pending creator fees |
 | `claimCreatorFees()` | 0.0001 + gas | Claim creator fees |
-| `withdrawExcessCollateral()` | 0.0001 + gas | Withdraw excess collateral after resolution |
-| `canResolve()` | 0.0001 USDC | Check if market can be resolved (calls getMarketInfo) |
-| `deployMarket()` | ~0.0003 + gas + liquidity | Deploy + init + list |
-| `initializeMarket()` | 0.0001 + gas + liquidity | Initialize with USDC |
-| `listMarket()` | 0.0001 USDC | List market for discovery |
-| `getBuyQuote()` | Free | On-chain estimate (no x402) |
-| `getSellQuote()` | Free | On-chain estimate (no x402) |
-| `getUSDCBalance()` | Free | On-chain read (no x402) |
-| `getMONBalance()` | Free | On-chain read (no x402) |
+| `deployMarket()` | ~0.0003 + gas + liquidity | Create a new market |
 
-## Method Signatures Quick Reference
+**DO NOT** loop through markets calling individual endpoints. One `getMarkets()` gives you everything.
+
+## Method Signatures
 
 ```typescript
-// Read operations (x402 protected)
-client.getMarkets(options?: GetMarketsOptions): Promise<Market[]>
-// options: { status?, category?, creator?, resolved?, sort?, order?, limit?, offset? }
-// sort: 'created_at' | 'volume' | 'resolution_time' | 'heat' | 'velocity'
-// Market includes: heatScore?, velocity1m?, stressScore?, fragility?
-client.getPrices(market: `0x${string}`): Promise<MarketPrices>
-client.getMarketInfo(market: `0x${string}`): Promise<MarketInfo>
-client.getPosition(market: `0x${string}`, user?: `0x${string}`): Promise<Position>
-client.getPortfolio(user?: `0x${string}`): Promise<Portfolio>
-client.getPremiumMarketData(market: `0x${string}`): Promise<PremiumMarketData>
-// PremiumMarketData.analytics?: { velocity: {v1m, v5m, v15m, acceleration}, stressScore, fragility, feeVelocity24h, heatScore, volume24h, trades24h }
-client.getFeeInfo(market: `0x${string}`): Promise<FeeInfo>
+// PRIMARY SCAN (use these every cycle)
+client.getMarkets(options?): Promise<Market[]>
+  // options: { status?, sort?, order?, limit?, offset?, category?, creator?, resolved? }
+  // sort: 'heat' | 'volume' | 'velocity' | 'created_at' | 'resolution_time'
+  // Market: { address, question, yesPrice, noPrice, heatScore, stressScore, fragility, velocity1m, resolutionTime, ... }
+client.getPortfolio(user?): Promise<Portfolio>
+  // Portfolio: { positions: [{ marketAddress, yesShares, noShares, totalValue, ... }], summary }
 
-// Trading (x402 + on-chain)
-client.buy(market: `0x${string}`, isYes: boolean, usdcAmount: string, minShares?: bigint): Promise<TradeResult>
-client.sell(market: `0x${string}`, isYes: boolean, shares: bigint, minPayout?: bigint): Promise<TradeResult>
-client.redeem(market: `0x${string}`): Promise<`0x${string}`>
-
-// Resolution & Fees (x402 + on-chain)
-client.resolve(market: `0x${string}`, yesWins: boolean): Promise<`0x${string}`>
-client.canResolve(market: `0x${string}`): Promise<{ canResolve: boolean; reason?: string; ... }>
-client.claimCreatorFees(market: `0x${string}`): Promise<`0x${string}`>
-client.withdrawExcessCollateral(market: `0x${string}`): Promise<`0x${string}`>
-
-// Market creation
-client.deployMarket(params): Promise<{ marketAddress, deployTxHash, initializeTxHash, listingId }>
-client.initializeMarket(market: `0x${string}`, usdcAmount: string): Promise<`0x${string}`>
-client.listMarket(params: MarketCreateParams): Promise<MarketCreateResult>
-
-// On-chain reads (free)
-client.getBuyQuote(market: `0x${string}`, isYes: boolean, usdcAmount: string): Promise<TradeQuote>
-client.getSellQuote(market: `0x${string}`, isYes: boolean, shares: bigint): Promise<SellQuote>
-client.getUSDCBalance(user?: `0x${string}`): Promise<string>
-client.getMONBalance(user?: `0x${string}`): Promise<string>
+// FREE (on-chain reads, no x402)
+client.getBuyQuote(market, isYes, usdcAmount): Promise<TradeQuote>
+client.getSellQuote(market, isYes, shares): Promise<{ payout, priceImpact }>
+client.getUSDCBalance(user?): Promise<string>
+client.getMONBalance(user?): Promise<string>
 client.getAddress(): `0x${string}` | null
-client.hasPaymentCapability(): boolean
-client.formatUSDC(amount: bigint): string
-client.parseUSDC(amount: string): bigint
+
+// TRADING (0.0001 USDC + gas each)
+client.buy(market, isYes, usdcAmount, minShares?): Promise<TradeResult>
+client.sell(market, isYes, shares, minPayout?): Promise<TradeResult>
+client.redeem(market): Promise<`0x${string}`>
+client.resolve(market, yesWins): Promise<`0x${string}`>
 ```
 
 ## Network Configuration

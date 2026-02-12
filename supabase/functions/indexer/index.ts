@@ -273,12 +273,23 @@ async function rpcBatch(
   return sorted.map((r) => r.result || "0x");
 }
 
+// Parsed market state returned by updateMarketPrices for snapshot use
+interface MarketState {
+  yesPrice: number;
+  noPrice: number;
+  yesShares: string;
+  noShares: string;
+  totalCollateral: string;
+  liquidityParameter: string;
+  resolved: boolean;
+}
+
 // Update market prices via RPC getMarketInfo + backfill token addresses
 async function updateMarketPrices(
   supabase: ReturnType<typeof createClient>,
   marketId: string,
   marketAddress: string
-): Promise<void> {
+): Promise<MarketState | null> {
   // Check if token addresses need backfilling
   const { data: existing } = await supabase
     .from("markets")
@@ -301,7 +312,7 @@ async function updateMarketPrices(
   const results = await rpcBatch(calls);
   const marketInfoResult = results[0];
 
-  if (!marketInfoResult || marketInfoResult === "0x") return;
+  if (!marketInfoResult || marketInfoResult === "0x") return null;
 
   const d = marketInfoResult.slice(2);
   // getMarketInfo ABI return slots (each 64 hex chars):
@@ -319,12 +330,18 @@ async function updateMarketPrices(
   const resolved = BigInt("0x" + d.slice(768, 832)) !== 0n;
   const yesWins = BigInt("0x" + d.slice(832, 896)) !== 0n;
 
+  const yesSharesStr = hexToDecimalString("0x" + d.slice(448, 512), 18);
+  const noSharesStr = hexToDecimalString("0x" + d.slice(512, 576), 18);
+  const totalCollateralStr = hexToDecimalString("0x" + d.slice(576, 640), 6);
+  const liquidityParamStr = hexToDecimalString("0x" + d.slice(640, 704), 18);
+
   const update: Record<string, unknown> = {
     yes_price: yesPrice,
     no_price: noPrice,
-    yes_shares: hexToDecimalString("0x" + d.slice(448, 512), 18),
-    no_shares: hexToDecimalString("0x" + d.slice(512, 576), 18),
-    total_collateral: hexToDecimalString("0x" + d.slice(576, 640), 6),
+    yes_shares: yesSharesStr,
+    no_shares: noSharesStr,
+    total_collateral: totalCollateralStr,
+    liquidity_parameter: liquidityParamStr,
     resolved,
     yes_wins: yesWins,
     status: resolved ? "RESOLVED" : "ACTIVE",
@@ -346,6 +363,242 @@ async function updateMarketPrices(
   }
 
   await supabase.from("markets").update(update).eq("id", marketId);
+
+  return {
+    yesPrice,
+    noPrice,
+    yesShares: yesSharesStr,
+    noShares: noSharesStr,
+    totalCollateral: totalCollateralStr,
+    liquidityParameter: liquidityParamStr,
+    resolved,
+  };
+}
+
+// ==================== Analytics Functions ====================
+
+// Reference alpha for "deep liquidity" normalization
+const ALPHA_DEEP = 10;
+
+// Write minute-level snapshots for all markets, prune old ones
+async function writeSnapshots(
+  supabase: ReturnType<typeof createClient>,
+  marketStates: Map<string, { marketId: string; state: MarketState }>
+): Promise<void> {
+  if (marketStates.size === 0) return;
+
+  const rows = [];
+  for (const [, { marketId, state }] of marketStates) {
+    rows.push({
+      market_id: marketId,
+      yes_price: state.yesPrice,
+      no_price: state.noPrice,
+      yes_shares: state.yesShares,
+      no_shares: state.noShares,
+      total_collateral: state.totalCollateral,
+      liquidity_parameter: state.liquidityParameter,
+    });
+  }
+
+  // Batch insert snapshots
+  const { error } = await supabase.from("market_snapshots").insert(rows);
+  if (error) {
+    console.error("Failed to insert snapshots:", error.message);
+  }
+
+  // Prune snapshots older than 24h
+  await supabase
+    .from("market_snapshots")
+    .delete()
+    .lt("snapshot_time", new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString());
+}
+
+// Compute analytics (velocity, stress, fragility, heat) and write to markets table
+async function computeAndStoreAnalytics(
+  supabase: ReturnType<typeof createClient>,
+  marketStates: Map<string, { marketId: string; state: MarketState }>
+): Promise<void> {
+  if (marketStates.size === 0) return;
+
+  const marketIds = Array.from(marketStates.values()).map((v) => v.marketId);
+
+  // 1. Velocity: get snapshots from last 16 minutes
+  const { data: recentSnapshots } = await supabase
+    .from("market_snapshots")
+    .select("market_id, yes_price, snapshot_time")
+    .in("market_id", marketIds)
+    .gte("snapshot_time", new Date(Date.now() - 16 * 60 * 1000).toISOString())
+    .order("snapshot_time", { ascending: false });
+
+  // 2. Stress: get 24h price range per market
+  const { data: stressData } = await supabase.rpc("get_snapshot_price_ranges", {
+    market_ids: marketIds,
+  }).maybeSingle();
+
+  // Fallback: query snapshots for stress if RPC not available
+  let stressMap: Record<string, number> = {};
+  if (!stressData) {
+    const { data: allSnapshots } = await supabase
+      .from("market_snapshots")
+      .select("market_id, yes_price")
+      .in("market_id", marketIds)
+      .gte("snapshot_time", new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString());
+
+    if (allSnapshots) {
+      const grouped: Record<string, number[]> = {};
+      for (const s of allSnapshots) {
+        if (!grouped[s.market_id]) grouped[s.market_id] = [];
+        grouped[s.market_id].push(parseFloat(s.yes_price));
+      }
+      for (const [mid, prices] of Object.entries(grouped)) {
+        const range = Math.max(...prices) - Math.min(...prices);
+        stressMap[mid] = Math.min(range / 0.5, 1.0);
+      }
+    }
+  }
+
+  // 3. Trade activity + Fee velocity (24h)
+  const { data: tradeActivity } = await supabase
+    .from("trades")
+    .select("market_id, amount, creator_fee, created_at")
+    .in("market_id", marketIds)
+    .gte("created_at", new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString());
+
+  // Aggregate trade stats per market
+  const tradeStats: Record<string, {
+    count: number;
+    volume: number;
+    feeSum: number;
+    lastTradeAt: Date | null;
+  }> = {};
+  for (const t of tradeActivity || []) {
+    if (!tradeStats[t.market_id]) {
+      tradeStats[t.market_id] = { count: 0, volume: 0, feeSum: 0, lastTradeAt: null };
+    }
+    const s = tradeStats[t.market_id];
+    s.count++;
+    s.volume += parseFloat(t.amount) || 0;
+    s.feeSum += parseFloat(t.creator_fee) || 0;
+    const tradeDate = new Date(t.created_at);
+    if (!s.lastTradeAt || tradeDate > s.lastTradeAt) {
+      s.lastTradeAt = tradeDate;
+    }
+  }
+
+  // Group velocity snapshots by market
+  const snapshotsByMarket: Record<string, Array<{ price: number; time: Date }>> = {};
+  for (const s of recentSnapshots || []) {
+    if (!snapshotsByMarket[s.market_id]) snapshotsByMarket[s.market_id] = [];
+    snapshotsByMarket[s.market_id].push({
+      price: parseFloat(s.yes_price),
+      time: new Date(s.snapshot_time),
+    });
+  }
+
+  // Compute per-market analytics
+  const updates: Array<{ id: string; data: Record<string, number> }> = [];
+  const now = Date.now();
+
+  // Collect raw values for heat normalization
+  const rawTradeCount: number[] = [];
+  const rawVolume: number[] = [];
+
+  for (const [, { marketId, state }] of marketStates) {
+    if (state.resolved) continue; // skip resolved markets
+
+    const ts = tradeStats[marketId] || { count: 0, volume: 0, feeSum: 0, lastTradeAt: null };
+    rawTradeCount.push(ts.count);
+    rawVolume.push(ts.volume);
+  }
+
+  const maxTradeCount = Math.max(...rawTradeCount, 1);
+  const maxVolume = Math.max(...rawVolume, 1);
+
+  for (const [, { marketId, state }] of marketStates) {
+    if (state.resolved) continue;
+
+    const currentPrice = state.yesPrice;
+    const snapshots = snapshotsByMarket[marketId] || [];
+
+    // --- Velocity ---
+    const findPriceAtOffset = (minutesAgo: number): number | null => {
+      const targetTime = now - minutesAgo * 60 * 1000;
+      let closest: { price: number; diff: number } | null = null;
+      for (const s of snapshots) {
+        const diff = Math.abs(s.time.getTime() - targetTime);
+        // Allow 90-second tolerance
+        if (diff < 90_000 && (!closest || diff < closest.diff)) {
+          closest = { price: s.price, diff };
+        }
+      }
+      return closest ? closest.price : null;
+    };
+
+    const p1m = findPriceAtOffset(1);
+    const p5m = findPriceAtOffset(5);
+    const p15m = findPriceAtOffset(15);
+
+    const v1m = p1m !== null ? currentPrice - p1m : 0;
+    const v5m = p5m !== null ? currentPrice - p5m : 0;
+    const v15m = p15m !== null ? currentPrice - p15m : 0;
+    const acceleration = v1m - (v5m / 5);
+
+    // --- Stress ---
+    const stress = stressMap[marketId] ?? 0;
+
+    // --- Fragility ---
+    const lp = parseFloat(state.liquidityParameter) || 0;
+    const fragility = lp > 0 ? Math.max(0, 1 - lp / ALPHA_DEEP) : 1.0;
+
+    // --- Trade activity ---
+    const ts = tradeStats[marketId] || { count: 0, volume: 0, feeSum: 0, lastTradeAt: null };
+
+    // --- Recency ---
+    const hoursSinceLastTrade = ts.lastTradeAt
+      ? (now - ts.lastTradeAt.getTime()) / (1000 * 60 * 60)
+      : 48;
+    const recency = Math.max(0, 1 - hoursSinceLastTrade / 48);
+
+    // --- Heat Score ---
+    const normTradeCount = ts.count / maxTradeCount;
+    const normVolume = ts.volume / maxVolume;
+    const heat = (
+      0.30 * normTradeCount +
+      0.25 * normVolume +
+      0.15 * stress +
+      0.20 * recency +
+      0.10 * (1 - fragility)
+    ) * 100;
+
+    updates.push({
+      id: marketId,
+      data: {
+        velocity_1m: v1m,
+        velocity_5m: v5m,
+        velocity_15m: v15m,
+        acceleration,
+        stress_score: stress,
+        fragility,
+        fee_velocity_24h: ts.feeSum,
+        heat_score: Math.round(heat * 100) / 100,
+        volume_24h: ts.volume,
+        trades_24h: ts.count,
+      },
+    });
+  }
+
+  // Batch update markets
+  for (const u of updates) {
+    const { error } = await supabase
+      .from("markets")
+      .update(u.data)
+      .eq("id", u.id);
+    if (error) {
+      console.error(`Analytics update failed for ${u.id}:`, error.message);
+    }
+  }
+
+  console.log(`Analytics computed for ${updates.length} markets`);
 }
 
 serve(async (req: Request) => {
@@ -599,12 +852,31 @@ serve(async (req: Request) => {
       }
 
       // Refresh ALL market prices every run to keep DB in sync
+      // Collect market states for snapshots + analytics
+      const marketStates = new Map<string, { marketId: string; state: MarketState }>();
       for (const m of marketsList) {
-        if (affectedMarketIds.has(m.id)) continue; // already updated above
         try {
-          await updateMarketPrices(supabase, m.id, m.address);
+          const state = affectedMarketIds.has(m.id)
+            ? null // already updated above, re-fetch for state
+            : await updateMarketPrices(supabase, m.id, m.address);
+          if (state) {
+            marketStates.set(m.address.toLowerCase(), { marketId: m.id, state });
+          }
         } catch (err) {
           errors.push(`Price refresh error for ${m.address}: ${err}`);
+        }
+      }
+      // Re-fetch states for affected markets (already updated, need state data)
+      for (const marketId of affectedMarketIds) {
+        const market = marketsList.find((m) => m.id === marketId);
+        if (!market) continue;
+        try {
+          const state = await updateMarketPrices(supabase, marketId, market.address);
+          if (state) {
+            marketStates.set(market.address.toLowerCase(), { marketId, state });
+          }
+        } catch (err) {
+          errors.push(`State re-fetch error for ${market.address}: ${err}`);
         }
       }
 
@@ -623,6 +895,14 @@ serve(async (req: Request) => {
         } catch (err) {
           errors.push(`Token backfill error for ${m.address}: ${err}`);
         }
+      }
+
+      // Write snapshots and compute analytics
+      try {
+        await writeSnapshots(supabase, marketStates);
+        await computeAndStoreAnalytics(supabase, marketStates);
+      } catch (err) {
+        errors.push(`Analytics error: ${err}`);
       }
 
       // Update indexer state
