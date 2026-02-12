@@ -259,7 +259,7 @@ for (const pos of portfolio.positions) {
       <section style={styles.section}>
         <h2 style={styles.sectionTitle}>x402 Micropayment Costs</h2>
         <p style={styles.sectionSubtitle}>
-          Premium API endpoints use x402 USDC micropayments. The SDK handles payments automatically.
+          All operations require x402 USDC micropayments. The SDK handles payments automatically.
         </p>
         <table style={styles.costTable}>
           <thead>

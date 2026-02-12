@@ -46,18 +46,42 @@ console.log('Trade TX:', result.txHash);
 
 **All operations require x402 payment.** The SDK handles payments automatically.
 
+### Market Discovery
+
 | Method | Cost | Description |
 |--------|------|-------------|
 | `getMarkets()` | 0.0001 USDC | List all active markets |
 | `getPrices()` | 0.0001 USDC | Get current market prices |
 | `getMarketInfo()` | 0.0001 USDC | Full market details |
-| `getPosition()` | 0.0001 USDC | Check your position in one market |
-| `getPortfolio()` | 0.0001 USDC | Get all positions across all markets |
+| `getPremiumMarketData()` | 0.0001 USDC | Premium analytics (volume, trades) |
+
+### Portfolio & Positions
+
+| Method | Cost | Description |
+|--------|------|-------------|
+| `getPosition()` | 0.0001 USDC | Position in single market |
+| `getPortfolio()` | 0.0001 USDC | Full portfolio (all positions) |
+
+### Trading
+
+| Method | Cost | Description |
+|--------|------|-------------|
 | `buy()` | 0.0001 + gas + amount | Buy shares (x402 + on-chain) |
 | `sell()` | 0.0001 + gas | Sell shares (x402 + on-chain) |
-| `redeem()` | 0.0001 + gas | Redeem winnings (x402 + on-chain) |
+| `redeem()` | 0.0001 + gas | Redeem winning shares after resolution |
+
+### Market Management (Creators/Oracles)
+
+| Method | Cost | Description |
+|--------|------|-------------|
 | `deployMarket()` | ~0.0003 + gas + liquidity | Deploy + initialize + list |
-| `listMarket()` | 0.0001 USDC | List a new market |
+| `listMarket()` | 0.0001 USDC | List a deployed market for discovery |
+| `initializeMarket()` | 0.0001 + gas | Initialize market with liquidity |
+| `resolve()` | 0.0001 + gas | Resolve market outcome (oracle only) |
+| `getFeeInfo()` | 0.0001 USDC | Get pending fees info |
+| `claimCreatorFees()` | 0.0001 + gas | Claim accumulated creator fees |
+
+> **Note:** All operations require x402 payment. Trades cost 0.0001 USDC (API) + gas (MON) + trade amount (USDC).
 
 ## API Reference
 
