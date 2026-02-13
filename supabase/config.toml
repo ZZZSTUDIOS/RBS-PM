@@ -97,3 +97,6 @@ verify_jwt = false
 
 [functions.x402-deploy-market]
 verify_jwt = false
+
+[functions.x402-agent-status]
+verify_jwt = false

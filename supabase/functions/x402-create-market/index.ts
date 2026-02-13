@@ -5,7 +5,7 @@
 
 import { serve } from "https://deno.land/std@0.177.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.39.0";
-import { logPayment, corsHeaders } from "../_shared/x402.ts";
+import { logPayment, recordReputation, corsHeaders } from "../_shared/x402.ts";
 
 // x402 Configuration
 // USDC contract address on Monad Testnet
@@ -262,7 +262,7 @@ serve(async (req: Request) => {
     // Get payer address for logging
     const payerAddressForLogging = (paymentPayload.payload as { authorization?: { from?: string } })?.authorization?.from || "unknown";
 
-    // Log payment to database
+    // Log payment and reputation
     logPayment(
       "x402-create-market",
       payerAddressForLogging,
@@ -270,6 +270,8 @@ serve(async (req: Request) => {
       true,
       settlement.txHash
     );
+    recordReputation(payerAddressForLogging, "x402-create-market")
+      .catch(err => console.error("Background reputation record failed:", err));
 
     // Initialize Supabase
     const supabaseUrl = Deno.env.get("SUPABASE_URL")!;

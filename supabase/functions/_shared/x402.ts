@@ -185,6 +185,46 @@ export async function verifyAndSettlePayment(
   }
 }
 
+// Reputation points per x402 endpoint
+const REPUTATION_POINTS: Record<string, number> = {
+  'x402-agent-trade': 10,
+  'x402-deploy-market': 10,
+  'x402-resolve': 8,
+  'x402-create-market': 5,
+  'x402-initialize': 5,
+  'x402-market-data': 3,
+  'x402-prices': 2,
+  'x402-market-info': 2,
+  'x402-position': 2,
+  'x402-portfolio': 2,
+  'x402-markets': 1,
+  'x402-claim-fees': 2,
+  'x402-redeem': 2,
+};
+
+export async function recordReputation(
+  wallet: string,
+  endpoint: string,
+  points?: number
+): Promise<void> {
+  try {
+    const supabaseUrl = Deno.env.get("SUPABASE_URL");
+    const supabaseKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
+    if (!supabaseUrl || !supabaseKey) return;
+
+    const supabase = createClient(supabaseUrl, supabaseKey);
+    const pts = points ?? REPUTATION_POINTS[endpoint] ?? 1;
+
+    await supabase.from("agent_reputation").insert({
+      agent_wallet: wallet.toLowerCase(),
+      endpoint,
+      points: pts,
+    });
+  } catch (err) {
+    console.error("Failed to record reputation:", err);
+  }
+}
+
 export async function logPayment(
   endpoint: string,
   payerAddress: string,
@@ -270,6 +310,12 @@ export async function handlePayment(
     verification.settlementTxHash,
     paymentSignature.substring(0, 100) // Store first 100 chars of header
   ).catch(err => console.error("Background payment log failed:", err));
+
+  // Record reputation points for the payer
+  recordReputation(
+    verification.payerAddress || "unknown",
+    endpoint
+  ).catch(err => console.error("Background reputation record failed:", err));
 
   return {
     success: true,
