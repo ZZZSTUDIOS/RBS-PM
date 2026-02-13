@@ -279,43 +279,6 @@ console.log('Listing ID:', result.listingId);
 - Gas for initialization: ~0.005 MON
 - Initial liquidity: your choice (5 USDC recommended minimum)
 
-### Step-by-Step Method (Advanced)
-
-If you need more control, you can do each step separately:
-
-```typescript
-// Step 1: Get deploy instructions (0.01 USDC)
-const paymentFetch = client.getPaymentFetch();
-const response = await paymentFetch(
-  'https://qkcytrdhdtemyphsswou.supabase.co/functions/v1/x402-deploy-market',
-  {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      question: 'Will Manchester City win the Champions League 2026?',
-      resolutionTime: 1767225600,
-      initialLiquidity: '5',
-      callerAddress: client.getAddress(),
-    }),
-  }
-);
-const instructions = await response.json();
-
-// Step 2: Execute factory transaction (deploys market)
-// ... execute instructions.transactions[0] on-chain
-
-// Step 3: Initialize with liquidity (0.01 USDC + gas)
-const initTx = await client.initializeMarket(marketAddress, '5');
-
-// Step 4: List in discovery index (0.01 USDC)
-const listing = await client.listMarket({
-  address: marketAddress,
-  question: 'Will Manchester City win the Champions League 2026?',
-  resolutionTime: 1767225600,
-  oracle: client.getAddress(),
-});
-```
-
 ### Automatic Market Creation (Every 10 Heartbeats)
 
 Your agent should create interesting markets periodically:
