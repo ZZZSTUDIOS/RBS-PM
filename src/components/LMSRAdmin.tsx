@@ -422,6 +422,10 @@ export default function LMSRAdmin() {
   // 0.5% trading fee goes 100% to market creator (no protocol fee)
   const { marketInfo, marketType: detectedMarketType, refetch: refetchMarketInfo } = useUnifiedMarketData(selectedMarket);
 
+  // Check if market is past resolution time but not yet resolved by oracle
+  const isPastResolutionTime = marketInfo?.resolutionTime
+    && BigInt(Math.floor(Date.now() / 1000)) >= marketInfo.resolutionTime;
+
   // Estimated shares state
   const [estimatedShares, setEstimatedShares] = useState<string>('0');
   const [isEstimating, setIsEstimating] = useState(false);
@@ -1385,8 +1389,8 @@ export default function LMSRAdmin() {
                       <InfoRow label="COLLATERAL POOL" value={`${formatUnits(marketInfo.totalCollateral, marketInfo.collateralDecimals || 18)} ${marketInfo.collateralSymbol || 'MON'}`} />
                       <InfoRow
                         label="STATUS"
-                        value={marketInfo.resolved ? `${marketInfo.yesWins ? yesSymbol : noSymbol} WINS` : 'ACTIVE'}
-                        valueColor={marketInfo.resolved ? theme.colors.highlight : theme.colors.primary}
+                        value={marketInfo.resolved ? `${marketInfo.yesWins ? yesSymbol : noSymbol} WINS` : isPastResolutionTime ? 'AWAITING RESOLUTION' : 'ACTIVE'}
+                        valueColor={marketInfo.resolved ? theme.colors.highlight : isPastResolutionTime ? theme.colors.warning : theme.colors.primary}
                       />
                     </div>
                   </div>
@@ -1536,6 +1540,41 @@ export default function LMSRAdmin() {
                       >
                         [ {isRedeeming ? 'REDEEMING...' : 'REDEEM WINNINGS'} ]
                       </button>
+                    )}
+                  </div>
+                </div>
+              ) : isPastResolutionTime ? (
+                <div style={{ ...styles.card, marginTop: '24px', borderColor: theme.colors.warning }}>
+                  <div style={{
+                    textAlign: 'center',
+                    padding: '24px',
+                  }}>
+                    <div style={{ color: theme.colors.warning, fontSize: theme.fontSizes.sectionTitle, fontWeight: 'bold', marginBottom: '8px' }}>
+                      TRADING CLOSED
+                    </div>
+                    <div style={{ color: theme.colors.textWhite, fontSize: theme.fontSizes.title, marginBottom: '16px' }}>
+                      Resolution time has passed. Awaiting oracle resolution.
+                    </div>
+                    <div style={{ color: theme.colors.textDim, fontSize: theme.fontSizes.small, marginBottom: '16px' }}>
+                      Resolution time: {new Date(Number(marketInfo!.resolutionTime) * 1000).toLocaleString()}
+                    </div>
+                    {address && marketInfo?.oracle && address.toLowerCase() === marketInfo.oracle.toLowerCase() && (
+                      <div style={{
+                        padding: '12px',
+                        backgroundColor: theme.colors.primaryDark,
+                        border: `1px solid ${theme.colors.warning}`,
+                        marginTop: '8px',
+                      }}>
+                        <div style={{ color: theme.colors.warning, fontSize: theme.fontSizes.small }}>
+                          You are the oracle for this market. Go to the <span
+                            style={{ textDecoration: 'underline', cursor: 'pointer' }}
+                            onClick={() => {
+                              setResolution(prev => ({ ...prev, marketAddress: tradeParams.marketAddress }));
+                              setActiveTab('resolve');
+                            }}
+                          >RESOLVE</span> tab to settle it.
+                        </div>
+                      </div>
                     )}
                   </div>
                 </div>
@@ -2339,10 +2378,11 @@ export default function LMSRAdmin() {
                         <div style={{ display: 'grid', gap: '16px', marginBottom: '32px' }}>
                           {activeMarkets.map(market => {
                             const prices = marketPrices[market.address.toLowerCase()];
+                            const isAwaitingResolution = market.resolution && new Date(market.resolution).getTime() <= Date.now();
                             return (
                               <div key={market.id} style={{
                                 ...styles.card,
-                                borderColor: theme.colors.primary,
+                                borderColor: isAwaitingResolution ? theme.colors.warning : theme.colors.primary,
                               }}>
                                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
                                   <div>
@@ -2364,13 +2404,13 @@ export default function LMSRAdmin() {
                                   <div
                                     style={{
                                       padding: '4px 12px',
-                                      backgroundColor: theme.colors.primaryDark,
-                                      border: `1px solid ${theme.colors.primary}`,
-                                      color: theme.colors.primary,
+                                      backgroundColor: isAwaitingResolution ? theme.colors.highlightDark : theme.colors.primaryDark,
+                                      border: `1px solid ${isAwaitingResolution ? theme.colors.warning : theme.colors.primary}`,
+                                      color: isAwaitingResolution ? theme.colors.warning : theme.colors.primary,
                                       fontSize: theme.fontSizes.xs,
                                     }}
                                   >
-                                    ACTIVE
+                                    {isAwaitingResolution ? 'AWAITING RESOLUTION' : 'ACTIVE'}
                                   </div>
                                 </div>
                                 <div style={{ marginTop: '12px', fontSize: theme.fontSizes.xs }}>
