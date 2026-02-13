@@ -52,5 +52,48 @@ verify_jwt = false
 [functions.auth-verify]
 verify_jwt = false
 
+[functions.auth-moltbook]
+verify_jwt = false
+
 [functions.indexer]
+verify_jwt = false
+
+# x402 endpoints (payment verified by x402 facilitator, not JWT)
+[functions.x402-markets]
+verify_jwt = false
+
+[functions.x402-prices]
+verify_jwt = false
+
+[functions.x402-market-info]
+verify_jwt = false
+
+[functions.x402-market-data]
+verify_jwt = false
+
+[functions.x402-position]
+verify_jwt = false
+
+[functions.x402-portfolio]
+verify_jwt = false
+
+[functions.x402-agent-trade]
+verify_jwt = false
+
+[functions.x402-resolve]
+verify_jwt = false
+
+[functions.x402-claim-fees]
+verify_jwt = false
+
+[functions.x402-redeem]
+verify_jwt = false
+
+[functions.x402-initialize]
+verify_jwt = false
+
+[functions.x402-create-market]
+verify_jwt = false
+
+[functions.x402-deploy-market]
 verify_jwt = false
