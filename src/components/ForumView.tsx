@@ -308,10 +308,11 @@ function PostCard({
         .eq('is_deleted', false)
         .order('created_at', { ascending: true })
         .limit(50),
+      // Fetch attributions linked to this post OR any of its comments
       supabase
         .from('forum_attributions')
         .select('*')
-        .eq('post_id', post.id)
+        .or(`post_id.eq.${post.id},comment_id.not.is.null`)
         .order('created_at', { ascending: false }),
     ]).then(([commentsRes, attrsRes]) => {
       if (commentsRes.data) setComments(commentsRes.data);
@@ -423,13 +424,13 @@ function PostCard({
             </div>
           )}
 
-          {/* Trade Attributions */}
-          {attributions.length > 0 && (
+          {/* Trade Attributions (post-level only) */}
+          {attributions.filter(a => a.post_id && !a.comment_id).length > 0 && (
             <div style={{ marginTop: '16px' }}>
               <div style={{ fontSize: theme.fontSizes.xxs, color: theme.colors.textDim, fontWeight: 'bold', letterSpacing: '1px', marginBottom: '6px' }}>
                 LINKED TRADES
               </div>
-              {attributions.map(attr => (
+              {attributions.filter(a => a.post_id && !a.comment_id).map(attr => (
                 <div key={attr.id} style={{ display: 'flex', gap: '8px', alignItems: 'center', fontSize: theme.fontSizes.xxs, padding: '4px 0' }}>
                   {attr.direction && (
                     <span style={{
@@ -502,6 +503,46 @@ function PostCard({
                     }}>
                       {c.body}
                     </div>
+                    {/* Trade attributions linked to this comment */}
+                    {attributions
+                      .filter(a => a.comment_id === c.id)
+                      .map(attr => (
+                        <div key={attr.id} style={{
+                          display: 'flex',
+                          gap: '8px',
+                          alignItems: 'center',
+                          fontSize: theme.fontSizes.xxs,
+                          marginTop: '8px',
+                          padding: '6px 10px',
+                          backgroundColor: theme.colors.pageBg,
+                          border: `1px solid ${theme.colors.border}`,
+                        }}>
+                          <span style={{ color: theme.colors.highlight, fontWeight: 'bold', letterSpacing: '0.5px' }}>
+                            BACKED WITH TRADE
+                          </span>
+                          {attr.direction && (
+                            <span style={{
+                              padding: '1px 6px',
+                              border: `1px solid ${attr.direction === 'BUY' ? theme.colors.primary : theme.colors.warning}`,
+                              color: attr.direction === 'BUY' ? theme.colors.primary : theme.colors.warning,
+                              fontWeight: 'bold',
+                            }}>
+                              {attr.direction}
+                            </span>
+                          )}
+                          {attr.outcome && (
+                            <span style={{ color: attr.outcome === 'YES' ? theme.colors.primary : theme.colors.error, fontWeight: 'bold' }}>
+                              {attr.outcome}
+                            </span>
+                          )}
+                          {attr.amount && (
+                            <span style={{ color: theme.colors.textWhite }}>{attr.amount} USDC</span>
+                          )}
+                          <span style={{ color: theme.colors.textDim }}>
+                            tx: {attr.tx_hash.slice(0, 10)}...
+                          </span>
+                        </div>
+                      ))}
                   </div>
                 ))}
               </div>
