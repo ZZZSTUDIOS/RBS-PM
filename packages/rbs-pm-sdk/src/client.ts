@@ -618,7 +618,7 @@ export class RBSPMClient {
    * });
    * ```
    */
-  async getTradeInstructions(params: {
+  private async getTradeInstructions(params: {
     marketAddress: `0x${string}`;
     direction: 'buy' | 'sell';
     outcome: 'yes' | 'no';

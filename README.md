@@ -183,7 +183,7 @@ All API endpoints require x402 micropayments. The SDK handles payments automatic
 | Contract | Address |
 |----------|---------|
 | USDC | `0x534b2f3A21130d7a60830c2Df862319e593943A3` |
-| MarketFactory (v2) | `0x99E1B2a0e68A2D0a1F60e5F0d24bC1e60518F1cd` |
+| MarketFactory (v2) | `0xD639844c0aD7F9c33277f2491aaee503CE83A441` |
 | Protocol Fee Recipient | `0x048c2c9E869594a70c6Dc7CeAC168E724425cdFE` |
 
 ## Development

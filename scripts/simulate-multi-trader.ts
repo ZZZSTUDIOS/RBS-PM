@@ -27,7 +27,7 @@ import { privateKeyToAccount, generatePrivateKey } from 'viem/accounts';
 // ============ Config ============
 
 const USDC_ADDRESS = '0x534b2f3A21130d7a60830c2Df862319e593943A3' as Address;
-const MARKET_FACTORY = '0x99E1B2a0e68A2D0a1F60e5F0d24bC1e60518F1cd' as Address;
+const MARKET_FACTORY = '0xD639844c0aD7F9c33277f2491aaee503CE83A441' as Address;
 const API_BASE = 'https://qkcytrdhdtemyphsswou.supabase.co';
 const RPC_URL = 'https://testnet-rpc.monad.xyz';
 
