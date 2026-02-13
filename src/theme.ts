@@ -2,62 +2,63 @@ export const theme = {
   colors: {
     // Backgrounds
     pageBg: '#0a0a0a',
-    headerBg: '#000',
-    sidebarBg: '#050505',
-    cardBg: '#111',
-    cardBgLight: '#1a1a1a',
-    inputBg: '#0d0d0d',
+    headerBg: '#0a0a0a',
+    sidebarBg: '#0a0a0a',
+    cardBg: '#111111',
+    cardBgLight: '#161616',
+    inputBg: '#0e0e0e',
     black: '#000',
     modalOverlay: 'rgba(0, 0, 0, 0.9)',
 
-    // Primary (green)
-    primary: '#00ff00',
-    primaryDark: '#001a00',
-    primaryBgMuted: '#0a1a0a',
+    // Primary (white — monochrome dashboard)
+    primary: '#e8e8e8',
+    primaryDark: '#141414',
+    primaryBgMuted: '#111',
 
-    // Warning (orange)
-    warning: '#ff6600',
-    warningDark: '#1a0a00',
+    // Warning (muted amber for secondary indicators)
+    warning: '#d4a03c',
+    warningDark: '#141008',
 
-    // Error (red)
-    error: '#ff0000',
-    errorLight: '#ff6666',
-    errorDark: '#1a0a0a',
-    errorBgDark: '#1a0000',
-    errorBorder: '#330000',
+    // Error (red for negative deltas)
+    error: '#d94444',
+    errorLight: '#e06060',
+    errorDark: '#140a0a',
+    errorBgDark: '#140808',
+    errorBorder: '#201010',
 
-    // Info (cyan)
-    info: '#00ffff',
-    infoDark: '#001a1a',
+    // Info (dim gray)
+    info: '#888',
+    infoDark: '#141414',
 
-    // Highlight (yellow)
-    highlight: '#ffff00',
-    highlightDark: '#1a1a00',
-    highlightMuted: '#cccc00',
-    highlightBorder: '#333300',
-    highlightBgLight: '#1a1a0a',
+    // Highlight (green — only for positive indicators)
+    highlight: '#4caf50',
+    highlightDark: '#0e140e',
+    highlightMuted: '#3d8b40',
+    highlightBorder: '#1a261a',
+    highlightBgLight: '#0e120e',
 
-    // Success
-    success: '#0f5132',
-    successDark: '#0d1a0d',
+    // Success (green)
+    success: '#4caf50',
+    successDark: '#0e140e',
 
     // Text
-    textWhite: '#fff',
-    textLight: '#e0e0e0',
-    textBody: '#ccc',
-    textMuted: '#999',
-    textMutedAlt: '#888',
-    textDim: '#666',
-    textDisabled: '#444',
-    textSubtle: '#aaa',
+    textWhite: '#f0f0f0',
+    textLight: '#d8d8d8',
+    textBody: '#b0b0b0',
+    textMuted: '#707070',
+    textMutedAlt: '#606060',
+    textDim: '#484848',
+    textDisabled: '#2a2a2a',
+    textSubtle: '#808080',
 
     // Borders
-    border: '#333',
-    borderLight: '#222',
-    borderDim: '#1a1a1a',
+    border: '#1e1e1e',
+    borderLight: '#181818',
+    borderDim: '#141414',
   },
 
   fonts: {
+    primary: "'Helvetica World', 'Helvetica Neue', Helvetica, Arial, sans-serif",
     mono: "'IBM Plex Mono', 'Courier New', monospace",
   },
 

@@ -43,7 +43,7 @@ function Router() {
           ...(route === 'admin' ? navStyles.active : {}),
         }}
       >
-        Markets
+        Humans
       </a>
       <a
         href="#agents"
@@ -52,7 +52,7 @@ function Router() {
           ...(route === 'agents' ? navStyles.active : {}),
         }}
       >
-        For Agents
+        Agents
       </a>
       <a
         href="#insights"
@@ -88,7 +88,7 @@ const navStyles = {
     padding: '15px 30px',
     textDecoration: 'none',
     color: theme.colors.textMutedAlt,
-    fontFamily: theme.fonts.mono,
+    fontFamily: theme.fonts.primary,
     fontWeight: 'bold' as const,
     fontSize: theme.fontSizes.nav,
     borderRight: `1px solid ${theme.colors.border}`,

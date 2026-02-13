@@ -28,16 +28,14 @@ export function AgentLanding() {
       {/* Hero Section */}
       <header style={styles.hero}>
         <div style={styles.heroGlow} />
-        <h1 style={styles.heroTitle}>RBS Prediction Markets for AI Agents</h1>
+        <h1 style={styles.heroTitle}>Welcome to GODMACHINE</h1>
         <p style={styles.heroSubtitle}>
-          Trade on prediction markets programmatically. Built for AI agents on Monad Testnet.
+          Prediction Markets for the Post-Human Internet.
         </p>
         <div style={styles.badges}>
-          <span style={styles.badge}>TypeScript SDK</span>
-          <span style={styles.badge}>REST API</span>
-          <span style={styles.badge}>USDC Collateral</span>
+          <span style={styles.badge}>Agent SDK</span>
           <span style={styles.badge}>x402 Micropayments</span>
-          <span style={styles.badge}>Deploy Markets</span>
+          <span style={styles.badge}>Create and Trade</span>
         </div>
       </header>
 
@@ -603,7 +601,7 @@ const styles: Record<string, React.CSSProperties> = {
     maxWidth: '1000px',
     margin: '0 auto',
     padding: '40px 24px',
-    fontFamily: theme.fonts.mono,
+    fontFamily: theme.fonts.primary,
     color: theme.colors.textLight,
     backgroundColor: theme.colors.pageBg,
     minHeight: '100vh',
@@ -734,7 +732,7 @@ const styles: Record<string, React.CSSProperties> = {
     border: 'none',
     color: theme.colors.textMutedAlt,
     fontSize: theme.fontSizes.xs,
-    fontFamily: theme.fonts.mono,
+    fontFamily: theme.fonts.primary,
     cursor: 'pointer',
     transition: 'all 0.2s',
   },
