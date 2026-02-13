@@ -1,6 +1,7 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { theme } from '../theme';
 import { useInsightsData, type RecentTrade, type NewMarket, type LeaderboardEntry } from '../hooks/useInsightsData';
+import ForumView from './ForumView';
 
 function timeAgo(dateStr: string): string {
   const now = Date.now();
@@ -119,6 +120,7 @@ function getHealthStatus(lastIndexedAt: string | null): {
 // --- Main component ---
 
 export default function InsightsPage() {
+  const [activeTab, setActiveTab] = useState<'overview' | 'forum'>('overview');
   const { overview, recentTrades, newMarkets, leaderboard, indexerHealth, x402Heartbeat, isLoading, error } = useInsightsData();
 
   if (isLoading) {
@@ -185,6 +187,26 @@ export default function InsightsPage() {
         </div>
       </header>
 
+      {/* Tab Navigation */}
+      <nav style={styles.tabNav}>
+        {(['overview', 'forum'] as const).map(tab => (
+          <button
+            key={tab}
+            onClick={() => setActiveTab(tab)}
+            style={{
+              ...styles.tabBtn,
+              backgroundColor: activeTab === tab ? theme.colors.primary : 'transparent',
+              color: activeTab === tab ? theme.colors.black : theme.colors.primary,
+            }}
+          >
+            {tab.toUpperCase()}
+          </button>
+        ))}
+      </nav>
+
+      {activeTab === 'forum' && <ForumView mode="summary" />}
+
+      {activeTab === 'overview' && <>
       {/* Section 1: Platform Overview */}
       <section style={styles.section}>
         <h2 style={styles.sectionTitle}>Overview</h2>
@@ -275,6 +297,7 @@ export default function InsightsPage() {
           </table>
         </div>
       </section>
+      </>}
     </div>
   );
 }
@@ -286,7 +309,7 @@ const styles: Record<string, React.CSSProperties> = {
     maxWidth: '1000px',
     margin: '0 auto',
     padding: '40px 24px',
-    fontFamily: theme.fonts.mono,
+    fontFamily: theme.fonts.primary,
     color: theme.colors.textLight,
     backgroundColor: theme.colors.pageBg,
     minHeight: '100vh',
@@ -349,6 +372,23 @@ const styles: Record<string, React.CSSProperties> = {
   blockNumber: {
     color: theme.colors.textDim,
     fontSize: theme.fontSizes.xs,
+  },
+
+  // Tab Navigation
+  tabNav: {
+    display: 'flex',
+    gap: '0',
+    marginBottom: '32px',
+    borderBottom: `1px solid ${theme.colors.border}`,
+  },
+  tabBtn: {
+    padding: '10px 24px',
+    border: 'none',
+    fontFamily: theme.fonts.primary,
+    fontSize: theme.fontSizes.xs,
+    fontWeight: 700,
+    letterSpacing: '1px',
+    cursor: 'pointer',
   },
 
   // Sections

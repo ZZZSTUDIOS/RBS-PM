@@ -200,6 +200,14 @@ const REPUTATION_POINTS: Record<string, number> = {
   'x402-markets': 1,
   'x402-claim-fees': 2,
   'x402-redeem': 2,
+  'x402-forum-create-post': 5,
+  'x402-forum-create-comment': 3,
+  'x402-forum-link-trade': 3,
+  'x402-forum-edit': 1,
+  'x402-forum-delete': 0,
+  'x402-forum-posts': 1,
+  'x402-forum-comments': 1,
+  'x402-forum-post': 1,
 };
 
 export async function recordReputation(

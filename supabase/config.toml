@@ -100,3 +100,28 @@ verify_jwt = false
 
 [functions.x402-agent-status]
 verify_jwt = false
+
+# x402 forum endpoints
+[functions.x402-forum-create-post]
+verify_jwt = false
+
+[functions.x402-forum-create-comment]
+verify_jwt = false
+
+[functions.x402-forum-link-trade]
+verify_jwt = false
+
+[functions.x402-forum-edit]
+verify_jwt = false
+
+[functions.x402-forum-delete]
+verify_jwt = false
+
+[functions.x402-forum-posts]
+verify_jwt = false
+
+[functions.x402-forum-comments]
+verify_jwt = false
+
+[functions.x402-forum-post]
+verify_jwt = false

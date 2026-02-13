@@ -28,6 +28,7 @@ import { monadTestnet, ADDRESSES } from '../config/wagmi';
 import { useMarkets } from '../hooks/useMarkets';
 import { useUserSync } from '../hooks/useUserSync';
 import { usePositions, useMarketTrades } from '../hooks/usePositions';
+import ForumView from './ForumView';
 import { syncMarketPrices } from '../lib/supabase';
 import { theme } from '../theme';
 
@@ -1008,6 +1009,7 @@ export default function LMSRAdmin() {
     { id: 'portfolio', label: 'PORTFOLIO' },
     { id: 'resolve', label: 'RESOLVE' },
     { id: 'markets', label: 'MARKETS' },
+    { id: 'forum', label: 'FORUM' },
   ];
 
   const isWrongChain = isConnected && chainId !== monadTestnet.id;
@@ -1017,7 +1019,7 @@ export default function LMSRAdmin() {
       {/* Header */}
       <header style={styles.header}>
         <div style={styles.headerLeft}>
-          <div style={styles.logo}>◈ LMSR</div>
+          <div style={styles.logo}>◈ GODMACHINE</div>
           <div style={styles.badge}>PREDICTION MARKETS</div>
         </div>
         <div style={styles.headerRight}>
@@ -1119,21 +1121,6 @@ export default function LMSRAdmin() {
                 </div>
               )}
 
-              <div style={{ marginTop: '32px' }}>
-                <SectionHeader>ABOUT LMSR</SectionHeader>
-                <div style={{ ...styles.card, marginTop: '16px' }}>
-                  <p style={{ color: theme.colors.textMuted, lineHeight: '1.6' }}>
-                    LMSR (Logarithmic Market Scoring Rule) is an automated market maker algorithm
-                    designed for prediction markets. It provides guaranteed liquidity and allows
-                    traders to buy/sell outcome shares (YES/NO) with prices that reflect the
-                    market's probability estimate.
-                  </p>
-                  <div style={{ marginTop: '16px' }}>
-                    <InfoRow label="COLLATERAL" value="USDC" />
-                    <InfoRow label="PRICING" value="C(q) = b * ln(e^(qYes/b) + e^(qNo/b))" mono />
-                  </div>
-                </div>
-              </div>
             </div>
           )}
 
@@ -2641,6 +2628,10 @@ export default function LMSRAdmin() {
               )}
             </div>
           )}
+          {/* FORUM TAB */}
+          {activeTab === 'forum' && (
+            <ForumView mode="full" wallet={address} isConnected={isConnected} />
+          )}
         </main>
 
         {/* Logs Sidebar */}
@@ -2760,7 +2751,7 @@ export default function LMSRAdmin() {
                 color: theme.colors.primary,
                 fontSize: theme.fontSizes.small,
                 wordBreak: 'break-all',
-                fontFamily: 'monospace',
+                fontFamily: theme.fonts.mono,
               }}>
                 {createdMarket.address}
               </div>
@@ -2921,7 +2912,7 @@ const styles: Record<string, React.CSSProperties> = {
     minHeight: '100vh',
     backgroundColor: theme.colors.pageBg,
     color: theme.colors.primary,
-    fontFamily: theme.fonts.mono,
+    fontFamily: theme.fonts.primary,
     fontSize: theme.fontSizes.body,
   },
   header: {
@@ -3002,7 +2993,7 @@ const styles: Record<string, React.CSSProperties> = {
     backgroundColor: 'transparent',
     border: `2px solid ${theme.colors.primary}`,
     color: theme.colors.primary,
-    fontFamily: theme.fonts.mono,
+    fontFamily: theme.fonts.primary,
     fontSize: theme.fontSizes.small,
     fontWeight: 'bold',
     letterSpacing: '1px',
@@ -3143,7 +3134,7 @@ function InfoRow({
       <span
         style={{
           color: valueColor,
-          fontFamily: mono ? 'monospace' : 'inherit',
+          fontFamily: mono ? theme.fonts.mono : 'inherit',
           wordBreak: 'break-all',
           textAlign: 'right',
           maxWidth: '60%',
