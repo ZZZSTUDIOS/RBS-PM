@@ -45,7 +45,18 @@ export interface MarketPrices {
 
 export interface TradeQuote {
   shares: bigint;
+  sharesFormatted: string;
   cost: bigint;
+  costFormatted: string;
+  priceImpact: number;
+  averagePrice: number;
+}
+
+export interface SellQuote {
+  payout: bigint;
+  payoutFormatted: string;
+  shares: bigint;
+  sharesFormatted: string;
   priceImpact: number;
   averagePrice: number;
 }

@@ -1,6 +1,6 @@
 {
   "name": "@madgallery/rbs-pm-sdk",
-  "version": "1.0.37",
+  "version": "1.0.39",
   "description": "SDK for AI agents to trade on RBS Prediction Markets (Monad)",
   "main": "dist/index.js",
   "module": "dist/index.mjs",
@@ -18,6 +18,7 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
+    "@madgallery/rbs-pm-sdk": "^1.0.38",
     "viem": "^2.0.0"
   },
   "devDependencies": {

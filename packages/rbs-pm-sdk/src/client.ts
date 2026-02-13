@@ -29,6 +29,7 @@ import type {
   MarketCreateParams,
   MarketCreateResult,
   GetMarketsOptions,
+  SellQuote,
 } from './types';
 
 // USDC decimals
@@ -200,7 +201,7 @@ export class RBSPMClient {
   // ==================== Market Discovery ====================
 
   /**
-   * Get markets with optional filtering and pagination (requires x402 payment - 0.0001 USDC)
+   * Get markets with optional filtering and pagination (requires x402 payment - 0.01 USDC)
    *
    * @example
    * ```typescript
@@ -236,7 +237,7 @@ export class RBSPMClient {
     });
 
     if (response.status === 402) {
-      throw new Error('Payment required for market list (0.0001 USDC)');
+      throw new Error('Payment required for market list (0.01 USDC)');
     }
 
     if (!response.ok) {
@@ -289,7 +290,7 @@ export class RBSPMClient {
   }
 
   /**
-   * Get premium market data (requires x402 payment - 0.0001 USDC)
+   * Get premium market data (requires x402 payment - 0.01 USDC)
    */
   async getPremiumMarketData(marketAddress: `0x${string}`): Promise<PremiumMarketData> {
     const paymentFetch = this.getPaymentFetch();
@@ -300,7 +301,7 @@ export class RBSPMClient {
     );
 
     if (response.status === 402) {
-      throw new Error('Payment required for premium market data (0.0001 USDC)');
+      throw new Error('Payment required for premium market data (0.01 USDC)');
     }
 
     if (!response.ok) {
@@ -314,10 +315,10 @@ export class RBSPMClient {
   // ==================== Market Listing ====================
 
   /**
-   * List a deployed market in the discovery index (requires 0.0001 USDC x402 payment)
+   * List a deployed market in the discovery index (requires 0.01 USDC x402 payment)
    *
    * After deploying a market contract on-chain, call this method to make it
-   * discoverable by other agents. The listing fee (0.0001 USDC) is paid via x402.
+   * discoverable by other agents. The listing fee (0.01 USDC) is paid via x402.
    *
    * @example
    * ```typescript
@@ -337,7 +338,7 @@ export class RBSPMClient {
     const paymentFetch = this.getPaymentFetch();
 
     console.log(`Listing market at ${params.address}...`);
-    console.log('This will cost 0.0001 USDC (paid via x402)');
+    console.log('This will cost 0.01 USDC (paid via x402)');
 
     const response = await paymentFetch(`${this.apiUrl}${API_ENDPOINTS.x402CreateMarket}`, {
       method: 'POST',
@@ -360,7 +361,7 @@ export class RBSPMClient {
 
     if (response.status === 402) {
       const challenge = await response.json();
-      throw new Error(`Payment required: 0.0001 USDC listing fee. Challenge: ${JSON.stringify(challenge)}`);
+      throw new Error(`Payment required: 0.01 USDC listing fee. Challenge: ${JSON.stringify(challenge)}`);
     }
 
     const data = await response.json() as {
@@ -401,7 +402,7 @@ export class RBSPMClient {
    * 2. Initialize with liquidity
    * 3. List in discovery index
    *
-   * Requires x402 payment (0.0001 USDC) + gas for deployment
+   * Requires x402 payment (0.01 USDC) + gas for deployment
    *
    * @example
    * ```typescript
@@ -460,7 +461,7 @@ export class RBSPMClient {
     });
 
     if (response.status === 402) {
-      throw new Error('Payment required for market deployment (0.0001 USDC)');
+      throw new Error('Payment required for market deployment (0.01 USDC)');
     }
 
     const data = await response.json() as {
@@ -588,7 +589,7 @@ export class RBSPMClient {
   // ==================== Trade Instructions (x402 Protected) ====================
 
   /**
-   * Get encoded trade calldata (requires x402 payment - 0.0001 USDC)
+   * Get encoded trade calldata (requires x402 payment - 0.01 USDC)
    *
    * This endpoint returns the raw calldata for executing trades,
    * useful for agents that want to build their own transactions.
@@ -645,7 +646,7 @@ export class RBSPMClient {
     });
 
     if (response.status === 402) {
-      throw new Error('Payment required for trade instructions (0.0001 USDC)');
+      throw new Error('Payment required for trade instructions (0.01 USDC)');
     }
 
     if (!response.ok) {
@@ -668,7 +669,7 @@ export class RBSPMClient {
   // ==================== Price Queries (x402 Protected) ====================
 
   /**
-   * Get current prices for a market (requires x402 payment - 0.0001 USDC)
+   * Get current prices for a market (requires x402 payment - 0.01 USDC)
    */
   async getPrices(marketAddress: `0x${string}`): Promise<MarketPrices> {
     const paymentFetch = this.getPaymentFetch();
@@ -679,7 +680,7 @@ export class RBSPMClient {
     );
 
     if (response.status === 402) {
-      throw new Error('Payment required for prices (0.0001 USDC)');
+      throw new Error('Payment required for prices (0.01 USDC)');
     }
 
     if (!response.ok) {
@@ -729,24 +730,28 @@ export class RBSPMClient {
       }) as Promise<bigint>,
     ]);
 
-    const currentPrice = Number(isYes ? yesPrice : noPrice) / 1e18;
+    const sharesNum = Number(shares) / 1e18;
+    const costNum = Number(amountInUnits) / 1e6;
+    const averagePrice = sharesNum > 0 ? costNum / sharesNum : 0;
 
     return {
       shares,
+      sharesFormatted: sharesNum.toFixed(6),
       cost: amountInUnits,
+      costFormatted: costNum.toFixed(6),
       priceImpact: 0,
-      averagePrice: currentPrice,
+      averagePrice,
     };
   }
 
   /**
-   * Get quote for selling shares
+   * Get quote for selling shares (free — on-chain read only)
    */
   async getSellQuote(
     marketAddress: `0x${string}`,
     isYes: boolean,
     shares: bigint
-  ): Promise<{ payout: bigint; priceImpact: number }> {
+  ): Promise<SellQuote> {
     const payout = await this.publicClient.readContract({
       address: marketAddress,
       abi: LSLMSR_ABI,
@@ -754,9 +759,17 @@ export class RBSPMClient {
       args: [isYes, shares],
     }) as bigint;
 
+    const payoutNum = Number(payout) / 1e6;
+    const sharesNum = Number(shares) / 1e18;
+    const averagePrice = sharesNum > 0 ? payoutNum / sharesNum : 0;
+
     return {
       payout,
+      payoutFormatted: payoutNum.toFixed(6),
+      shares,
+      sharesFormatted: sharesNum.toFixed(6),
       priceImpact: 0,
+      averagePrice,
     };
   }
 
@@ -794,7 +807,7 @@ export class RBSPMClient {
    * Buy shares with USDC
    *
    * IMPORTANT: This method routes through x402-agent-trade endpoint to ensure
-   * all trades are tracked. Costs 0.0001 USDC for the API call + trade amount.
+   * all trades are tracked. Costs 0.01 USDC for the API call + trade amount.
    */
   async buy(
     marketAddress: `0x${string}`,
@@ -808,7 +821,7 @@ export class RBSPMClient {
       throw new Error('Wallet not configured. Provide privateKey in constructor.');
     }
 
-    // MUST go through x402 endpoint for tracking (costs 0.0001 USDC)
+    // MUST go through x402 endpoint for tracking (costs 0.01 USDC)
     const instructions = await this.getTradeInstructions({
       marketAddress,
       direction: 'buy',
@@ -886,7 +899,7 @@ export class RBSPMClient {
    * Sell shares for USDC
    *
    * IMPORTANT: This method routes through x402-agent-trade endpoint to ensure
-   * all trades are tracked. Costs 0.0001 USDC for the API call.
+   * all trades are tracked. Costs 0.01 USDC for the API call.
    */
   async sell(
     marketAddress: `0x${string}`,
@@ -905,7 +918,7 @@ export class RBSPMClient {
     // Convert shares to decimal string (shares have 18 decimals)
     const sharesDecimal = formatUnits(shares, 18);
 
-    // MUST go through x402 endpoint for tracking (costs 0.0001 USDC)
+    // MUST go through x402 endpoint for tracking (costs 0.01 USDC)
     const instructions = await this.getTradeInstructions({
       marketAddress,
       direction: 'sell',
@@ -994,7 +1007,7 @@ export class RBSPMClient {
   /**
    * Redeem winning shares after resolution
    *
-   * IMPORTANT: Routes through x402-redeem endpoint for tracking (0.0001 USDC)
+   * IMPORTANT: Routes through x402-redeem endpoint for tracking (0.01 USDC)
    */
   async redeem(marketAddress: `0x${string}`): Promise<`0x${string}`> {
     validateAddress(marketAddress, 'marketAddress');
@@ -1015,7 +1028,7 @@ export class RBSPMClient {
     });
 
     if (response.status === 402) {
-      throw new Error('Payment required for redeem instructions (0.0001 USDC)');
+      throw new Error('Payment required for redeem instructions (0.01 USDC)');
     }
 
     const data = await response.json() as {
@@ -1053,7 +1066,7 @@ export class RBSPMClient {
   // ==================== Position Queries (x402 Protected) ====================
 
   /**
-   * Get user's position in a market (requires x402 payment - 0.0001 USDC)
+   * Get user's position in a market (requires x402 payment - 0.01 USDC)
    */
   async getPosition(marketAddress: `0x${string}`, userAddress?: `0x${string}`): Promise<Position> {
     const address = userAddress || this.account?.address;
@@ -1069,7 +1082,7 @@ export class RBSPMClient {
     );
 
     if (response.status === 402) {
-      throw new Error('Payment required for position (0.0001 USDC)');
+      throw new Error('Payment required for position (0.01 USDC)');
     }
 
     if (!response.ok) {
@@ -1097,7 +1110,7 @@ export class RBSPMClient {
   }
 
   /**
-   * Get full portfolio with all positions across all markets (requires x402 payment - 0.0001 USDC)
+   * Get full portfolio with all positions across all markets (requires x402 payment - 0.01 USDC)
    *
    * Returns all markets where the user has a position, with current values and P&L.
    * Use this for portfolio health checks and monitoring.
@@ -1127,7 +1140,7 @@ export class RBSPMClient {
     );
 
     if (response.status === 402) {
-      throw new Error('Payment required for portfolio (0.0001 USDC)');
+      throw new Error('Payment required for portfolio (0.01 USDC)');
     }
 
     if (!response.ok) {
@@ -1213,7 +1226,7 @@ export class RBSPMClient {
   // ==================== Market Info (x402 Protected) ====================
 
   /**
-   * Get full market information (requires x402 payment - 0.0001 USDC)
+   * Get full market information (requires x402 payment - 0.01 USDC)
    */
   async getMarketInfo(marketAddress: `0x${string}`): Promise<{
     question: string;
@@ -1241,7 +1254,7 @@ export class RBSPMClient {
     );
 
     if (response.status === 402) {
-      throw new Error('Payment required for market info (0.0001 USDC)');
+      throw new Error('Payment required for market info (0.01 USDC)');
     }
 
     if (!response.ok) {
@@ -1289,7 +1302,7 @@ export class RBSPMClient {
   // ==================== Market Resolution (x402 Protected) ====================
 
   /**
-   * Get resolve calldata and execute (requires x402 payment - 0.0001 USDC)
+   * Get resolve calldata and execute (requires x402 payment - 0.01 USDC)
    *
    * @example
    * ```typescript
@@ -1317,7 +1330,7 @@ export class RBSPMClient {
     });
 
     if (response.status === 402) {
-      throw new Error('Payment required for resolve instructions (0.0001 USDC)');
+      throw new Error('Payment required for resolve instructions (0.01 USDC)');
     }
 
     const data = await response.json() as {
@@ -1353,7 +1366,7 @@ export class RBSPMClient {
   }
 
   /**
-   * Check if market can be resolved (requires x402 payment - 0.0001 USDC for market info)
+   * Check if market can be resolved (requires x402 payment - 0.01 USDC for market info)
    */
   async canResolve(marketAddress: `0x${string}`): Promise<{
     canResolve: boolean;
@@ -1386,7 +1399,7 @@ export class RBSPMClient {
   // ==================== Fee Claiming (x402 Protected) ====================
 
   /**
-   * Get fee information and claim calldata (requires x402 payment - 0.0001 USDC)
+   * Get fee information and claim calldata (requires x402 payment - 0.01 USDC)
    * Note: 0.5% trading fee goes 100% to market creator (no protocol fee)
    */
   async getFeeInfo(marketAddress: `0x${string}`): Promise<{
@@ -1408,7 +1421,7 @@ export class RBSPMClient {
     });
 
     if (response.status === 402) {
-      throw new Error('Payment required for fee info (0.0001 USDC)');
+      throw new Error('Payment required for fee info (0.01 USDC)');
     }
 
     if (!response.ok) {
@@ -1436,7 +1449,7 @@ export class RBSPMClient {
   }
 
   /**
-   * Claim accumulated creator fees (requires x402 payment - 0.0001 USDC)
+   * Claim accumulated creator fees (requires x402 payment - 0.01 USDC)
    *
    * @example
    * ```typescript
@@ -1474,7 +1487,7 @@ export class RBSPMClient {
   }
 
   /**
-   * Withdraw excess collateral after market resolution (requires x402 payment - 0.0001 USDC)
+   * Withdraw excess collateral after market resolution (requires x402 payment - 0.01 USDC)
    */
   async withdrawExcessCollateral(marketAddress: `0x${string}`): Promise<`0x${string}`> {
     if (!this.walletClient || !this.account) {
@@ -1505,7 +1518,7 @@ export class RBSPMClient {
   /**
    * Initialize a deployed market with initial liquidity
    *
-   * IMPORTANT: Routes through x402-initialize endpoint for tracking (0.0001 USDC)
+   * IMPORTANT: Routes through x402-initialize endpoint for tracking (0.01 USDC)
    *
    * @param marketAddress The deployed market contract address
    * @param usdcAmount Initial liquidity in USDC (e.g., "10" for 10 USDC)
@@ -1529,7 +1542,7 @@ export class RBSPMClient {
     });
 
     if (response.status === 402) {
-      throw new Error('Payment required for initialize instructions (0.0001 USDC)');
+      throw new Error('Payment required for initialize instructions (0.01 USDC)');
     }
 
     const data = await response.json() as {
@@ -1595,14 +1608,14 @@ export class RBSPMClient {
    */
   getX402Prices() {
     return {
-      markets: { raw: X402_CONFIG.prices.markets, formatted: '0.0001 USDC', description: 'List all markets' },
-      prices: { raw: X402_CONFIG.prices.prices, formatted: '0.0001 USDC', description: 'Get market prices' },
-      marketInfo: { raw: X402_CONFIG.prices.marketInfo, formatted: '0.0001 USDC', description: 'Full market info' },
-      position: { raw: X402_CONFIG.prices.position, formatted: '0.0001 USDC', description: 'Position in single market' },
-      portfolio: { raw: X402_CONFIG.prices.portfolio, formatted: '0.0001 USDC', description: 'Full portfolio (all positions)' },
-      marketData: { raw: X402_CONFIG.prices.marketData, formatted: '0.0001 USDC', description: 'Premium market data' },
-      tradeInstructions: { raw: X402_CONFIG.prices.tradeInstructions, formatted: '0.0001 USDC', description: 'Get trade calldata' },
-      createMarket: { raw: X402_CONFIG.prices.createMarket, formatted: '0.0001 USDC', description: 'List market for discovery' },
+      markets: { raw: X402_CONFIG.prices.markets, formatted: '0.01 USDC', description: 'List all markets' },
+      prices: { raw: X402_CONFIG.prices.prices, formatted: '0.01 USDC', description: 'Get market prices' },
+      marketInfo: { raw: X402_CONFIG.prices.marketInfo, formatted: '0.01 USDC', description: 'Full market info' },
+      position: { raw: X402_CONFIG.prices.position, formatted: '0.01 USDC', description: 'Position in single market' },
+      portfolio: { raw: X402_CONFIG.prices.portfolio, formatted: '0.01 USDC', description: 'Full portfolio (all positions)' },
+      marketData: { raw: X402_CONFIG.prices.marketData, formatted: '0.01 USDC', description: 'Premium market data' },
+      tradeInstructions: { raw: X402_CONFIG.prices.tradeInstructions, formatted: '0.01 USDC', description: 'Get trade calldata' },
+      createMarket: { raw: X402_CONFIG.prices.createMarket, formatted: '0.01 USDC', description: 'List market for discovery' },
     };
   }
 }

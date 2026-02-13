@@ -40,20 +40,20 @@ export const API_CONFIG = {
 // All endpoints are x402 protected (require USDC micropayment)
 export const API_ENDPOINTS = {
   base: 'https://qkcytrdhdtemyphsswou.supabase.co',
-  // Read operations (0.0001 USDC each)
+  // Read operations (0.01 USDC each)
   x402Markets: '/functions/v1/x402-markets',           // GET - list all markets
   x402Prices: '/functions/v1/x402-prices',             // GET ?market=0x... - get prices
   x402MarketInfo: '/functions/v1/x402-market-info',    // GET ?market=0x... - full market info
   x402Position: '/functions/v1/x402-position',         // GET ?market=0x...&user=0x... - user position
   x402Portfolio: '/functions/v1/x402-portfolio',       // GET ?user=0x... - full portfolio with all positions
   x402MarketData: '/functions/v1/x402-market-data',    // GET ?market=0x... - premium analytics
-  // Write operations - return calldata (0.0001 USDC each)
+  // Write operations - return calldata (0.01 USDC each)
   x402AgentTrade: '/functions/v1/x402-agent-trade',    // POST - buy/sell calldata
   x402Resolve: '/functions/v1/x402-resolve',           // POST - resolve calldata
   x402ClaimFees: '/functions/v1/x402-claim-fees',      // POST - claim fees calldata
   x402Redeem: '/functions/v1/x402-redeem',             // POST - redeem calldata
   x402Initialize: '/functions/v1/x402-initialize',     // POST - initialize calldata
-  // Market creation (0.0001 USDC)
+  // Market creation (0.01 USDC)
   x402CreateMarket: '/functions/v1/x402-create-market', // POST - list market in discovery
   x402DeployMarket: '/functions/v1/x402-deploy-market', // POST - deploy new market via factory
   // Authentication (free - required for agent identity)

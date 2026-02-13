@@ -48,7 +48,7 @@ const RETRY_DELAY_MS = 3000;
 
 /**
  * Create a fetch wrapper that automatically handles x402 payments.
- * Includes retry with exponential backoff for facilitator rate-limiting.
+ * Includes retry with fixed delay for facilitator rate-limiting.
  */
 export function createX402Fetch(
   walletClient: WalletClient,
@@ -182,7 +182,7 @@ export function createX402Fetch(
 export async function checkX402Balance(
   publicClient: { readContract: (args: unknown) => Promise<bigint> },
   address: `0x${string}`,
-  requiredAmount: string = '100' // 0.0001 USDC
+  requiredAmount: string = '10000' // 0.01 USDC (facilitator minimum)
 ): Promise<{ sufficient: boolean; balance: bigint; required: bigint }> {
   const balance = await publicClient.readContract({
     address: ADDRESSES.USDC,

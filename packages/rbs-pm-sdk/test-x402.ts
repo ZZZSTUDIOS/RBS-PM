@@ -1,202 +1,150 @@
-// Test x402 payment flow for markets endpoint
-// Run with: npx ts-node test-x402.ts
+// Test all x402 endpoints using published SDK v1.0.38
+// Run with: npx tsx test-x402.ts
 
-import { createWalletClient, createPublicClient, http, encodeFunctionData, keccak256, toHex } from 'viem';
-import { privateKeyToAccount } from 'viem/accounts';
-import { monadTestnet } from 'viem/chains';
+import { RBSPMClient } from '@madgallery/rbs-pm-sdk';
 
-// ========== CONFIGURATION ==========
-// Set your private key here (with 0x prefix)
-const PRIVATE_KEY = process.env.PRIVATE_KEY as `0x${string}` || '0x...YOUR_PRIVATE_KEY_HERE...';
+const sleep = (ms: number) => new Promise(r => setTimeout(r, ms));
 
-const API_BASE = 'https://qkcytrdhdtemyphsswou.supabase.co';
-const API_KEY = 'sb_publishable_mKTNqXht6ek37VkHAGWoUQ_TMzoC3wp';
-const USDC_ADDRESS = '0x534b2f3A21130d7a60830c2Df862319e593943A3';
-const RECIPIENT = '0x048c2c9E869594a70c6Dc7CeAC168E724425cdFE';
-const AMOUNT = '100'; // 0.0001 USDC
-
-// EIP-712 types for USDC TransferWithAuthorization
-const TRANSFER_WITH_AUTH_TYPES = {
-  TransferWithAuthorization: [
-    { name: 'from', type: 'address' },
-    { name: 'to', type: 'address' },
-    { name: 'value', type: 'uint256' },
-    { name: 'validAfter', type: 'uint256' },
-    { name: 'validBefore', type: 'uint256' },
-    { name: 'nonce', type: 'bytes32' },
-  ],
-} as const;
-
-const USDC_DOMAIN = {
-  name: 'USDC',
-  version: '2',
-  chainId: 10143,
-  verifyingContract: USDC_ADDRESS as `0x${string}`,
-} as const;
-
-async function testX402Markets() {
-  console.log('🔐 Setting up wallet...');
-
-  const account = privateKeyToAccount(PRIVATE_KEY);
-  console.log(`   Wallet address: ${account.address}`);
-
-  const walletClient = createWalletClient({
-    account,
-    chain: monadTestnet,
-    transport: http('https://testnet-rpc.monad.xyz'),
+async function main() {
+  const client = new RBSPMClient({
+    privateKey: process.env.PRIVATE_KEY as `0x${string}`,
   });
 
-  const publicClient = createPublicClient({
-    chain: monadTestnet,
-    transport: http('https://testnet-rpc.monad.xyz'),
-  });
+  const addr = client.getAddress();
+  console.log(`Wallet: ${addr}`);
+  console.log(`x402 Enabled: ${client.hasPaymentCapability()}\n`);
 
-  // Check USDC balance
-  const usdcAbi = [
-    { name: 'balanceOf', type: 'function', inputs: [{ name: 'account', type: 'address' }], outputs: [{ type: 'uint256' }], stateMutability: 'view' },
-  ] as const;
+  // === FREE OPERATIONS ===
+  console.log('=== FREE OPERATIONS ===');
 
-  const balance = await publicClient.readContract({
-    address: USDC_ADDRESS as `0x${string}`,
-    abi: usdcAbi,
-    functionName: 'balanceOf',
-    args: [account.address],
-  });
+  const usdc = await client.getUSDCBalance();
+  console.log(`✓ getUSDCBalance: ${usdc} USDC`);
 
-  console.log(`   USDC Balance: ${Number(balance) / 1e6} USDC`);
+  const mon = await client.getMONBalance();
+  console.log(`✓ getMONBalance: ${mon} MON`);
 
-  if (balance < BigInt(AMOUNT)) {
-    console.error('❌ Insufficient USDC balance! Need at least 0.0001 USDC');
-    process.exit(1);
+  // === x402 READS (0.01 USDC each) ===
+  console.log('\n=== x402 READS ===');
+
+  // 1. getMarkets
+  console.log('\n--- getMarkets (0.01 USDC) ---');
+  const markets = await client.getMarkets({ status: 'ACTIVE', limit: 3 });
+  console.log(`✓ Got ${markets.length} markets`);
+  for (const m of markets) {
+    console.log(`  ${m.question} | YES: ${(m.yesPrice * 100).toFixed(1)}%`);
+  }
+  await sleep(2000);
+
+  // 2. getPortfolio
+  console.log('\n--- getPortfolio (0.01 USDC) ---');
+  const portfolio = await client.getPortfolio();
+  console.log(`✓ Positions: ${portfolio.summary.totalPositions}, Value: $${portfolio.summary.totalValue}`);
+  await sleep(2000);
+
+  // 3. getPosition (single market)
+  if (markets.length > 0) {
+    console.log('\n--- getPosition (0.01 USDC) ---');
+    const pos = await client.getPosition(markets[0].address as `0x${string}`);
+    console.log(`✓ Position in "${markets[0].question}": YES=${pos.yesShares}, NO=${pos.noShares}`);
+    await sleep(2000);
   }
 
-  // Step 1: Get payment requirements from 402 response
-  console.log('\n📋 Step 1: Getting payment requirements...');
-
-  const initialResponse = await fetch(`${API_BASE}/functions/v1/x402-markets`, {
-    headers: { 'apikey': API_KEY },
-  });
-
-  if (initialResponse.status !== 402) {
-    console.log('   Unexpected status:', initialResponse.status);
-    const body = await initialResponse.text();
-    console.log('   Response:', body);
-    return;
+  // 4. getPrices
+  if (markets.length > 0) {
+    console.log('\n--- getPrices (0.01 USDC) ---');
+    const prices = await client.getPrices(markets[0].address as `0x${string}`);
+    console.log(`✓ Prices: YES=${prices.yesPrice}, NO=${prices.noPrice}`);
+    await sleep(2000);
   }
 
-  const paymentRequired = initialResponse.headers.get('payment-required');
-  if (!paymentRequired) {
-    console.error('❌ No payment-required header found!');
-    process.exit(1);
+  // 5. getMarketInfo
+  if (markets.length > 0) {
+    console.log('\n--- getMarketInfo (0.01 USDC) ---');
+    const info = await client.getMarketInfo(markets[0].address as `0x${string}`);
+    console.log(`✓ Info: oracle=${info.oracle}, resolved=${info.resolved}`);
+    await sleep(2000);
   }
 
-  const paymentDetails = JSON.parse(atob(paymentRequired));
-  console.log('   Payment required:', paymentDetails);
-
-  // Step 2: Create and sign the payment
-  console.log('\n✍️  Step 2: Signing payment authorization...');
-
-  const now = Math.floor(Date.now() / 1000);
-  const validAfter = now - 60; // Valid from 1 minute ago
-  const validBefore = now + 3600; // Valid for 1 hour
-  const nonce = keccak256(toHex(`${account.address}-${Date.now()}-${Math.random()}`));
-
-  const message = {
-    from: account.address,
-    to: RECIPIENT as `0x${string}`,
-    value: BigInt(AMOUNT),
-    validAfter: BigInt(validAfter),
-    validBefore: BigInt(validBefore),
-    nonce: nonce,
-  };
-
-  console.log('   Message to sign:', {
-    from: message.from,
-    to: message.to,
-    value: message.value.toString(),
-    validAfter: validAfter,
-    validBefore: validBefore,
-    nonce: nonce,
-  });
-
-  const signature = await walletClient.signTypedData({
-    account,
-    domain: USDC_DOMAIN,
-    types: TRANSFER_WITH_AUTH_TYPES,
-    primaryType: 'TransferWithAuthorization',
-    message,
-  });
-
-  console.log('   Signature:', signature);
-
-  // Step 3: Create payment payload
-  console.log('\n📦 Step 3: Creating payment payload...');
-
-  // The accepted field mirrors what the server specified in the 402 response
-  const accepted = paymentDetails.accepts[0];
-
-  const paymentPayload = {
-    x402Version: 2,
-    scheme: 'exact',
-    network: 'eip155:10143',
-    payload: {
-      signature,
-      authorization: {
-        from: message.from,
-        to: message.to,
-        value: message.value.toString(),
-        validAfter: validAfter.toString(),
-        validBefore: validBefore.toString(),
-        nonce: nonce,
-      },
-    },
-    // Include the accepted payment requirements
-    accepted: {
-      scheme: accepted.scheme,
-      network: accepted.network,
-      amount: accepted.amount,
-      asset: accepted.asset,
-      payTo: accepted.payTo,
-      maxTimeoutSeconds: accepted.maxTimeoutSeconds,
-      extra: accepted.extra,
-    },
-  };
-
-  console.log('   Payment payload structure:', Object.keys(paymentPayload));
-  const paymentSignature = btoa(JSON.stringify(paymentPayload));
-  console.log('   Payment signature (base64):', paymentSignature.substring(0, 50) + '...');
-
-  // Step 4: Make the paid request
-  console.log('\n🚀 Step 4: Making paid request to x402-markets...');
-
-  const paidResponse = await fetch(`${API_BASE}/functions/v1/x402-markets`, {
-    headers: {
-      'apikey': API_KEY,
-      'PAYMENT-SIGNATURE': paymentSignature,
-    },
-  });
-
-  console.log('   Response status:', paidResponse.status);
-
-  const responseBody = await paidResponse.json() as {
-    success?: boolean;
-    count?: number;
-    markets?: unknown[];
-    payment?: { amountFormatted?: string; payer?: string };
-    error?: string;
-  };
-  console.log('\n📊 Response:');
-  console.log(JSON.stringify(responseBody, null, 2));
-
-  if (paidResponse.ok) {
-    console.log('\n✅ SUCCESS! x402 payment worked!');
-    console.log(`   Markets returned: ${responseBody.count || 0}`);
-    console.log(`   Payment amount: ${responseBody.payment?.amountFormatted || 'N/A'}`);
-    console.log(`   Payer: ${responseBody.payment?.payer || 'N/A'}`);
-  } else {
-    console.log('\n❌ Request failed');
-    console.log(`   Error: ${responseBody.error || 'Unknown'}`);
+  // 6. getPremiumMarketData
+  if (markets.length > 0) {
+    console.log('\n--- getPremiumMarketData (0.01 USDC) ---');
+    const data = await client.getPremiumMarketData(markets[0].address as `0x${string}`);
+    console.log(`✓ Premium data: heat=${data.heatScore}, stress=${data.stressScore}`);
+    await sleep(2000);
   }
+
+  // 7. canResolve
+  if (markets.length > 0) {
+    console.log('\n--- canResolve (0.01 USDC) ---');
+    const canRes = await client.canResolve(markets[0].address as `0x${string}`);
+    console.log(`✓ canResolve=${canRes.canResolve}, reason=${canRes.reason}`);
+    await sleep(2000);
+  }
+
+  // 8. getFeeInfo
+  if (markets.length > 0) {
+    console.log('\n--- getFeeInfo (0.01 USDC) ---');
+    const fees = await client.getFeeInfo(markets[0].address as `0x${string}`);
+    console.log(`✓ Fees: pendingCreatorFees=${fees.pendingCreatorFees}`);
+    await sleep(2000);
+  }
+
+  // === FREE QUOTES ===
+  console.log('\n=== FREE QUOTES ===');
+
+  if (markets.length > 0) {
+    const mAddr = markets[0].address as `0x${string}`;
+
+    console.log('\n--- getBuyQuote (FREE) ---');
+    const buyQ = await client.getBuyQuote(mAddr, true, '1');
+    console.log(`✓ Buy 1 USDC of YES → ${buyQ.shares} shares, avg price: ${buyQ.averagePrice}`);
+
+    console.log('\n--- getSellQuote (FREE) ---');
+    const sellQ = await client.getSellQuote(mAddr, true, BigInt(1e18));
+    console.log(`✓ Sell 1 share of YES → payout: ${sellQ.payout}`);
+  }
+
+  // === WRITE OPERATIONS (0.01 USDC + gas) ===
+  console.log('\n=== WRITE OPERATIONS ===');
+
+  if (markets.length > 0) {
+    const mAddr = markets[0].address as `0x${string}`;
+
+    // Buy 1 USDC of YES
+    console.log('\n--- buy (0.01 USDC + gas + 1 USDC) ---');
+    try {
+      const buyResult = await client.buy(mAddr, true, '1');
+      console.log(`✓ Buy TX: ${buyResult.txHash}`);
+    } catch (e: any) {
+      console.log(`✗ Buy failed: ${e.message}`);
+    }
+    await sleep(3000);
+
+    // Sell a small amount
+    console.log('\n--- sell (0.01 USDC + gas) ---');
+    try {
+      const pos = await client.getPosition(mAddr);
+      await sleep(2000);
+      const yesShares = BigInt(pos.yesShares);
+      if (yesShares > 0n) {
+        const toSell = yesShares / 4n;
+        const sellResult = await client.sell(mAddr, true, toSell > 0n ? toSell : 1n);
+        console.log(`✓ Sell TX: ${sellResult.txHash}`);
+      } else {
+        console.log('  No YES shares to sell, skipping');
+      }
+    } catch (e: any) {
+      console.log(`✗ Sell failed: ${e.message}`);
+    }
+  }
+
+  // === FINAL BALANCE ===
+  console.log('\n=== FINAL ===');
+  const finalUsdc = await client.getUSDCBalance();
+  const finalMon = await client.getMONBalance();
+  console.log(`USDC: ${usdc} → ${finalUsdc} (spent: ${(parseFloat(usdc) - parseFloat(finalUsdc)).toFixed(4)})`);
+  console.log(`MON: ${mon} → ${finalMon}`);
+  console.log('\nAll x402 endpoint tests complete!');
 }
 
-testX402Markets().catch(console.error);
+main().catch(console.error);
