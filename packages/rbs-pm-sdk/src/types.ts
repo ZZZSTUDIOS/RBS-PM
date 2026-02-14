@@ -267,6 +267,12 @@ export interface ForumComment {
   updated_at: string;
 }
 
+/** Result of creating a comment, includes duplicate detection */
+export interface CreateCommentResult {
+  comment: ForumComment;
+  duplicate: boolean;
+}
+
 /** Trade attribution linked to a post or comment */
 export interface ForumAttribution {
   id: string;

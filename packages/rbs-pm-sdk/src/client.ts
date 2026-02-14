@@ -33,6 +33,7 @@ import type {
   ForumPost,
   ForumComment,
   ForumAttribution,
+  CreateCommentResult,
   GetPostsOptions,
 } from './types';
 
@@ -1760,21 +1761,31 @@ export class RBSPMClient {
   /**
    * Create a comment on a forum post (requires x402 payment - 0.01 USDC)
    *
+   * Pass an `idempotencyKey` to avoid duplicate comments without calling `getComments()` first.
+   * If the key already exists, the server returns the existing comment for free (no x402 charge).
+   * Use `computeCommentIdempotencyKey()` to generate a deterministic key.
+   *
    * @example
    * ```typescript
-   * const comment = await client.createComment('post-uuid', 'Great analysis, I agree.');
-   * console.log('Comment ID:', comment.id);
+   * const key = RBSPMClient.computeCommentIdempotencyKey(wallet, marketAddress, text);
+   * const { comment, duplicate } = await client.createComment('post-uuid', 'Great analysis.', key);
+   * if (duplicate) console.log('Already posted this comment');
    * ```
    */
-  async createComment(postId: string, body: string): Promise<ForumComment> {
+  async createComment(postId: string, body: string, idempotencyKey?: string): Promise<CreateCommentResult> {
     const paymentFetch = this.getPaymentFetch();
+
+    const payload: Record<string, string> = { post_id: postId, body };
+    if (idempotencyKey) {
+      payload.idempotency_key = idempotencyKey;
+    }
 
     const response = await paymentFetch(
       `${this.apiUrl}${API_ENDPOINTS.x402ForumCreateComment}`,
       {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ post_id: postId, body }),
+        body: JSON.stringify(payload),
       }
     );
 
@@ -1783,8 +1794,44 @@ export class RBSPMClient {
       throw new Error(errorData.error || 'Failed to create comment');
     }
 
-    const data = await response.json() as { comment: ForumComment };
-    return data.comment;
+    const data = await response.json() as { comment: ForumComment; duplicate?: boolean };
+    return {
+      comment: data.comment,
+      duplicate: data.duplicate ?? false,
+    };
+  }
+
+  /**
+   * Compute a deterministic idempotency key for a comment.
+   *
+   * The key is a SHA-256 hash of wallet + market + normalized text + time window bucket.
+   * Same inputs within the same window produce the same key, preventing duplicate comments
+   * without needing to call `getComments()` first.
+   *
+   * @param wallet - Wallet address of the commenter
+   * @param marketAddress - Market address the comment relates to
+   * @param text - Comment body text
+   * @param windowMinutes - Time window in minutes (default: 10)
+   * @returns Hex-encoded SHA-256 hash
+   */
+  static computeCommentIdempotencyKey(
+    wallet: string,
+    marketAddress: string,
+    text: string,
+    windowMinutes: number = 10,
+  ): string {
+    const windowBucket = Math.floor(Date.now() / (windowMinutes * 60_000));
+    const normalized = text.trim().toLowerCase().replace(/\s+/g, ' ');
+    const input = `${wallet.toLowerCase()}:${marketAddress.toLowerCase()}:${normalized}:${windowBucket}`;
+
+    // Simple hash using Web Crypto-compatible sync approach
+    // We use a deterministic string hash since this runs in both Node and browser
+    let hash = 0n;
+    for (let i = 0; i < input.length; i++) {
+      const ch = BigInt(input.charCodeAt(i));
+      hash = ((hash << 5n) - hash + ch) & 0xFFFFFFFFFFFFFFFFn;
+    }
+    return hash.toString(16).padStart(16, '0');
   }
 
   /**

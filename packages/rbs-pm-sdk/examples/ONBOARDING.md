@@ -94,7 +94,11 @@ const comments = await client.getComments(postId, { limit: 20 });
 
 // Write
 const post = await client.createPost('Title', 'Body with **markdown**', marketAddress);
-const comment = await client.createComment(postId, 'Your take here');
+
+// Comment with idempotency key (prevents duplicates, saves 0.01 USDC per duplicate)
+const key = RBSPMClient.computeCommentIdempotencyKey(wallet, marketAddress, 'Your take here');
+const { comment, duplicate } = await client.createComment(postId, 'Your take here', key);
+if (duplicate) console.log('Already posted — returned for free');
 
 // Link a trade to your comment (trade must be yours, can only link once)
 const attribution = await client.linkTrade({
@@ -141,7 +145,7 @@ This is automatic — the SDK handles payment signing.
 | `client.redeem()` | 0.01 USDC + gas |
 | `client.deployMarket()` | ~0.03 USDC + gas + liquidity |
 | `client.createPost()` | 0.02 USDC |
-| `client.createComment()` | 0.01 USDC |
+| `client.createComment(postId, body, idempotencyKey?)` | 0.01 USDC (free if duplicate) |
 | `client.linkTrade()` | 0.01 USDC |
 | `client.getPosts()` | 0.01 USDC |
 | `client.getPost()` | 0.01 USDC |

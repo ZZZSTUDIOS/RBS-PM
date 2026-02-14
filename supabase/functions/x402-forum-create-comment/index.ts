@@ -1,5 +1,6 @@
 // Edge Function: x402-forum-create-comment
 // Create a comment on a forum post - x402 protected (0.01 USDC)
+// Supports idempotency keys: if provided, duplicate key returns existing comment for free.
 
 import { serve } from "https://deno.land/std@0.177.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.39.0";
@@ -21,7 +22,31 @@ serve(async (req: Request) => {
 
   try {
     const body = await req.json();
-    const { post_id, body: commentBody, parent_comment_id } = body;
+    const { post_id, body: commentBody, parent_comment_id, idempotency_key } = body;
+
+    // If idempotency key is provided, check for existing comment BEFORE payment
+    if (idempotency_key && typeof idempotency_key === "string") {
+      const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
+      const supabaseKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
+      const supabase = createClient(supabaseUrl, supabaseKey);
+
+      const { data: existing } = await supabase
+        .from("forum_comments")
+        .select("*")
+        .eq("idempotency_key", idempotency_key)
+        .maybeSingle();
+
+      if (existing) {
+        return new Response(
+          JSON.stringify({
+            success: true,
+            comment: existing,
+            duplicate: true,
+          }),
+          { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
+    }
 
     // Handle x402 payment
     const paymentResult = await handlePayment(req, ENDPOINT, { post_id });
@@ -83,37 +108,45 @@ serve(async (req: Request) => {
       );
     }
 
-    // Reject duplicate comments (same wallet, same post, same body)
-    const { data: duplicate } = await supabase
-      .from("forum_comments")
-      .select("id")
-      .eq("post_id", post_id)
-      .eq("author_wallet", paymentResult.payerAddress.toLowerCase())
-      .eq("body", commentBody.trim())
-      .eq("is_deleted", false)
-      .limit(1)
-      .maybeSingle();
+    // Insert comment (with optional idempotency key)
+    const insertData: Record<string, unknown> = {
+      post_id,
+      parent_comment_id: parent_comment_id || null,
+      author_wallet: paymentResult.payerAddress.toLowerCase(),
+      body: commentBody.trim(),
+    };
 
-    if (duplicate) {
-      return new Response(
-        JSON.stringify({ error: "You already posted this exact comment on this post" }),
-        { status: 409, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-      );
+    if (idempotency_key && typeof idempotency_key === "string") {
+      insertData.idempotency_key = idempotency_key;
     }
 
-    // Insert comment
     const { data: comment, error } = await supabase
       .from("forum_comments")
-      .insert({
-        post_id,
-        parent_comment_id: parent_comment_id || null,
-        author_wallet: paymentResult.payerAddress.toLowerCase(),
-        body: commentBody.trim(),
-      })
+      .insert(insertData)
       .select()
       .single();
 
     if (error) {
+      // Handle unique constraint violation on idempotency_key (race condition)
+      if (error.code === "23505" && idempotency_key) {
+        const { data: existing } = await supabase
+          .from("forum_comments")
+          .select("*")
+          .eq("idempotency_key", idempotency_key)
+          .maybeSingle();
+
+        if (existing) {
+          return new Response(
+            JSON.stringify({
+              success: true,
+              comment: existing,
+              duplicate: true,
+            }),
+            { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+          );
+        }
+      }
+
       console.error("Insert error:", error);
       return new Response(
         JSON.stringify({ error: "Failed to create comment" }),
@@ -125,6 +158,7 @@ serve(async (req: Request) => {
       JSON.stringify({
         success: true,
         comment,
+        duplicate: false,
         payment: {
           amount: "10000",
           amountFormatted: "0.01 USDC",
