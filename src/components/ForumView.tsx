@@ -64,15 +64,15 @@ function renderForumText(text: string): React.ReactNode {
 
     // Headings: ###, ##, #
     if (line.startsWith('### ')) {
-      elements.push(<div key={i} style={{ fontWeight: 'bold', fontSize: theme.fontSizes.small, marginTop: i > 0 ? '10px' : 0, marginBottom: '4px', color: theme.colors.text, textTransform: 'uppercase', letterSpacing: '0.5px' }}>{line.slice(4)}</div>);
+      elements.push(<div key={i} style={{ fontWeight: 'bold', fontSize: theme.fontSizes.small, marginTop: i > 0 ? '10px' : 0, marginBottom: '4px', color: theme.colors.textWhite, textTransform: 'uppercase', letterSpacing: '0.5px' }}>{line.slice(4)}</div>);
       i++; continue;
     }
     if (line.startsWith('## ')) {
-      elements.push(<div key={i} style={{ fontWeight: 'bold', fontSize: theme.fontSizes.body, marginTop: i > 0 ? '12px' : 0, marginBottom: '4px', color: theme.colors.text }}>{line.slice(3)}</div>);
+      elements.push(<div key={i} style={{ fontWeight: 'bold', fontSize: theme.fontSizes.body, marginTop: i > 0 ? '12px' : 0, marginBottom: '4px', color: theme.colors.textWhite }}>{line.slice(3)}</div>);
       i++; continue;
     }
     if (line.startsWith('# ')) {
-      elements.push(<div key={i} style={{ fontWeight: 'bold', fontSize: '18px', marginTop: i > 0 ? '14px' : 0, marginBottom: '6px', color: theme.colors.text }}>{line.slice(2)}</div>);
+      elements.push(<div key={i} style={{ fontWeight: 'bold', fontSize: '18px', marginTop: i > 0 ? '14px' : 0, marginBottom: '6px', color: theme.colors.textWhite }}>{line.slice(2)}</div>);
       i++; continue;
     }
 
@@ -94,7 +94,7 @@ function renderForumText(text: string): React.ReactNode {
               <thead>
                 <tr>
                   {headerCells.map((cell, ci) => (
-                    <th key={ci} style={{ textAlign: 'left', padding: '6px 10px', borderBottom: `1px solid ${theme.colors.border}`, color: theme.colors.text, fontWeight: 'bold' }}>{formatInline(cell)}</th>
+                    <th key={ci} style={{ textAlign: 'left', padding: '6px 10px', borderBottom: `1px solid ${theme.colors.border}`, color: theme.colors.textWhite, fontWeight: 'bold' }}>{formatInline(cell)}</th>
                   ))}
                 </tr>
               </thead>
@@ -142,7 +142,7 @@ function formatInline(text: string): React.ReactNode {
   const parts = text.split(/(\*\*[^*]+\*\*)/g);
   return parts.map((part, i) => {
     if (part.startsWith('**') && part.endsWith('**')) {
-      return <strong key={i} style={{ color: theme.colors.text }}>{part.slice(2, -2)}</strong>;
+      return <strong key={i} style={{ color: theme.colors.textWhite }}>{part.slice(2, -2)}</strong>;
     }
     return part;
   });
