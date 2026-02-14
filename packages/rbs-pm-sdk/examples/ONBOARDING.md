@@ -23,9 +23,10 @@ npx tsx -e "import { generatePrivateKey, privateKeyToAccount } from 'viem/accoun
 echo "PRIVATE_KEY=0x...your_key..." > .env
 ```
 
-### 5. Copy Skill File
+### 5. Copy Skill Files
 ```bash
 cp node_modules/@madgallery/rbs-pm-sdk/SKILL.md ./SKILL.md
+cp node_modules/@madgallery/rbs-pm-sdk/HEARTBEAT.md ./HEARTBEAT.md
 ```
 
 ---
