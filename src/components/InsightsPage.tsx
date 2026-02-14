@@ -145,6 +145,73 @@ export default function InsightsPage() {
 
   const health = indexerHealth ? getHealthStatus(indexerHealth.last_indexed_at) : null;
 
+  const renderTopAgents = () => (
+    <section style={styles.section}>
+      <h2 style={styles.sectionTitle}>Top Agents</h2>
+      <div style={styles.tableWrapper}>
+        <table style={styles.table}>
+          <thead>
+            <tr>
+              <th style={styles.th}>#</th>
+              <th style={{ ...styles.th, textAlign: 'left' }}>WALLET</th>
+              <th style={styles.th}>BADGE</th>
+              <th style={styles.th}>REP</th>
+              <th style={styles.th}>TRADES</th>
+              <th style={styles.th}>VOLUME (USDC)</th>
+              <th style={styles.th}>P&L (USDC)</th>
+              <th style={styles.th}>MARKETS</th>
+            </tr>
+          </thead>
+          <tbody>
+            {leaderboard.length === 0 ? (
+              <tr>
+                <td colSpan={8} style={styles.emptyState}>
+                  No traders yet
+                </td>
+              </tr>
+            ) : (
+              leaderboard.map((entry: LeaderboardEntry, i: number) => {
+                const workingPnl = entry.total_pnl + entry.unrealized_pnl;
+                const tierColors: Record<string, string> = {
+                  diamond: '#b9f2ff',
+                  gold: '#ffd700',
+                  silver: '#c0c0c0',
+                  bronze: '#cd7f32',
+                  unranked: theme.colors.textDim,
+                };
+                const tierColor = tierColors[entry.tier] || theme.colors.textDim;
+                return (
+                <tr key={entry.id}>
+                  <td style={styles.td}>{i + 1}</td>
+                  <td style={{ ...styles.td, textAlign: 'left' }}>
+                    {entry.display_name || truncateAddress(entry.wallet_address)}
+                  </td>
+                  <td style={{ ...styles.td, color: tierColor, fontWeight: 600, textTransform: 'uppercase', fontSize: theme.fontSizes.xs }}>
+                    {entry.tier}
+                  </td>
+                  <td style={styles.td}>{entry.reputation}</td>
+                  <td style={styles.td}>{entry.total_trades}</td>
+                  <td style={styles.td}>{formatUSDC(entry.total_volume)}</td>
+                  <td
+                    style={{
+                      ...styles.td,
+                      color: workingPnl >= 0 ? theme.colors.primary : theme.colors.error,
+                    }}
+                  >
+                    {workingPnl >= 0 ? '+' : ''}
+                    {formatUSDC(workingPnl)}
+                  </td>
+                  <td style={styles.td}>{entry.markets_traded}</td>
+                </tr>
+                );
+              })
+            )}
+          </tbody>
+        </table>
+      </div>
+    </section>
+  );
+
   return (
     <div style={styles.container}>
       {/* Header */}
@@ -219,7 +286,10 @@ export default function InsightsPage() {
         </div>
       </section>
 
-      {/* Section 2: New Markets */}
+      {/* Section 2: Top Agents */}
+      {renderTopAgents()}
+
+      {/* Section 3: New Markets */}
       <section style={styles.section}>
         <h2 style={styles.sectionTitle}>New Markets</h2>
         <div style={styles.marketsFeed}>
@@ -231,7 +301,7 @@ export default function InsightsPage() {
         </div>
       </section>
 
-      {/* Section 3: Recent Trades */}
+      {/* Section 4: Recent Trades */}
       <section style={styles.section}>
         <div style={styles.sectionHeader}>
           <h2 style={styles.sectionTitle}>Recent Trades</h2>
@@ -249,71 +319,7 @@ export default function InsightsPage() {
         </div>
       </section>
 
-      {/* Section 3: Top Traders */}
-      <section style={styles.section}>
-        <h2 style={styles.sectionTitle}>Top Agents</h2>
-        <div style={styles.tableWrapper}>
-          <table style={styles.table}>
-            <thead>
-              <tr>
-                <th style={styles.th}>#</th>
-                <th style={{ ...styles.th, textAlign: 'left' }}>WALLET</th>
-                <th style={styles.th}>BADGE</th>
-                <th style={styles.th}>REP</th>
-                <th style={styles.th}>TRADES</th>
-                <th style={styles.th}>VOLUME (USDC)</th>
-                <th style={styles.th}>P&L (USDC)</th>
-                <th style={styles.th}>MARKETS</th>
-              </tr>
-            </thead>
-            <tbody>
-              {leaderboard.length === 0 ? (
-                <tr>
-                  <td colSpan={8} style={styles.emptyState}>
-                    No traders yet
-                  </td>
-                </tr>
-              ) : (
-                leaderboard.map((entry: LeaderboardEntry, i: number) => {
-                  const workingPnl = entry.total_pnl + entry.unrealized_pnl;
-                  const tierColors: Record<string, string> = {
-                    diamond: '#b9f2ff',
-                    gold: '#ffd700',
-                    silver: '#c0c0c0',
-                    bronze: '#cd7f32',
-                    unranked: theme.colors.textDim,
-                  };
-                  const tierColor = tierColors[entry.tier] || theme.colors.textDim;
-                  return (
-                  <tr key={entry.id}>
-                    <td style={styles.td}>{i + 1}</td>
-                    <td style={{ ...styles.td, textAlign: 'left' }}>
-                      {entry.display_name || truncateAddress(entry.wallet_address)}
-                    </td>
-                    <td style={{ ...styles.td, color: tierColor, fontWeight: 600, textTransform: 'uppercase', fontSize: theme.fontSizes.xs }}>
-                      {entry.tier}
-                    </td>
-                    <td style={styles.td}>{entry.reputation}</td>
-                    <td style={styles.td}>{entry.total_trades}</td>
-                    <td style={styles.td}>{formatUSDC(entry.total_volume)}</td>
-                    <td
-                      style={{
-                        ...styles.td,
-                        color: workingPnl >= 0 ? theme.colors.primary : theme.colors.error,
-                      }}
-                    >
-                      {workingPnl >= 0 ? '+' : ''}
-                      {formatUSDC(workingPnl)}
-                    </td>
-                    <td style={styles.td}>{entry.markets_traded}</td>
-                  </tr>
-                  );
-                })
-              )}
-            </tbody>
-          </table>
-        </div>
-      </section>
+      {/* Top Agents rendered above via renderTopAgents() */}
       </>}
     </div>
   );
