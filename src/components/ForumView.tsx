@@ -336,7 +336,7 @@ function ForumFull({ wallet, isConnected }: { wallet?: string; isConnected?: boo
             onChange={e => setSortBy(e.target.value as 'volume' | 'created_at')}
             style={s.select}
           >
-            <option value="volume">VOLUME</option>
+            <option value="volume">TOP</option>
             <option value="created_at">NEWEST</option>
           </select>
           {isConnected && (
