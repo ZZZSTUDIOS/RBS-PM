@@ -55,24 +55,86 @@ interface ForumViewProps {
 function renderForumText(text: string): React.ReactNode {
   // Replace literal \n with actual newlines
   const normalized = text.replace(/\\n/g, '\n');
+  const lines = normalized.split('\n');
+  const elements: React.ReactNode[] = [];
+  let i = 0;
 
-  return normalized.split('\n').map((line, i) => {
-    // Headings
-    if (line.startsWith('## ')) {
-      return <div key={i} style={{ fontWeight: 'bold', fontSize: theme.fontSizes.body, marginTop: i > 0 ? '12px' : 0, marginBottom: '4px', color: theme.colors.text }}>{line.slice(3)}</div>;
+  while (i < lines.length) {
+    const line = lines[i];
+
+    // Headings: ###, ##, #
+    if (line.startsWith('### ')) {
+      elements.push(<div key={i} style={{ fontWeight: 'bold', fontSize: theme.fontSizes.small, marginTop: i > 0 ? '10px' : 0, marginBottom: '4px', color: theme.colors.text, textTransform: 'uppercase', letterSpacing: '0.5px' }}>{line.slice(4)}</div>);
+      i++; continue;
     }
+    if (line.startsWith('## ')) {
+      elements.push(<div key={i} style={{ fontWeight: 'bold', fontSize: theme.fontSizes.body, marginTop: i > 0 ? '12px' : 0, marginBottom: '4px', color: theme.colors.text }}>{line.slice(3)}</div>);
+      i++; continue;
+    }
+    if (line.startsWith('# ')) {
+      elements.push(<div key={i} style={{ fontWeight: 'bold', fontSize: '18px', marginTop: i > 0 ? '14px' : 0, marginBottom: '6px', color: theme.colors.text }}>{line.slice(2)}</div>);
+      i++; continue;
+    }
+
+    // Table: lines starting with | and containing |
+    if (line.trim().startsWith('|') && line.includes('|', 1)) {
+      const tableRows: string[] = [];
+      while (i < lines.length && lines[i].trim().startsWith('|')) {
+        tableRows.push(lines[i]);
+        i++;
+      }
+      // Filter out separator rows (|---|---|)
+      const dataRows = tableRows.filter(r => !r.match(/^\s*\|[\s\-:]+\|\s*$/));
+      if (dataRows.length > 0) {
+        const headerCells = dataRows[0].split('|').filter(c => c.trim()).map(c => c.trim());
+        const bodyRows = dataRows.slice(1);
+        elements.push(
+          <div key={`table-${i}`} style={{ overflowX: 'auto', margin: '8px 0' }}>
+            <table style={{ borderCollapse: 'collapse', width: '100%', fontSize: theme.fontSizes.small }}>
+              <thead>
+                <tr>
+                  {headerCells.map((cell, ci) => (
+                    <th key={ci} style={{ textAlign: 'left', padding: '6px 10px', borderBottom: `1px solid ${theme.colors.border}`, color: theme.colors.text, fontWeight: 'bold' }}>{formatInline(cell)}</th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {bodyRows.map((row, ri) => {
+                  const cells = row.split('|').filter(c => c.trim()).map(c => c.trim());
+                  return (
+                    <tr key={ri}>
+                      {cells.map((cell, ci) => (
+                        <td key={ci} style={{ padding: '5px 10px', borderBottom: `1px solid ${theme.colors.border}22`, color: theme.colors.textLight }}>{formatInline(cell)}</td>
+                      ))}
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        );
+      }
+      continue;
+    }
+
     // List items
     if (line.startsWith('- ')) {
-      const formatted = formatInline(line.slice(2));
-      return <div key={i} style={{ paddingLeft: '16px' }}>{'\u2022 '}{formatted}</div>;
+      elements.push(<div key={i} style={{ paddingLeft: '16px' }}>{'\u2022 '}{formatInline(line.slice(2))}</div>);
+      i++; continue;
     }
+
     // Empty lines
     if (line.trim() === '') {
-      return <div key={i} style={{ height: '8px' }} />;
+      elements.push(<div key={i} style={{ height: '8px' }} />);
+      i++; continue;
     }
-    // Regular text with inline bold
-    return <div key={i}>{formatInline(line)}</div>;
-  });
+
+    // Regular text
+    elements.push(<div key={i}>{formatInline(line)}</div>);
+    i++;
+  }
+
+  return elements;
 }
 
 function formatInline(text: string): React.ReactNode {
@@ -80,7 +142,7 @@ function formatInline(text: string): React.ReactNode {
   const parts = text.split(/(\*\*[^*]+\*\*)/g);
   return parts.map((part, i) => {
     if (part.startsWith('**') && part.endsWith('**')) {
-      return <strong key={i}>{part.slice(2, -2)}</strong>;
+      return <strong key={i} style={{ color: theme.colors.text }}>{part.slice(2, -2)}</strong>;
     }
     return part;
   });
