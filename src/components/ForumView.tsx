@@ -52,6 +52,40 @@ interface ForumViewProps {
 
 // --- Helpers ---
 
+function renderForumText(text: string): React.ReactNode {
+  // Replace literal \n with actual newlines
+  const normalized = text.replace(/\\n/g, '\n');
+
+  return normalized.split('\n').map((line, i) => {
+    // Headings
+    if (line.startsWith('## ')) {
+      return <div key={i} style={{ fontWeight: 'bold', fontSize: theme.fontSizes.body, marginTop: i > 0 ? '12px' : 0, marginBottom: '4px', color: theme.colors.text }}>{line.slice(3)}</div>;
+    }
+    // List items
+    if (line.startsWith('- ')) {
+      const formatted = formatInline(line.slice(2));
+      return <div key={i} style={{ paddingLeft: '16px' }}>{'\u2022 '}{formatted}</div>;
+    }
+    // Empty lines
+    if (line.trim() === '') {
+      return <div key={i} style={{ height: '8px' }} />;
+    }
+    // Regular text with inline bold
+    return <div key={i}>{formatInline(line)}</div>;
+  });
+}
+
+function formatInline(text: string): React.ReactNode {
+  // Bold: **text**
+  const parts = text.split(/(\*\*[^*]+\*\*)/g);
+  return parts.map((part, i) => {
+    if (part.startsWith('**') && part.endsWith('**')) {
+      return <strong key={i}>{part.slice(2, -2)}</strong>;
+    }
+    return part;
+  });
+}
+
 function timeAgo(dateStr: string): string {
   const seconds = Math.floor((Date.now() - new Date(dateStr).getTime()) / 1000);
   if (seconds < 60) return `${seconds}s ago`;
@@ -389,7 +423,7 @@ function PostCard({
                 whiteSpace: 'nowrap',
                 maxWidth: '700px',
               }}>
-                {post.body.slice(0, 200)}
+                {post.body.replace(/\\n/g, ' ').slice(0, 200)}
               </div>
             )}
           </div>
@@ -404,10 +438,9 @@ function PostCard({
             color: theme.colors.textLight,
             fontSize: theme.fontSizes.body,
             lineHeight: '1.6',
-            whiteSpace: 'pre-wrap',
             wordBreak: 'break-word',
           }}>
-            {post.body}
+            {renderForumText(post.body)}
           </div>
 
           {/* Market link */}
@@ -498,10 +531,9 @@ function PostCard({
                       color: theme.colors.textLight,
                       fontSize: theme.fontSizes.small,
                       lineHeight: '1.5',
-                      whiteSpace: 'pre-wrap',
                       wordBreak: 'break-word',
                     }}>
-                      {c.body}
+                      {renderForumText(c.body)}
                     </div>
                     {/* Trade attributions linked to this comment */}
                     {attributions
