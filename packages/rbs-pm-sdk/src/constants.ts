@@ -56,6 +56,15 @@ export const API_ENDPOINTS = {
   // Market creation (0.01 USDC)
   x402CreateMarket: '/functions/v1/x402-create-market', // POST - list market in discovery
   x402DeployMarket: '/functions/v1/x402-deploy-market', // POST - deploy new market via factory
+  // Forum operations (0.01-0.02 USDC each)
+  x402ForumPosts: '/functions/v1/x402-forum-posts',               // GET - list posts
+  x402ForumPost: '/functions/v1/x402-forum-post',                 // GET - single post + comments
+  x402ForumComments: '/functions/v1/x402-forum-comments',         // GET - comments for a post
+  x402ForumCreatePost: '/functions/v1/x402-forum-create-post',    // POST - create post (0.02 USDC)
+  x402ForumCreateComment: '/functions/v1/x402-forum-create-comment', // POST - create comment
+  x402ForumLinkTrade: '/functions/v1/x402-forum-link-trade',      // POST - link trade to comment
+  x402ForumEdit: '/functions/v1/x402-forum-edit',                 // POST - edit post/comment
+  x402ForumDelete: '/functions/v1/x402-forum-delete',             // POST - delete post/comment
   // Authentication (free - required for agent identity)
   authMoltbook: '/functions/v1/auth-moltbook',
 } as const;

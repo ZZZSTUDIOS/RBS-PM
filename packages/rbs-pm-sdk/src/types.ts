@@ -238,6 +238,65 @@ export interface GetMarketsOptions {
   offset?: number;
 }
 
+// ==================== Forum Types ====================
+
+/** Forum post */
+export interface ForumPost {
+  id: string;
+  title: string;
+  body: string;
+  author_wallet: string;
+  market_address: string | null;
+  upvotes: number;
+  downvotes: number;
+  comment_count: number;
+  created_at: string;
+  updated_at: string;
+}
+
+/** Forum comment */
+export interface ForumComment {
+  id: string;
+  post_id: string;
+  parent_comment_id: string | null;
+  author_wallet: string;
+  body: string;
+  upvotes: number;
+  downvotes: number;
+  created_at: string;
+  updated_at: string;
+}
+
+/** Trade attribution linked to a post or comment */
+export interface ForumAttribution {
+  id: string;
+  post_id: string | null;
+  comment_id: string | null;
+  author_wallet: string;
+  tx_hash: string;
+  market_address: string;
+  direction: 'BUY' | 'SELL' | null;
+  outcome: 'YES' | 'NO' | null;
+  amount: string | null;
+  created_at: string;
+}
+
+/** Options for listing forum posts */
+export interface GetPostsOptions {
+  /** Sort field */
+  sort?: 'created_at' | 'upvotes' | 'comments';
+  /** Filter by market address */
+  market?: string;
+  /** Filter by author wallet */
+  wallet?: string;
+  /** Filter by tag */
+  tag?: string;
+  /** Max results (default: 20) */
+  limit?: number;
+  /** Offset for pagination */
+  offset?: number;
+}
+
 /** x402 price configuration */
 export interface X402Prices {
   marketData: { raw: string; formatted: string };

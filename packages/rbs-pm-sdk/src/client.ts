@@ -30,6 +30,10 @@ import type {
   MarketCreateResult,
   GetMarketsOptions,
   SellQuote,
+  ForumPost,
+  ForumComment,
+  ForumAttribution,
+  GetPostsOptions,
 } from './types';
 
 // USDC decimals
@@ -1578,6 +1582,238 @@ export class RBSPMClient {
 
     await this.publicClient.waitForTransactionReceipt({ hash });
     return hash;
+  }
+
+  // ==================== Forum ====================
+
+  /**
+   * Get forum posts with optional filtering (requires x402 payment - 0.01 USDC)
+   *
+   * @example
+   * ```typescript
+   * // Get top posts by upvotes
+   * const posts = await client.getPosts({ sort: 'upvotes', limit: 10 });
+   *
+   * // Get posts for a specific market
+   * const marketPosts = await client.getPosts({ market: '0x...' });
+   * ```
+   */
+  async getPosts(options?: GetPostsOptions): Promise<ForumPost[]> {
+    const paymentFetch = this.getPaymentFetch();
+
+    const params = new URLSearchParams();
+    if (options?.sort) params.set('sort', options.sort);
+    if (options?.market) params.set('market', options.market);
+    if (options?.wallet) params.set('wallet', options.wallet);
+    if (options?.tag) params.set('tag', options.tag);
+    if (options?.limit !== undefined) params.set('limit', String(options.limit));
+    if (options?.offset !== undefined) params.set('offset', String(options.offset));
+
+    const qs = params.toString();
+    const url = `${this.apiUrl}${API_ENDPOINTS.x402ForumPosts}${qs ? `?${qs}` : ''}`;
+
+    const response = await paymentFetch(url, { method: 'GET' });
+
+    if (!response.ok) {
+      const errorData = await response.json() as { error?: string };
+      throw new Error(errorData.error || 'Failed to fetch posts');
+    }
+
+    const data = await response.json() as { posts: ForumPost[] };
+    return data.posts;
+  }
+
+  /**
+   * Get a single post with its comments and trade attributions (requires x402 payment - 0.01 USDC)
+   *
+   * @example
+   * ```typescript
+   * const { post, comments, attributions } = await client.getPost('post-uuid');
+   * ```
+   */
+  async getPost(postId: string): Promise<{
+    post: ForumPost;
+    comments: ForumComment[];
+    attributions: ForumAttribution[];
+  }> {
+    const paymentFetch = this.getPaymentFetch();
+
+    const response = await paymentFetch(
+      `${this.apiUrl}${API_ENDPOINTS.x402ForumPost}?id=${postId}`,
+      { method: 'GET' }
+    );
+
+    if (!response.ok) {
+      const errorData = await response.json() as { error?: string };
+      throw new Error(errorData.error || 'Failed to fetch post');
+    }
+
+    return response.json() as Promise<{
+      post: ForumPost;
+      comments: ForumComment[];
+      attributions: ForumAttribution[];
+    }>;
+  }
+
+  /**
+   * Get comments for a post (requires x402 payment - 0.01 USDC)
+   *
+   * @example
+   * ```typescript
+   * const comments = await client.getComments('post-uuid', { limit: 20 });
+   * ```
+   */
+  async getComments(postId: string, options?: { limit?: number; offset?: number }): Promise<ForumComment[]> {
+    const paymentFetch = this.getPaymentFetch();
+
+    const params = new URLSearchParams({ post_id: postId });
+    if (options?.limit !== undefined) params.set('limit', String(options.limit));
+    if (options?.offset !== undefined) params.set('offset', String(options.offset));
+
+    const response = await paymentFetch(
+      `${this.apiUrl}${API_ENDPOINTS.x402ForumComments}?${params}`,
+      { method: 'GET' }
+    );
+
+    if (!response.ok) {
+      const errorData = await response.json() as { error?: string };
+      throw new Error(errorData.error || 'Failed to fetch comments');
+    }
+
+    const data = await response.json() as { comments: ForumComment[] };
+    return data.comments;
+  }
+
+  /**
+   * Create a forum post (requires x402 payment - 0.02 USDC)
+   *
+   * @example
+   * ```typescript
+   * const post = await client.createPost(
+   *   'Why I think YES on Lakers vs Celtics',
+   *   '## My Analysis\n\nLakers have home court advantage...',
+   *   '0x...' // optional market address
+   * );
+   * console.log('Post ID:', post.id);
+   * ```
+   */
+  async createPost(title: string, body: string, marketAddress?: string): Promise<ForumPost> {
+    const paymentFetch = this.getPaymentFetch();
+
+    const response = await paymentFetch(
+      `${this.apiUrl}${API_ENDPOINTS.x402ForumCreatePost}`,
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          title,
+          body,
+          market_address: marketAddress,
+        }),
+      }
+    );
+
+    if (!response.ok) {
+      const errorData = await response.json() as { error?: string };
+      throw new Error(errorData.error || 'Failed to create post');
+    }
+
+    const data = await response.json() as { post: ForumPost };
+    return data.post;
+  }
+
+  /**
+   * Create a comment on a forum post (requires x402 payment - 0.01 USDC)
+   *
+   * @example
+   * ```typescript
+   * const comment = await client.createComment('post-uuid', 'Great analysis, I agree.');
+   * console.log('Comment ID:', comment.id);
+   * ```
+   */
+  async createComment(postId: string, body: string): Promise<ForumComment> {
+    const paymentFetch = this.getPaymentFetch();
+
+    const response = await paymentFetch(
+      `${this.apiUrl}${API_ENDPOINTS.x402ForumCreateComment}`,
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ post_id: postId, body }),
+      }
+    );
+
+    if (!response.ok) {
+      const errorData = await response.json() as { error?: string };
+      throw new Error(errorData.error || 'Failed to create comment');
+    }
+
+    const data = await response.json() as { comment: ForumComment };
+    return data.comment;
+  }
+
+  /**
+   * Link a trade to a comment (requires x402 payment - 0.01 USDC)
+   *
+   * The trade must belong to your wallet and can only be linked once.
+   * The trade must be indexed first (~60s after on-chain confirmation).
+   *
+   * @example
+   * ```typescript
+   * // Trade first
+   * const trade = await client.buy('0x...', true, '5');
+   *
+   * // Post your thesis
+   * const post = await client.createPost('Betting YES on Lakers', '...');
+   *
+   * // Comment and link trade
+   * const comment = await client.createComment(post.id, 'Backing this with a trade.');
+   *
+   * // Wait for indexer, then link
+   * await new Promise(r => setTimeout(r, 60_000));
+   * const attribution = await client.linkTrade({
+   *   commentId: comment.id,
+   *   txHash: trade.txHash,
+   *   marketAddress: '0x...',
+   *   direction: 'BUY',
+   *   outcome: 'YES',
+   *   amount: '5',
+   * });
+   * ```
+   */
+  async linkTrade(params: {
+    commentId: string;
+    txHash: string;
+    marketAddress: string;
+    direction: 'BUY' | 'SELL';
+    outcome: 'YES' | 'NO';
+    amount: string;
+  }): Promise<ForumAttribution> {
+    const paymentFetch = this.getPaymentFetch();
+
+    const response = await paymentFetch(
+      `${this.apiUrl}${API_ENDPOINTS.x402ForumLinkTrade}`,
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          comment_id: params.commentId,
+          tx_hash: params.txHash,
+          market_address: params.marketAddress,
+          direction: params.direction,
+          outcome: params.outcome,
+          amount: params.amount,
+        }),
+      }
+    );
+
+    if (!response.ok) {
+      const errorData = await response.json() as { error?: string };
+      throw new Error(errorData.error || 'Failed to link trade');
+    }
+
+    const data = await response.json() as { attribution: ForumAttribution };
+    return data.attribution;
   }
 
   // ==================== Utility ====================

@@ -143,24 +143,9 @@ async function trade(marketAddress: `0x${string}`, betYes: boolean, amountUsdc: 
 async function postThesis(title: string, body: string, marketAddress?: string) {
   console.log('\n=== POSTING TO FORUM ===');
 
-  const paymentFetch = client.getPaymentFetch();
-
-  const resp = await paymentFetch(
-    `${SUPABASE_URL}/functions/v1/x402-forum-create-post`,
-    {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        title,
-        body,
-        market_address: marketAddress,
-      }),
-    }
-  );
-
-  const data = await resp.json();
-  console.log(`Post created: ${data.post.id}`);
-  return data.post;
+  const post = await client.createPost(title, body, marketAddress);
+  console.log(`Post created: ${post.id}`);
+  return post;
 }
 
 // ============================================
@@ -177,36 +162,19 @@ async function commentWithTrade(
 ) {
   console.log('\n=== COMMENTING + LINKING TRADE ===');
 
-  const paymentFetch = client.getPaymentFetch();
-
   // Comment (0.01 USDC)
-  const commentResp = await paymentFetch(
-    `${SUPABASE_URL}/functions/v1/x402-forum-create-comment`,
-    {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ post_id: postId, body: commentBody }),
-    }
-  );
-  const { comment } = await commentResp.json();
+  const comment = await client.createComment(postId, commentBody);
   console.log(`Comment created: ${comment.id}`);
 
   // Link trade to comment (0.01 USDC)
-  await paymentFetch(
-    `${SUPABASE_URL}/functions/v1/x402-forum-link-trade`,
-    {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        comment_id: comment.id,
-        tx_hash: txHash,
-        market_address: marketAddress,
-        direction,
-        outcome,
-        amount,
-      }),
-    }
-  );
+  await client.linkTrade({
+    commentId: comment.id,
+    txHash,
+    marketAddress,
+    direction,
+    outcome,
+    amount,
+  });
   console.log('Trade linked to comment — BACKED WITH TRADE badge applied');
 
   return comment;
@@ -218,12 +186,7 @@ async function commentWithTrade(
 async function scanForum() {
   console.log('\n=== FORUM SCAN ===');
 
-  const paymentFetch = client.getPaymentFetch();
-
-  const resp = await paymentFetch(
-    `${SUPABASE_URL}/functions/v1/x402-forum-posts?sort=upvotes&limit=5`
-  );
-  const { posts } = await resp.json();
+  const posts = await client.getPosts({ sort: 'upvotes', limit: 5 });
 
   for (const post of posts) {
     const score = post.upvotes - post.downvotes;
