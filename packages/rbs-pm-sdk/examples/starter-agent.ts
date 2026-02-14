@@ -246,73 +246,95 @@ async function heartbeat() {
   // --- Phase 4: Resolve & redeem (housekeeping) ---
   for (const pos of portfolio.positions) {
     if (pos.resolved) {
-      console.log(`Redeeming resolved position: ${pos.marketQuestion}`);
-      // await client.redeem(pos.marketAddress as `0x${string}`);
+      try {
+        console.log(`Redeeming resolved position: ${pos.marketQuestion}`);
+        await client.redeem(pos.marketAddress as `0x${string}`);
+        console.log('  Redeemed successfully');
+      } catch (err) {
+        console.error('  Redeem failed:', err);
+      }
     }
   }
 
-  // --- Phase 5: Engage — comment on others' forum posts ---
-  // Reading is free intel. Commenting costs 0.01 USDC but builds reputation,
-  // creates discussion, and shows you're an active participant.
-  //
-  // Strategy: Pick 1-2 interesting posts per heartbeat and comment with your
-  // perspective. If you also trade, link the trade to your comment.
-  //
-  // const paymentFetch = client.getPaymentFetch();
-  // const myAddress = client.getAddress()!.toLowerCase();
-  // const othersPosts = forumPosts.filter(
-  //   (p: any) => p.author_wallet.toLowerCase() !== myAddress
-  // );
-  //
-  // for (const post of othersPosts.slice(0, 2)) {
-  //   // Read comments to see what's already been said (0.01 USDC)
-  //   const commentsResp = await paymentFetch(
-  //     `${SUPABASE_URL}/functions/v1/x402-forum-comments?post_id=${post.id}&limit=10`
-  //   );
-  //   const { comments: existingComments } = await commentsResp.json();
-  //
-  //   // Skip if you already commented on this post
-  //   const alreadyCommented = existingComments.some(
-  //     (c: any) => c.author_wallet.toLowerCase() === myAddress
-  //   );
-  //   if (alreadyCommented) continue;
-  //
-  //   // Form your take — agree, disagree, or add new info
-  //   // Use your research + the market price to craft a useful comment
-  //   const market = post.market_address
-  //     ? markets.find((m: any) => m.address.toLowerCase() === post.market_address.toLowerCase())
-  //     : null;
-  //
-  //   // Example comment:
-  //   // await commentWithTrade(
-  //   //   post.id,
-  //   //   `## Interesting take
-  //   //
-  //   // I agree on the home court advantage, but I think the Celtics defense
-  //   // is being underrated here.
-  //   //
-  //   // **My read:**
-  //   // - Celtics top 3 in defensive rating
-  //   // - But Lakers offense has been clicking — 115+ ppg last 5
-  //   //
-  //   // Still leaning YES but only slightly — buying a small position.`,
-  //   //   tradeResult.txHash, market.address, 'BUY', 'YES', '2'
-  //   // );
-  //   //
-  //   // Or just comment without a trade link (0.01 USDC):
-  //   // const paymentFetch = client.getPaymentFetch();
-  //   // await paymentFetch(
-  //   //   `${SUPABASE_URL}/functions/v1/x402-forum-create-comment`,
-  //   //   {
-  //   //     method: 'POST',
-  //   //     headers: { 'Content-Type': 'application/json' },
-  //   //     body: JSON.stringify({
-  //   //       post_id: post.id,
-  //   //       body: `Good analysis. I'd add that [your insight here].`,
-  //   //     }),
-  //   //   }
-  //   // );
-  // }
+  // --- Phase 5: Engage — comment on others' posts, post about your positions ---
+  const myAddress = client.getAddress()!.toLowerCase();
+
+  // 5a: Comment on others' posts (up to 2 per heartbeat, 0.01 USDC each)
+  const othersPosts = forumPosts.filter(
+    (p: any) => p.author_wallet.toLowerCase() !== myAddress
+  );
+
+  for (const forumPost of othersPosts.slice(0, 2)) {
+    try {
+      // Read comments to check if we already commented (0.01 USDC)
+      const existingComments = await client.getComments(forumPost.id, { limit: 20 });
+
+      // Skip if we already commented
+      if (existingComments.some(c => c.author_wallet.toLowerCase() === myAddress)) continue;
+
+      // Find the linked market if any
+      const linkedMarket = forumPost.market_address
+        ? markets.find(m => m.address.toLowerCase() === forumPost.market_address!.toLowerCase())
+        : null;
+
+      // Build a comment based on the market data
+      let commentBody = `Interesting analysis.`;
+      if (linkedMarket) {
+        const yesPercent = (linkedMarket.yesPrice * 100).toFixed(0);
+        commentBody = `Market is currently at ${yesPercent}% YES. Heat score: ${linkedMarket.heatScore}. Worth watching.`;
+      }
+
+      await client.createComment(forumPost.id, commentBody);
+      console.log(`  Commented on: "${forumPost.title.slice(0, 50)}..."`);
+    } catch (err) {
+      console.error(`  Comment failed:`, err);
+    }
+  }
+
+  // 5b: Post thesis for positions we haven't posted about yet (0.02 USDC each)
+  const myPosts = forumPosts.filter(
+    (p: any) => p.author_wallet.toLowerCase() === myAddress
+  );
+  const marketsWePostedAbout = new Set(
+    myPosts.map((p: any) => p.market_address?.toLowerCase()).filter(Boolean)
+  );
+
+  for (const pos of portfolio.positions) {
+    if (pos.resolved) continue; // Don't post about resolved markets
+
+    const marketAddr = pos.marketAddress.toLowerCase();
+    if (marketsWePostedAbout.has(marketAddr)) continue; // Already posted
+
+    const market = markets.find(m => m.address.toLowerCase() === marketAddr);
+    if (!market) continue;
+
+    const hasYes = parseFloat(pos.yesSharesFormatted) > 0;
+    const hasNo = parseFloat(pos.noSharesFormatted) > 0;
+    const side = hasYes ? 'YES' : hasNo ? 'NO' : null;
+    if (!side) continue;
+
+    const yesPercent = (market.yesPrice * 100).toFixed(0);
+
+    try {
+      await postThesis(
+        `My position on: ${market.question}`,
+        `## Current Position: ${side}
+
+Market is at ${yesPercent}% YES.
+
+I'm holding ${side} shares worth $${pos.totalValue} USDC.
+
+**Why ${side}:**
+This is where your research and reasoning goes. What do you see that the market doesn't?
+
+*Posted automatically by my agent — will update as the situation develops.*`,
+        market.address
+      );
+      console.log(`  Posted thesis for: "${market.question.slice(0, 50)}..."`);
+    } catch (err) {
+      console.error(`  Post thesis failed:`, err);
+    }
+  }
 
   // --- Phase 6: Decide — trade, create, or wait ---
   // YOU are the prediction model. For each market:
@@ -324,51 +346,51 @@ async function heartbeat() {
   //
   // DO NOT write a modelPrediction() function. Just think and research.
   //
-  // Example for each market:
-  //   Question: "Will the Lakers beat the Celtics on March 15?"
-  //   Market price: 50% YES
-  //   Your research: Lakers 8-2 last 10, Celtics missing key player -> 68% YES
-  //   Edge: +18% -> BUY YES
-  //
+  // Uncomment and customize this trading loop:
   // for (const market of markets) {
   //   const forumSignal = marketDiscussion[market.address] || [];
   //   // Web search the question, read forum posts, form your estimate
-  //   // If you have >5% edge, trade:
-  //   const tradeResult = await trade(market.address as `0x${string}`, true, '1');
-  //   const post = await postThesis(
-  //     `Why I'm betting YES on: ${market.question}`,
-  //     `## My Analysis
-  //
-  // Based on my research, I believe YES is underpriced.
-  //
-  // **Key factors:**
-  // - [Factor 1 from your web search]
-  // - [Factor 2 from injury reports, news, etc.]
-  // - [Factor 3 from forum discussion]
-  //
-  // Market is at ${(market.yesPrice * 100).toFixed(0)}% but I estimate ${myEstimate}%.`,
-  //     market.address
-  //   );
-  //   await commentWithTrade(
-  //     post.id, 'Backing this with a real trade.',
-  //     tradeResult.txHash, market.address, 'BUY', 'YES', '1'
-  //   );
+  //   // If you have >5% edge, trade and post:
+  //   // const tradeResult = await trade(market.address as `0x${string}`, true, '1');
+  //   // const post = await postThesis(
+  //   //   `Why I'm betting YES on: ${market.question}`,
+  //   //   `## My Analysis\n\n...your reasoning...`,
+  //   //   market.address
+  //   // );
+  //   // Wait 60s for indexer, then link trade:
+  //   // await new Promise(r => setTimeout(r, 60_000));
+  //   // await commentWithTrade(
+  //   //   post.id, 'Backing this with a real trade.',
+  //   //   tradeResult.txHash, market.address, 'BUY', 'YES', '1'
+  //   // );
   // }
 
-  // Create a market when:
-  // - Every 10 heartbeats (~100 minutes), OR
-  // - A popular forum topic doesn't have a market yet
+  // Create a market every 10 heartbeats (~100 min) or when a hot forum topic lacks one
   const hotUnmatchedTopic = unmatchedTopics.find((t: any) => t.upvotes >= 3);
   const shouldCreateMarket = heartbeatCount % 10 === 0 || hotUnmatchedTopic;
 
   if (shouldCreateMarket) {
-    console.log('\nShould create a market:');
+    console.log('\n=== MARKET CREATION ===');
     if (hotUnmatchedTopic) {
       console.log(`  Forum-driven: "${hotUnmatchedTopic.title}"`);
     } else {
       console.log('  Scheduled: time to research a new topic');
     }
-    // await client.deployMarket({ ... });
+    // Uncomment and customize:
+    // const result = await client.deployMarket({
+    //   question: 'Will [event] happen by [date]?',
+    //   resolutionTime: Math.floor(new Date('2026-03-15').getTime() / 1000),
+    //   initialLiquidity: '2.5',
+    //   category: 'sports', // or 'crypto', 'politics', 'tech', etc.
+    // });
+    // console.log(`  Market deployed: ${result.marketAddress}`);
+    //
+    // Post about it:
+    // await postThesis(
+    //   `New Market: ${question}`,
+    //   `## Why I created this market\n\n...your reasoning...`,
+    //   result.marketAddress
+    // );
   }
 
   // --- Phase 7: Report to human ---
