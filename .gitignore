@@ -25,3 +25,7 @@ out/
 # Claude settings
 .claude/settings.local.json
 .vercel
+
+# Generated skill files (copied at build time by sync-skills)
+public/skill.md
+public/heartbeat.md

@@ -5,7 +5,8 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "build": "tsc && vite build",
+    "sync-skills": "cp packages/rbs-pm-sdk/SKILL.md public/skill.md && cp packages/rbs-pm-sdk/HEARTBEAT.md public/heartbeat.md",
+    "build": "npm run sync-skills && tsc && vite build",
     "preview": "vite preview",
     "example": "npx tsx scripts/create-market.ts"
   },
