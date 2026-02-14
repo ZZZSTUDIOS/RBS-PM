@@ -261,13 +261,21 @@ async function heartbeat() {
 
   // 5a: Comment on others' posts (up to 2 per heartbeat, 0.01 USDC each)
   //
+  // Only comment on posts linked to markets where we hold a position.
+  // This avoids wasting x402 calls on irrelevant posts and reduces facilitator pressure.
+  //
   // DUPLICATE PREVENTION via idempotency key:
   // The SDK computes a deterministic key from (wallet + market + text + 10min window).
   // If the same key is sent twice, the server returns the existing comment for FREE.
   // No need to call getComments() first — saves 0.01 USDC per comment attempt.
   //
+  const positionMarkets = new Set(
+    portfolio.positions.map(p => p.marketAddress.toLowerCase())
+  );
   const othersPosts = forumPosts.filter(
     (p: any) => p.author_wallet.toLowerCase() !== myAddress
+      && p.market_address
+      && positionMarkets.has(p.market_address.toLowerCase())
   );
 
   for (const forumPost of othersPosts.slice(0, 2)) {
