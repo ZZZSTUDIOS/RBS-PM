@@ -196,48 +196,37 @@ function ForumFull({ wallet, isConnected }: { wallet?: string; isConnected?: boo
       .limit(50);
 
     if (!error && data) {
-      // Fetch all attributions to compute volume per post
-      const postIds = data.map(p => p.id);
+      // Compute trade volume per post with a single query
+      // Fetch all attributions (small table) and map to posts client-side
       const volumes: Record<string, number> = {};
-      for (const id of postIds) volumes[id] = 0;
+      for (const p of data) volumes[p.id] = 0;
 
-      // Get attributions directly linked to posts
-      const { data: postAttrs } = await supabase
-        .from('forum_attributions')
-        .select('post_id, amount')
-        .in('post_id', postIds);
+      const [attrsRes, commentsRes] = await Promise.all([
+        supabase.from('forum_attributions').select('post_id, comment_id, amount').limit(500),
+        supabase.from('forum_comments').select('id, post_id').limit(1000),
+      ]);
 
-      if (postAttrs) {
-        for (const attr of postAttrs) {
-          if (attr.post_id && attr.amount) {
-            volumes[attr.post_id] = (volumes[attr.post_id] || 0) + parseFloat(attr.amount);
-          }
-        }
+      // Build comment_id -> post_id lookup
+      const commentToPost: Record<string, string> = {};
+      if (commentsRes.data) {
+        for (const c of commentsRes.data) commentToPost[c.id] = c.post_id;
       }
 
-      // Get attributions linked to comments on these posts
-      const { data: commentAttrs } = await supabase
-        .from('forum_comments')
-        .select('id, post_id')
-        .in('post_id', postIds);
+      // Sum volumes per post
+      if (attrsRes.data) {
+        for (const attr of attrsRes.data) {
+          const amt = attr.amount ? parseFloat(attr.amount) : 0;
+          if (amt <= 0) continue;
 
-      if (commentAttrs && commentAttrs.length > 0) {
-        const commentIds = commentAttrs.map(c => c.id);
-        const commentToPost: Record<string, string> = {};
-        for (const c of commentAttrs) commentToPost[c.id] = c.post_id;
-
-        const { data: cAttrs } = await supabase
-          .from('forum_attributions')
-          .select('comment_id, amount')
-          .in('comment_id', commentIds);
-
-        if (cAttrs) {
-          for (const attr of cAttrs) {
-            if (attr.comment_id && attr.amount) {
-              const pid = commentToPost[attr.comment_id];
-              if (pid) {
-                volumes[pid] = (volumes[pid] || 0) + parseFloat(attr.amount);
-              }
+          // Direct post attribution
+          if (attr.post_id && volumes[attr.post_id] !== undefined) {
+            volumes[attr.post_id] += amt;
+          }
+          // Comment attribution — look up which post it belongs to
+          if (attr.comment_id) {
+            const pid = commentToPost[attr.comment_id];
+            if (pid && volumes[pid] !== undefined) {
+              volumes[pid] += amt;
             }
           }
         }
@@ -771,8 +760,8 @@ function ForumSummary() {
       setLoading(true);
       const sevenDaysAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString();
 
-      const [postsRes, hotRes, contributorsRes] = await Promise.all([
-        // Recent posts (last 7 days) — we'll sort by volume client-side
+      const [postsRes, hotRes, attrsRes, commentsRes] = await Promise.all([
+        // Recent posts (last 7 days)
         supabase
           .from('forum_posts')
           .select('*')
@@ -780,58 +769,61 @@ function ForumSummary() {
           .gte('created_at', sevenDaysAgo)
           .order('created_at', { ascending: false })
           .limit(50),
-        // Hot threads by comment_count (recent)
+        // Hot threads by comment_count
         supabase
           .from('forum_posts')
           .select('*')
           .eq('is_deleted', false)
           .order('comment_count', { ascending: false })
           .limit(5),
-        // Top contributors (by post count)
-        supabase
-          .from('forum_posts')
-          .select('author_wallet')
-          .eq('is_deleted', false),
+        // All attributions
+        supabase.from('forum_attributions').select('post_id, comment_id, amount').limit(500),
+        // All comments (for comment->post mapping)
+        supabase.from('forum_comments').select('id, post_id').limit(1000),
       ]);
 
       if (hotRes.data) setHotThreads(hotRes.data);
 
-      // Compute volumes for top posts
+      // Build comment->post lookup and compute volumes
+      const commentToPost: Record<string, string> = {};
+      if (commentsRes.data) {
+        for (const c of commentsRes.data) commentToPost[c.id] = c.post_id;
+      }
+
       if (postsRes.data && postsRes.data.length > 0) {
-        const postIds = postsRes.data.map(p => p.id);
         const volumes: Record<string, number> = {};
-        for (const id of postIds) volumes[id] = 0;
+        for (const p of postsRes.data) volumes[p.id] = 0;
 
-        const { data: postAttrs } = await supabase
-          .from('forum_attributions')
-          .select('post_id, amount')
-          .in('post_id', postIds);
-
-        if (postAttrs) {
-          for (const attr of postAttrs) {
-            if (attr.post_id && attr.amount) {
-              volumes[attr.post_id] = (volumes[attr.post_id] || 0) + parseFloat(attr.amount);
+        if (attrsRes.data) {
+          for (const attr of attrsRes.data) {
+            const amt = attr.amount ? parseFloat(attr.amount) : 0;
+            if (amt <= 0) continue;
+            if (attr.post_id && volumes[attr.post_id] !== undefined) {
+              volumes[attr.post_id] += amt;
+            }
+            if (attr.comment_id) {
+              const pid = commentToPost[attr.comment_id];
+              if (pid && volumes[pid] !== undefined) {
+                volumes[pid] += amt;
+              }
             }
           }
         }
 
-        // Sort by volume, take top 5
         const sorted = [...postsRes.data].sort((a, b) => (volumes[b.id] || 0) - (volumes[a.id] || 0)).slice(0, 5);
         setTopPosts(sorted);
         setTopPostVolumes(volumes);
-      }
 
-      // Aggregate contributors
-      if (contributorsRes.data) {
+        // Aggregate contributors from same data
         const counts: Record<string, number> = {};
-        for (const row of contributorsRes.data) {
+        for (const row of postsRes.data) {
           counts[row.author_wallet] = (counts[row.author_wallet] || 0) + 1;
         }
-        const sorted = Object.entries(counts)
-          .map(([wallet, count]) => ({ wallet, count }))
+        const topC = Object.entries(counts)
+          .map(([w, count]) => ({ wallet: w, count }))
           .sort((a, b) => b.count - a.count)
           .slice(0, 10);
-        setTopContributors(sorted);
+        setTopContributors(topC);
       }
 
       setLoading(false);
