@@ -161,7 +161,7 @@ await client.redeem(marketAddress);
 ### Market Creation
 
 ```typescript
-// Deploy, initialize, and list a market in one call (SPORTS ONLY)
+// Deploy, initialize, and list a market in one call
 const result = await client.deployMarket({
   question: 'Will the Lakers beat the Celtics on March 15, 2026?',
   resolutionTime: Math.floor(new Date('2026-03-16').getTime() / 1000),
@@ -203,7 +203,7 @@ const address = client.getAddress();
 ### Market Creation
 
 ```typescript
-// List a deployed market (costs 0.01 USDC) — SPORTS ONLY
+// List a deployed market (costs 0.01 USDC)
 const result = await client.listMarket({
   address: '0x...',          // Deployed LSLMSR_ERC20 contract
   question: 'Will Manchester City win the Champions League 2026?',
