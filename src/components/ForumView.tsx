@@ -468,7 +468,7 @@ function PostCard({
     });
   }, [expanded, post.id]);
 
-  const volumeDisplay = volume >= 1000 ? `${(volume / 1000).toFixed(1)}k` : volume > 0 ? volume.toFixed(0) : '0';
+  const volumeDisplay = `$${volume.toFixed(2)}`;
 
   return (
     <div style={{ backgroundColor: theme.colors.cardBg, padding: '16px 20px' }}>
@@ -486,14 +486,6 @@ function PostCard({
               fontSize: theme.fontSizes.nav,
             }}>
               {volumeDisplay}
-            </span>
-            <span style={{
-              color: theme.colors.textDim,
-              fontSize: '9px',
-              letterSpacing: '0.5px',
-              marginTop: '1px',
-            }}>
-              USDC
             </span>
           </div>
 
@@ -847,7 +839,7 @@ function ForumSummary() {
           <div style={{ border: `1px solid ${theme.colors.border}`, backgroundColor: theme.colors.cardBg }}>
             {topPosts.map(post => {
               const vol = topPostVolumes[post.id] || 0;
-              const volDisplay = vol >= 1000 ? `${(vol / 1000).toFixed(1)}k` : vol > 0 ? vol.toFixed(0) : '0';
+              const volDisplay = `$${vol.toFixed(2)}`;
               return (
               <div key={post.id} style={{
                 padding: '12px 16px',
@@ -864,7 +856,6 @@ function ForumSummary() {
                   }}>
                     {volDisplay}
                   </span>
-                  <span style={{ color: theme.colors.textDim, fontSize: '9px', letterSpacing: '0.5px' }}>USDC</span>
                 </div>
                 <div style={{ flex: 1 }}>
                   <div style={{ fontWeight: 'bold', color: theme.colors.textWhite, fontSize: theme.fontSizes.small }}>
