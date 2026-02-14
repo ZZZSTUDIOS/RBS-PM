@@ -169,9 +169,10 @@ function truncAddr(addr: string): string {
 
 function ForumFull({ wallet, isConnected }: { wallet?: string; isConnected?: boolean }) {
   const [posts, setPosts] = useState<ForumPost[]>([]);
+  const [postVolumes, setPostVolumes] = useState<Record<string, number>>({});
   const [loading, setLoading] = useState(true);
   const [expandedId, setExpandedId] = useState<string | null>(null);
-  const [sortBy, setSortBy] = useState<'created_at' | 'upvotes'>('created_at');
+  const [sortBy, setSortBy] = useState<'volume' | 'created_at'>('volume');
 
   // Composer state
   const [showComposer, setShowComposer] = useState(false);
@@ -184,14 +185,72 @@ function ForumFull({ wallet, isConnected }: { wallet?: string; isConnected?: boo
 
   const fetchPosts = useCallback(async () => {
     setLoading(true);
+
+    // Fetch posts (always by created_at, we sort client-side for volume)
+    const dbSort = sortBy === 'created_at' ? 'created_at' : 'created_at';
     const { data, error } = await supabase
       .from('forum_posts')
       .select('*')
       .eq('is_deleted', false)
-      .order(sortBy, { ascending: false })
+      .order(dbSort, { ascending: false })
       .limit(50);
 
-    if (!error && data) setPosts(data);
+    if (!error && data) {
+      // Fetch all attributions to compute volume per post
+      const postIds = data.map(p => p.id);
+      const volumes: Record<string, number> = {};
+      for (const id of postIds) volumes[id] = 0;
+
+      // Get attributions directly linked to posts
+      const { data: postAttrs } = await supabase
+        .from('forum_attributions')
+        .select('post_id, amount')
+        .in('post_id', postIds);
+
+      if (postAttrs) {
+        for (const attr of postAttrs) {
+          if (attr.post_id && attr.amount) {
+            volumes[attr.post_id] = (volumes[attr.post_id] || 0) + parseFloat(attr.amount);
+          }
+        }
+      }
+
+      // Get attributions linked to comments on these posts
+      const { data: commentAttrs } = await supabase
+        .from('forum_comments')
+        .select('id, post_id')
+        .in('post_id', postIds);
+
+      if (commentAttrs && commentAttrs.length > 0) {
+        const commentIds = commentAttrs.map(c => c.id);
+        const commentToPost: Record<string, string> = {};
+        for (const c of commentAttrs) commentToPost[c.id] = c.post_id;
+
+        const { data: cAttrs } = await supabase
+          .from('forum_attributions')
+          .select('comment_id, amount')
+          .in('comment_id', commentIds);
+
+        if (cAttrs) {
+          for (const attr of cAttrs) {
+            if (attr.comment_id && attr.amount) {
+              const pid = commentToPost[attr.comment_id];
+              if (pid) {
+                volumes[pid] = (volumes[pid] || 0) + parseFloat(attr.amount);
+              }
+            }
+          }
+        }
+      }
+
+      setPostVolumes(volumes);
+
+      // Sort posts
+      if (sortBy === 'volume') {
+        data.sort((a, b) => (volumes[b.id] || 0) - (volumes[a.id] || 0));
+      }
+      setPosts(data);
+    }
     setLoading(false);
   }, [sortBy]);
 
@@ -285,11 +344,11 @@ function ForumFull({ wallet, isConnected }: { wallet?: string; isConnected?: boo
         <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
           <select
             value={sortBy}
-            onChange={e => setSortBy(e.target.value as 'created_at' | 'upvotes')}
+            onChange={e => setSortBy(e.target.value as 'volume' | 'created_at')}
             style={s.select}
           >
+            <option value="volume">VOLUME</option>
             <option value="created_at">NEWEST</option>
-            <option value="upvotes">TOP</option>
           </select>
           {isConnected && (
             <button
@@ -364,6 +423,7 @@ function ForumFull({ wallet, isConnected }: { wallet?: string; isConnected?: boo
               onToggle={() => setExpandedId(expandedId === post.id ? null : post.id)}
               wallet={wallet}
               isConnected={isConnected}
+              volume={postVolumes[post.id] || 0}
             />
           ))}
         </div>
@@ -380,12 +440,14 @@ function PostCard({
   onToggle,
   wallet,
   isConnected,
+  volume,
 }: {
   post: ForumPost;
   expanded: boolean;
   onToggle: () => void;
   wallet?: string;
   isConnected?: boolean;
+  volume: number;
 }) {
   const [comments, setComments] = useState<ForumComment[]>([]);
   const [attributions, setAttributions] = useState<ForumAttribution[]>([]);
@@ -417,7 +479,7 @@ function PostCard({
     });
   }, [expanded, post.id]);
 
-  const score = post.upvotes - post.downvotes;
+  const volumeDisplay = volume >= 1000 ? `${(volume / 1000).toFixed(1)}k` : volume > 0 ? volume.toFixed(0) : '0';
 
   return (
     <div style={{ backgroundColor: theme.colors.cardBg, padding: '16px 20px' }}>
@@ -427,14 +489,22 @@ function PostCard({
         style={{ cursor: 'pointer' }}
       >
         <div style={{ display: 'flex', alignItems: 'flex-start', gap: '12px' }}>
-          {/* Score */}
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', minWidth: '36px', paddingTop: '2px' }}>
+          {/* Volume */}
+          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', minWidth: '36px', paddingTop: '2px' }}>
             <span style={{
-              color: score > 0 ? theme.colors.primary : score < 0 ? theme.colors.error : theme.colors.textDim,
+              color: volume > 0 ? theme.colors.primary : theme.colors.textDim,
               fontWeight: 'bold',
               fontSize: theme.fontSizes.nav,
             }}>
-              {score > 0 ? `+${score}` : score}
+              {volumeDisplay}
+            </span>
+            <span style={{
+              color: theme.colors.textDim,
+              fontSize: '9px',
+              letterSpacing: '0.5px',
+              marginTop: '1px',
+            }}>
+              USDC
             </span>
           </div>
 
@@ -691,6 +761,7 @@ function PostCard({
 
 function ForumSummary() {
   const [topPosts, setTopPosts] = useState<ForumPost[]>([]);
+  const [topPostVolumes, setTopPostVolumes] = useState<Record<string, number>>({});
   const [hotThreads, setHotThreads] = useState<ForumPost[]>([]);
   const [topContributors, setTopContributors] = useState<{ wallet: string; count: number }[]>([]);
   const [loading, setLoading] = useState(true);
@@ -700,15 +771,15 @@ function ForumSummary() {
       setLoading(true);
       const sevenDaysAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString();
 
-      const [topRes, hotRes, contributorsRes] = await Promise.all([
-        // Top posts by upvotes (last 7 days)
+      const [postsRes, hotRes, contributorsRes] = await Promise.all([
+        // Recent posts (last 7 days) — we'll sort by volume client-side
         supabase
           .from('forum_posts')
           .select('*')
           .eq('is_deleted', false)
           .gte('created_at', sevenDaysAgo)
-          .order('upvotes', { ascending: false })
-          .limit(5),
+          .order('created_at', { ascending: false })
+          .limit(50),
         // Hot threads by comment_count (recent)
         supabase
           .from('forum_posts')
@@ -723,8 +794,32 @@ function ForumSummary() {
           .eq('is_deleted', false),
       ]);
 
-      if (topRes.data) setTopPosts(topRes.data);
       if (hotRes.data) setHotThreads(hotRes.data);
+
+      // Compute volumes for top posts
+      if (postsRes.data && postsRes.data.length > 0) {
+        const postIds = postsRes.data.map(p => p.id);
+        const volumes: Record<string, number> = {};
+        for (const id of postIds) volumes[id] = 0;
+
+        const { data: postAttrs } = await supabase
+          .from('forum_attributions')
+          .select('post_id, amount')
+          .in('post_id', postIds);
+
+        if (postAttrs) {
+          for (const attr of postAttrs) {
+            if (attr.post_id && attr.amount) {
+              volumes[attr.post_id] = (volumes[attr.post_id] || 0) + parseFloat(attr.amount);
+            }
+          }
+        }
+
+        // Sort by volume, take top 5
+        const sorted = [...postsRes.data].sort((a, b) => (volumes[b.id] || 0) - (volumes[a.id] || 0)).slice(0, 5);
+        setTopPosts(sorted);
+        setTopPostVolumes(volumes);
+      }
 
       // Aggregate contributors
       if (contributorsRes.data) {
@@ -758,7 +853,10 @@ function ForumSummary() {
           <div style={s.empty}>No posts yet</div>
         ) : (
           <div style={{ border: `1px solid ${theme.colors.border}`, backgroundColor: theme.colors.cardBg }}>
-            {topPosts.map(post => (
+            {topPosts.map(post => {
+              const vol = topPostVolumes[post.id] || 0;
+              const volDisplay = vol >= 1000 ? `${(vol / 1000).toFixed(1)}k` : vol > 0 ? vol.toFixed(0) : '0';
+              return (
               <div key={post.id} style={{
                 padding: '12px 16px',
                 borderBottom: `1px solid ${theme.colors.borderLight}`,
@@ -766,15 +864,16 @@ function ForumSummary() {
                 alignItems: 'center',
                 gap: '12px',
               }}>
-                <span style={{
-                  color: post.upvotes > 0 ? theme.colors.primary : theme.colors.textDim,
-                  fontWeight: 'bold',
-                  fontSize: theme.fontSizes.nav,
-                  minWidth: '30px',
-                  textAlign: 'center',
-                }}>
-                  {post.upvotes - post.downvotes}
-                </span>
+                <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', minWidth: '30px' }}>
+                  <span style={{
+                    color: vol > 0 ? theme.colors.primary : theme.colors.textDim,
+                    fontWeight: 'bold',
+                    fontSize: theme.fontSizes.nav,
+                  }}>
+                    {volDisplay}
+                  </span>
+                  <span style={{ color: theme.colors.textDim, fontSize: '9px', letterSpacing: '0.5px' }}>USDC</span>
+                </div>
                 <div style={{ flex: 1 }}>
                   <div style={{ fontWeight: 'bold', color: theme.colors.textWhite, fontSize: theme.fontSizes.small }}>
                     {post.title}
@@ -802,7 +901,8 @@ function ForumSummary() {
                   </span>
                 )}
               </div>
-            ))}
+              );
+            })}
           </div>
         )}
       </section>
