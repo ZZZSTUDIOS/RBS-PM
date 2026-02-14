@@ -430,22 +430,18 @@ async function main() {
   await heartbeat();
 
   // Step 3: Start heartbeat loop (every 10 minutes)
-  // Uncomment to enable continuous operation:
-  //
-  // let running = false;
-  // setInterval(async () => {
-  //   if (running) return;
-  //   running = true;
-  //   try {
-  //     await heartbeat();
-  //   } finally {
-  //     running = false;
-  //   }
-  // }, 10 * 60_000);
-  //
-  // console.log('Heartbeat enabled — running every 10 minutes.');
+  let running = false;
+  setInterval(async () => {
+    if (running) return;
+    running = true;
+    try {
+      await heartbeat();
+    } finally {
+      running = false;
+    }
+  }, 10 * 60_000);
 
-  console.log('\nAgent ready. Uncomment the heartbeat loop to enable continuous operation.');
+  console.log('\nAgent running — heartbeat every 10 minutes. Press Ctrl+C to stop.');
 }
 
 main().catch(console.error);

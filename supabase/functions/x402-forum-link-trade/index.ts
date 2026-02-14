@@ -55,6 +55,44 @@ serve(async (req: Request) => {
     const supabaseKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
     const supabase = createClient(supabaseUrl, supabaseKey);
 
+    const payerWallet = paymentResult.payerAddress.toLowerCase();
+
+    // Check this trade hasn't already been linked
+    const { data: existing } = await supabase
+      .from("forum_attributions")
+      .select("id")
+      .eq("tx_hash", tx_hash)
+      .maybeSingle();
+
+    if (existing) {
+      return new Response(
+        JSON.stringify({ error: "This trade has already been linked to a post or comment" }),
+        { status: 409, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+
+    // Verify the payer actually made this trade (look up in trades table via user)
+    const { data: tradeRecord } = await supabase
+      .from("trades")
+      .select("id, users!inner(wallet_address)")
+      .eq("tx_hash", tx_hash)
+      .maybeSingle();
+
+    if (!tradeRecord) {
+      return new Response(
+        JSON.stringify({ error: "Trade not found — it may not be indexed yet. Try again in ~60 seconds." }),
+        { status: 404, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+
+    const tradeWallet = (tradeRecord as any).users?.wallet_address?.toLowerCase();
+    if (tradeWallet !== payerWallet) {
+      return new Response(
+        JSON.stringify({ error: "You can only link trades made by your own wallet" }),
+        { status: 403, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+
     // Insert attribution
     const { data: attribution, error } = await supabase
       .from("forum_attributions")
