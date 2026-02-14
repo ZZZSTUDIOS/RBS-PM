@@ -83,6 +83,24 @@ serve(async (req: Request) => {
       );
     }
 
+    // Reject duplicate comments (same wallet, same post, same body)
+    const { data: duplicate } = await supabase
+      .from("forum_comments")
+      .select("id")
+      .eq("post_id", post_id)
+      .eq("author_wallet", paymentResult.payerAddress.toLowerCase())
+      .eq("body", commentBody.trim())
+      .eq("is_deleted", false)
+      .limit(1)
+      .maybeSingle();
+
+    if (duplicate) {
+      return new Response(
+        JSON.stringify({ error: "You already posted this exact comment on this post" }),
+        { status: 409, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+
     // Insert comment
     const { data: comment, error } = await supabase
       .from("forum_comments")
