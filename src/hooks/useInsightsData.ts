@@ -33,7 +33,10 @@ export interface LeaderboardEntry {
   total_trades: number;
   total_volume: number;
   total_pnl: number;
+  unrealized_pnl: number;
   markets_traded: number;
+  reputation: number;
+  tier: string;
 }
 
 export interface IndexerHealth {
@@ -198,24 +201,68 @@ export function useInsightsData(): InsightsData {
 
   const fetchLeaderboard = useCallback(async () => {
     try {
-      const { data, error: lErr } = await supabase
-        .from('leaderboard')
-        .select('*')
-        .order('total_volume', { ascending: false })
-        .limit(10);
-      if (lErr) throw lErr;
+      const [leaderRes, repRes, posRes, marketRes] = await Promise.all([
+        supabase.from('leaderboard').select('*').order('total_volume', { ascending: false }).limit(10),
+        supabase.from('agent_reputation_summary').select('agent_wallet, total_reputation, tier'),
+        supabase.from('positions').select('user_id, market_id, yes_shares, no_shares, yes_cost_basis, no_cost_basis'),
+        supabase.from('markets').select('id, yes_price, no_price'),
+      ]);
+
+      if (leaderRes.error) throw leaderRes.error;
+
+      // Build reputation lookup by wallet
+      const repByWallet: Record<string, { reputation: number; tier: string }> = {};
+      if (repRes.data) {
+        for (const r of repRes.data) {
+          repByWallet[r.agent_wallet.toLowerCase()] = {
+            reputation: Number(r.total_reputation || 0),
+            tier: r.tier || 'unranked',
+          };
+        }
+      }
+
+      // Build market price lookup
+      const marketPrices: Record<string, { yes: number; no: number }> = {};
+      if (marketRes.data) {
+        for (const m of marketRes.data) {
+          marketPrices[m.id] = { yes: Number(m.yes_price || 0.5), no: Number(m.no_price || 0.5) };
+        }
+      }
+
+      // Compute unrealized PnL per user
+      const unrealizedByUser: Record<string, number> = {};
+      if (posRes.data) {
+        for (const p of posRes.data) {
+          const prices = marketPrices[p.market_id];
+          if (!prices) continue;
+          const yesShares = Number(p.yes_shares || 0);
+          const noShares = Number(p.no_shares || 0);
+          const yesCost = Number(p.yes_cost_basis || 0);
+          const noCost = Number(p.no_cost_basis || 0);
+          const currentValue = (yesShares * prices.yes) + (noShares * prices.no);
+          const totalCost = yesCost + noCost;
+          unrealizedByUser[p.user_id] = (unrealizedByUser[p.user_id] || 0) + (currentValue - totalCost);
+        }
+      }
 
       setLeaderboard(
-        (data || []).map((entry: any) => ({
-          id: entry.id,
-          wallet_address: entry.wallet_address,
-          display_name: entry.display_name || null,
-          avatar_url: entry.avatar_url || null,
-          total_trades: Number(entry.total_trades || 0),
-          total_volume: Number(entry.total_volume || 0),
-          total_pnl: Number(entry.total_pnl || 0),
-          markets_traded: Number(entry.markets_traded || 0),
-        }))
+        (leaderRes.data || []).map((entry: any) => {
+          const wallet = (entry.wallet_address || '').toLowerCase();
+          const rep = repByWallet[wallet] || { reputation: 0, tier: 'unranked' };
+          return {
+            id: entry.id,
+            wallet_address: entry.wallet_address,
+            display_name: entry.display_name || null,
+            avatar_url: entry.avatar_url || null,
+            total_trades: Number(entry.total_trades || 0),
+            total_volume: Number(entry.total_volume || 0),
+            total_pnl: Number(entry.total_pnl || 0),
+            unrealized_pnl: unrealizedByUser[entry.id] || 0,
+            markets_traded: Number(entry.markets_traded || 0),
+            reputation: rep.reputation,
+            tier: rep.tier,
+          };
+        })
       );
     } catch (err) {
       console.error('Failed to fetch leaderboard:', err);

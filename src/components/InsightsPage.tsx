@@ -258,6 +258,8 @@ export default function InsightsPage() {
               <tr>
                 <th style={styles.th}>#</th>
                 <th style={{ ...styles.th, textAlign: 'left' }}>WALLET</th>
+                <th style={styles.th}>BADGE</th>
+                <th style={styles.th}>REP</th>
                 <th style={styles.th}>TRADES</th>
                 <th style={styles.th}>VOLUME (USDC)</th>
                 <th style={styles.th}>P&L (USDC)</th>
@@ -267,31 +269,46 @@ export default function InsightsPage() {
             <tbody>
               {leaderboard.length === 0 ? (
                 <tr>
-                  <td colSpan={6} style={styles.emptyState}>
+                  <td colSpan={8} style={styles.emptyState}>
                     No traders yet
                   </td>
                 </tr>
               ) : (
-                leaderboard.map((entry: LeaderboardEntry, i: number) => (
+                leaderboard.map((entry: LeaderboardEntry, i: number) => {
+                  const workingPnl = entry.total_pnl + entry.unrealized_pnl;
+                  const tierColors: Record<string, string> = {
+                    diamond: '#b9f2ff',
+                    gold: '#ffd700',
+                    silver: '#c0c0c0',
+                    bronze: '#cd7f32',
+                    unranked: theme.colors.textDim,
+                  };
+                  const tierColor = tierColors[entry.tier] || theme.colors.textDim;
+                  return (
                   <tr key={entry.id}>
                     <td style={styles.td}>{i + 1}</td>
                     <td style={{ ...styles.td, textAlign: 'left' }}>
                       {entry.display_name || truncateAddress(entry.wallet_address)}
                     </td>
+                    <td style={{ ...styles.td, color: tierColor, fontWeight: 600, textTransform: 'uppercase', fontSize: theme.fontSizes.xs }}>
+                      {entry.tier}
+                    </td>
+                    <td style={styles.td}>{entry.reputation}</td>
                     <td style={styles.td}>{entry.total_trades}</td>
                     <td style={styles.td}>{formatUSDC(entry.total_volume)}</td>
                     <td
                       style={{
                         ...styles.td,
-                        color: entry.total_pnl >= 0 ? theme.colors.primary : theme.colors.error,
+                        color: workingPnl >= 0 ? theme.colors.primary : theme.colors.error,
                       }}
                     >
-                      {entry.total_pnl >= 0 ? '+' : ''}
-                      {formatUSDC(entry.total_pnl)}
+                      {workingPnl >= 0 ? '+' : ''}
+                      {formatUSDC(workingPnl)}
                     </td>
                     <td style={styles.td}>{entry.markets_traded}</td>
                   </tr>
-                ))
+                  );
+                })
               )}
             </tbody>
           </table>
