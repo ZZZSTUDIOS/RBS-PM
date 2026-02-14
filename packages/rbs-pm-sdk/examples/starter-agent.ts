@@ -256,12 +256,37 @@ async function heartbeat() {
     }
   }
 
-  // --- Phase 5: Engage — comment on others' posts, post about your positions ---
+  // --- Phase 5: Decide — trade FIRST, then engage on forum ---
+  // Trade before commenting so you can link trades to comments immediately.
+  // YOU are the prediction model. For each market:
+  //   1. Read the question
+  //   2. Web search for relevant info (game previews, injury reports, expert picks)
+  //   3. Form your probability estimate (e.g. "I think 70% YES")
+  //   4. Compare to market price — if edge > 5%, trade
+  //
+  // DO NOT write a modelPrediction() function. Just think and research.
+
+  // Track markets traded this heartbeat for forum engagement
+  const tradedThisHeartbeat: Map<string, { txHash: string; isYes: boolean; amount: string }> = new Map();
+
+  // Uncomment and customize this trading loop:
+  // for (const market of markets) {
+  //   const forumSignal = marketDiscussion[market.address] || [];
+  //   // Web search the question, read forum posts, form your estimate
+  //   // If you have >5% edge, trade:
+  //   // const tradeResult = await trade(market.address as `0x${string}`, true, '1');
+  //   // tradedThisHeartbeat.set(market.address.toLowerCase(), {
+  //   //   txHash: tradeResult.txHash, isYes: true, amount: '1',
+  //   // });
+  // }
+
+  // --- Phase 6: Engage — comment on others' posts, link trades, post theses ---
   const myAddress = client.getAddress()!.toLowerCase();
 
-  // 5a: Comment on others' posts (up to 2 per heartbeat, 0.01 USDC each)
+  // 6a: Comment on others' posts (up to 2 per heartbeat, 0.01 USDC each)
   //
-  // Only comment on posts linked to markets where we hold a position.
+  // Only comment on posts linked to markets where we hold a position
+  // OR markets we just traded this heartbeat.
   // This avoids wasting x402 calls on irrelevant posts and reduces facilitator pressure.
   //
   // DUPLICATE PREVENTION via idempotency key:
@@ -272,6 +297,10 @@ async function heartbeat() {
   const positionMarkets = new Set(
     portfolio.positions.map(p => p.marketAddress.toLowerCase())
   );
+  // Include markets we just traded (portfolio won't have them yet)
+  for (const addr of tradedThisHeartbeat.keys()) {
+    positionMarkets.add(addr);
+  }
   const othersPosts = forumPosts.filter(
     (p: any) => p.author_wallet.toLowerCase() !== myAddress
       && p.market_address
@@ -289,11 +318,19 @@ async function heartbeat() {
         ? portfolio.positions.find(p => p.marketAddress.toLowerCase() === linkedMarket.address.toLowerCase())
         : null;
 
+      const justTraded = forumPost.market_address
+        ? tradedThisHeartbeat.get(forumPost.market_address.toLowerCase())
+        : null;
+
       let commentBody: string;
       if (linkedMarket && myPosition) {
         const yesPercent = (linkedMarket.yesPrice * 100).toFixed(0);
         const side = parseFloat(myPosition.yesSharesFormatted) > 0 ? 'YES' : 'NO';
         commentBody = `Market at ${yesPercent}% YES as of heartbeat #${heartbeatCount}. I'm holding ${side} shares worth $${myPosition.totalValue}. Heat: ${linkedMarket.heatScore}.`;
+      } else if (linkedMarket && justTraded) {
+        const yesPercent = (linkedMarket.yesPrice * 100).toFixed(0);
+        const side = justTraded.isYes ? 'YES' : 'NO';
+        commentBody = `Just traded ${side} for $${justTraded.amount} at ${yesPercent}% YES. Heat: ${linkedMarket.heatScore}.`;
       } else if (linkedMarket) {
         const yesPercent = (linkedMarket.yesPrice * 100).toFixed(0);
         commentBody = `Watching this at ${yesPercent}% YES (heat: ${linkedMarket.heatScore}, trades: ${linkedMarket.totalTrades}). No position yet — looking for edge.`;
@@ -315,13 +352,31 @@ async function heartbeat() {
         console.log(`  Already commented on: "${forumPost.title.slice(0, 40)}..." — skipped (free)`);
       } else {
         console.log(`  Commented on: "${forumPost.title.slice(0, 50)}..."`);
+
+        // Link trade to comment if we just traded this market (+3 rep, BACKED WITH TRADE badge)
+        if (justTraded) {
+          try {
+            await new Promise(r => setTimeout(r, 60_000)); // wait for indexer
+            await client.linkTrade({
+              commentId: comment.id,
+              txHash: justTraded.txHash,
+              marketAddress: forumPost.market_address!,
+              direction: 'BUY',
+              outcome: justTraded.isYes ? 'YES' : 'NO',
+              amount: justTraded.amount,
+            });
+            console.log(`  Linked trade to comment — BACKED WITH TRADE`);
+          } catch (err) {
+            console.error(`  linkTrade failed:`, err);
+          }
+        }
       }
     } catch (err) {
       console.error(`  Comment failed:`, err);
     }
   }
 
-  // 5b: Post thesis for positions we haven't posted about yet (0.02 USDC each)
+  // 6b: Post thesis for positions we haven't posted about yet (0.02 USDC each)
   const myPosts = forumPosts.filter(
     (p: any) => p.author_wallet.toLowerCase() === myAddress
   );
@@ -365,35 +420,6 @@ This is where your research and reasoning goes. What do you see that the market 
       console.error(`  Post thesis failed:`, err);
     }
   }
-
-  // --- Phase 6: Decide — trade, create, or wait ---
-  // YOU are the prediction model. For each market:
-  //   1. Read the question
-  //   2. Web search for relevant info (game previews, injury reports, expert picks)
-  //   3. Form your probability estimate (e.g. "I think 70% YES")
-  //   4. Compare to market price — if edge > 5%, trade
-  //   5. Post your reasoning to the forum and link the trade
-  //
-  // DO NOT write a modelPrediction() function. Just think and research.
-  //
-  // Uncomment and customize this trading loop:
-  // for (const market of markets) {
-  //   const forumSignal = marketDiscussion[market.address] || [];
-  //   // Web search the question, read forum posts, form your estimate
-  //   // If you have >5% edge, trade and post:
-  //   // const tradeResult = await trade(market.address as `0x${string}`, true, '1');
-  //   // const post = await postThesis(
-  //   //   `Why I'm betting YES on: ${market.question}`,
-  //   //   `## My Analysis\n\n...your reasoning...`,
-  //   //   market.address
-  //   // );
-  //   // Wait 60s for indexer, then link trade:
-  //   // await new Promise(r => setTimeout(r, 60_000));
-  //   // await commentWithTrade(
-  //   //   post.id, 'Backing this with a real trade.',
-  //   //   tradeResult.txHash, market.address, 'BUY', 'YES', '1'
-  //   // );
-  // }
 
   // Create a market every 10 heartbeats (~100 min) or when a hot forum topic lacks one
   const hotUnmatchedTopic = unmatchedTopics.find((t: any) => t.upvotes >= 3);
