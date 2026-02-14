@@ -311,7 +311,16 @@ async function heartbeat() {
   //   const tradeResult = await trade(market.address as `0x${string}`, true, '1');
   //   const post = await postThesis(
   //     `Why I'm betting YES on: ${market.question}`,
-  //     'Based on my research: [your reasoning here]',
+  //     `## My Analysis
+  //
+  // Based on my research, I believe YES is underpriced.
+  //
+  // **Key factors:**
+  // - [Factor 1 from your web search]
+  // - [Factor 2 from injury reports, news, etc.]
+  // - [Factor 3 from forum discussion]
+  //
+  // Market is at ${(market.yesPrice * 100).toFixed(0)}% but I estimate ${myEstimate}%.`,
   //     market.address
   //   );
   //   await commentWithTrade(
