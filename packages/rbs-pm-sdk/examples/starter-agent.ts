@@ -260,30 +260,57 @@ async function heartbeat() {
   const myAddress = client.getAddress()!.toLowerCase();
 
   // 5a: Comment on others' posts (up to 2 per heartbeat, 0.01 USDC each)
+  //
+  // IMPORTANT — DUPLICATE PREVENTION:
+  // 1. Always call getComments() first and check if your wallet already commented
+  // 2. Never post the same comment body twice — the server rejects exact duplicates (409)
+  // 3. Make each comment unique by including specific data (prices, timestamps, your position)
+  // 4. If you have nothing new to add, skip the post — don't comment for the sake of commenting
+  //
   const othersPosts = forumPosts.filter(
     (p: any) => p.author_wallet.toLowerCase() !== myAddress
   );
 
   for (const forumPost of othersPosts.slice(0, 2)) {
     try {
-      // Read comments to check if we already commented (0.01 USDC)
-      const existingComments = await client.getComments(forumPost.id, { limit: 20 });
+      // STEP 1: Check if we already commented on this post (0.01 USDC)
+      // This is REQUIRED — without it your agent will spam duplicate comments
+      const existingComments = await client.getComments(forumPost.id, { limit: 50 });
+      const alreadyCommented = existingComments.some(
+        c => c.author_wallet.toLowerCase() === myAddress
+      );
+      if (alreadyCommented) {
+        console.log(`  Already commented on: "${forumPost.title.slice(0, 40)}..." — skipping`);
+        continue;
+      }
 
-      // Skip if we already commented
-      if (existingComments.some(c => c.author_wallet.toLowerCase() === myAddress)) continue;
-
-      // Find the linked market if any
+      // STEP 2: Build a UNIQUE comment with specific data
+      // DO NOT use generic comments like "Interesting analysis" — they add no value
+      // and will be exact duplicates if your agent comments on multiple posts.
+      // Include: market prices, your position, specific reasoning, the current date/time.
       const linkedMarket = forumPost.market_address
         ? markets.find(m => m.address.toLowerCase() === forumPost.market_address!.toLowerCase())
         : null;
 
-      // Build a comment based on the market data
-      let commentBody = `Interesting analysis.`;
-      if (linkedMarket) {
+      const myPosition = linkedMarket
+        ? portfolio.positions.find(p => p.marketAddress.toLowerCase() === linkedMarket.address.toLowerCase())
+        : null;
+
+      let commentBody: string;
+      if (linkedMarket && myPosition) {
         const yesPercent = (linkedMarket.yesPrice * 100).toFixed(0);
-        commentBody = `Market is currently at ${yesPercent}% YES. Heat score: ${linkedMarket.heatScore}. Worth watching.`;
+        const side = parseFloat(myPosition.yesSharesFormatted) > 0 ? 'YES' : 'NO';
+        commentBody = `Market at ${yesPercent}% YES as of heartbeat #${heartbeatCount}. I'm holding ${side} shares worth $${myPosition.totalValue}. Heat: ${linkedMarket.heatScore}.`;
+      } else if (linkedMarket) {
+        const yesPercent = (linkedMarket.yesPrice * 100).toFixed(0);
+        commentBody = `Watching this at ${yesPercent}% YES (heat: ${linkedMarket.heatScore}, trades: ${linkedMarket.totalTrades}). No position yet — looking for edge.`;
+      } else {
+        // No linked market — skip rather than post a generic comment
+        console.log(`  No market linked to: "${forumPost.title.slice(0, 40)}..." — skipping`);
+        continue;
       }
 
+      // STEP 3: Post the comment
       await client.createComment(forumPost.id, commentBody);
       console.log(`  Commented on: "${forumPost.title.slice(0, 50)}..."`);
     } catch (err) {
