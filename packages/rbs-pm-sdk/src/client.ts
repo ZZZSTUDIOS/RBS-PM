@@ -1055,6 +1055,41 @@ export class RBSPMClient {
       throw new Error(`Unexpected redeem target: ${redeemTo}. Expected market: ${marketAddress}`);
     }
 
+    // Approve winning token before redeem (contract uses transferFrom)
+    const fullData = data as any;
+    const yesWins = fullData.outcome === 'YES';
+    const winningTokenAddress = yesWins
+      ? await this.publicClient.readContract({ address: marketAddress, abi: LSLMSR_ABI, functionName: 'yesToken' }) as `0x${string}`
+      : await this.publicClient.readContract({ address: marketAddress, abi: LSLMSR_ABI, functionName: 'noToken' }) as `0x${string}`;
+
+    const winningBalance = await this.publicClient.readContract({
+      address: winningTokenAddress,
+      abi: ERC20_ABI,
+      functionName: 'balanceOf',
+      args: [this.account.address],
+    }) as bigint;
+
+    if (winningBalance > 0n) {
+      const allowance = await this.publicClient.readContract({
+        address: winningTokenAddress,
+        abi: ERC20_ABI,
+        functionName: 'allowance',
+        args: [this.account.address, marketAddress],
+      }) as bigint;
+
+      if (allowance < winningBalance) {
+        const approveHash = await this.walletClient.writeContract({
+          account: this.account,
+          chain: monadTestnet,
+          address: winningTokenAddress,
+          abi: ERC20_ABI,
+          functionName: 'approve',
+          args: [marketAddress, winningBalance],
+        });
+        await this.publicClient.waitForTransactionReceipt({ hash: approveHash });
+      }
+    }
+
     // Execute the redeem transaction
     const hash = await this.walletClient.sendTransaction({
       account: this.account,
