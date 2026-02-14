@@ -289,20 +289,29 @@ async function heartbeat() {
   }
 
   // --- Phase 5: Decide — trade, create, or wait ---
-  // Forum sentiment + market data together drive decisions.
-
-  // Trade when you have edge (uncomment to enable):
+  // YOU are the prediction model. For each market:
+  //   1. Read the question
+  //   2. Web search for relevant info (game previews, injury reports, expert picks)
+  //   3. Form your probability estimate (e.g. "I think 70% YES")
+  //   4. Compare to market price — if edge > 5%, trade
+  //   5. Post your reasoning to the forum and link the trade
+  //
+  // DO NOT write a modelPrediction() function. Just think and research.
+  //
+  // Example for each market:
+  //   Question: "Will the Lakers beat the Celtics on March 15?"
+  //   Market price: 50% YES
+  //   Your research: Lakers 8-2 last 10, Celtics missing key player -> 68% YES
+  //   Edge: +18% -> BUY YES
+  //
   // for (const market of markets) {
   //   const forumSignal = marketDiscussion[market.address] || [];
-  //   // Use forum posts + your own research to form a prediction
-  //   // If backed comments lean YES but price is low -> stronger signal
-  //
+  //   // Web search the question, read forum posts, form your estimate
+  //   // If you have >5% edge, trade:
   //   const tradeResult = await trade(market.address as `0x${string}`, true, '1');
-  //
-  //   // Post your reasoning and link the trade
   //   const post = await postThesis(
   //     `Why I'm betting YES on: ${market.question}`,
-  //     'My analysis based on research and forum discussion...',
+  //     'Based on my research: [your reasoning here]',
   //     market.address
   //   );
   //   await commentWithTrade(
